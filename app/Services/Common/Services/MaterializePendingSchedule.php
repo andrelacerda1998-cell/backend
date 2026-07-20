@@ -1,0 +1,132 @@
+<?php
+
+namespace App\Services\Common\Services;
+
+use App\Events\Customer\Schedule\AcceptScheduleEvent;
+use App\Events\Vendor\Schedule\CreateScheduleEvent;
+use App\Events\Vendor\Schedule\ServiceScheduledEvent;
+use App\Http\Controllers\Api\Customer\Services\traits\NotifyVendor;
+use App\Jobs\Services\CancelJobWithoutReactionJob;
+use App\Models\GeneralSettings\ServicesType;
+use App\Models\Service;
+use App\Notifications\Vendor\NewScheduledServiceNotification;
+use App\Notifications\Vendor\NewServiceAvailableNotification;
+use Illuminate\Support\Carbon;
+use Throwable;
+
+/**
+ * Single source of truth for turning a paid service into a live schedule (or, for immediate
+ * services, notifying the vendor and arming the accept-timeout job).
+ *
+ * Extracted from the ProcessPendingScheduleAfterPayment trait so that both the customer-app
+ * poll (OpenServiceController::checkPaymentStatus) and the async MbwayPaymentCheckJob can
+ * run the exact same logic once payment is confirmed. The MBWay flow no longer creates the
+ * schedule eagerly at request time — it only stores pending_schedule_data — so this must run
+ * on payment confirmation to make the service visible to the vendor.
+ */
+class MaterializePendingSchedule
+{
+    use NotifyVendor;
+
+    public function __construct(private readonly AcceptService $acceptService) {}
+
+    public function handle(Service $service): void
+    {
+        if (! $service->pending_schedule_data) {
+            $this->notifyVendor($service, $service->vendor);
+            $this->dispatchCancelJob($service);
+
+            return;
+        }
+
+        $pendingData = $service->pending_schedule_data;
+        if (! ($pendingData['scheduled'] ?? false)) {
+            $service->pending_schedule_data = null;
+            $service->save();
+
+            return;
+        }
+
+        $vendor = $service->vendor;
+        $scheduleData = $pendingData['schedule'] ?? [];
+        $scheduledDay = $scheduleData['scheduled_day'] ?? null;
+        $serviceType = ServicesType::find($service->services_type_id);
+        if (! $serviceType) {
+            $service->pending_schedule_data = null;
+            $service->save();
+
+            return;
+        }
+
+        $scheduledTimeStart = Carbon::parse($scheduleData['scheduled_time_start']);
+        $scheduledTimeEnd = $scheduledTimeStart->copy()->addMinutes((int) $serviceType->time);
+
+        $scheduleExists = $vendor->schedules()
+            ->where('customer_id', $service->customer_id)
+            ->where('scheduled_day', $scheduledDay)
+            ->where('service_type_id', $service->services_type_id)
+            ->where('scheduled_time_start', $scheduledTimeStart)
+            ->where('scheduled_time_end', $scheduledTimeEnd)
+            ->exists();
+
+        if ($scheduleExists) {
+            $service->pending_schedule_data = null;
+            $service->save();
+
+            return;
+        }
+
+        $schedule = $vendor->schedules()->create([
+            'customer_id' => $service->customer_id,
+            'scheduled_day' => Carbon::parse($scheduledDay),
+            'service_type_id' => $service->services_type_id,
+            'service_id' => $service->id,
+            'scheduled_time_start' => $scheduledTimeStart,
+            'scheduled_time_end' => $scheduledTimeEnd,
+            'is_pending' => true,
+        ]);
+
+        $service->pending_schedule_data = null;
+        $service->save();
+
+        if ($vendor->scheduleAvailable()->where('auto_accept', '=', true)->where('is_enabled', '=', true)->exists()) {
+            $schedule->update(['is_pending' => false]);
+            AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
+            $this->acceptService->acceptSchedule($service);
+            ServiceScheduledEvent::dispatch($schedule->vendor->user->id, ['id' => $schedule->id]);
+
+            // Push ao vendor (espelha ScheduleController::createPendingSchedule / NotifyVendor):
+            // o evento acima é só websocket, não chega com a app fechada. Uma falha do Expo
+            // não pode interromper a confirmação do pagamento.
+            try {
+                $vendor->user->notifyNow(new NewScheduledServiceNotification($schedule));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        } else {
+            CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id]);
+
+            try {
+                $vendor->user->notifyNow(new NewServiceAvailableNotification($service));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
+        $this->dispatchCancelJob($service);
+    }
+
+    public function dispatchCancelJob(Service $service): void
+    {
+        $seconds = config('services.request.time_to_accept');
+        $service->refresh();
+        $service->load('schedule');
+        if ($service->schedule) {
+            $seconds = config('services.request.time_accept_scheduled');
+        }
+
+        CancelJobWithoutReactionJob::dispatch($service)->delay(
+            now()->addSeconds($seconds)
+        );
+    }
+}

@@ -1,0 +1,56 @@
+<?php
+return [
+    'required' => 'O campo :attribute é obrigatório.',
+    'unique' => 'O :attribute já foi utilizado.',
+    'email' => 'O :attribute deve ser um endereço de email válido.',
+    'string' => 'O :attribute deve ser uma string.',
+    'confirmed' => 'A confirmação do :attribute não corresponde.',
+    'min' => [
+        'string' => 'O :attribute deve ter pelo menos :min caracteres.',
+    ],
+    'max' => [
+        'file' => 'O :attribute não pode ser maior que :max kilobytes.',
+    ],
+    'array' => 'O :attribute deve ser um array.',
+    'integer' => 'O :attribute deve ser um inteiro.',
+    'exists' => 'O :attribute selecionado é inválido.',
+    'file' => 'O :attribute deve ser um arquivo.',
+    'mimes' => 'O :attribute deve ser um arquivo do tipo: :values.',
+    'numeric' => 'O :attribute deve ser um número.',
+    'date' => 'O :attribute não é uma data válida.',
+    'before_or_equal' => 'O :attribute deve ser uma data anterior ou igual a :date.',
+    'distinct' => [
+        'must_be_selected' => 'Deve ser seleccionado, no mínimo, um campo :attribute.',
+        'only_one_must_be_selected' => 'Apenas um campo :attribute deve ser seleccionado.',
+    ],
+    'password' => [
+        'letters' => 'A senha deve conter pelo menos uma letra.',
+        'mixed_case' => 'A senha deve conter letras maiúsculas e minúsculas.',
+        'numbers' => 'A senha deve conter pelo menos um número.',
+        'symbols' => 'A senha deve conter pelo menos um símbolo.',
+        'uncompromised' => 'A :attribute foi comprometida em uma violação de dados. Por favor, escolha uma senha diferente.',
+    ],
+    'custom' => [
+        'nif_rule' => 'O NIF não é válido.',
+    ],
+    'attributes' => [
+        'email' => 'email',
+        'nif' => 'NIF',
+        'phone_number' => 'número de telefone',
+        'username' => 'nome de utilizador',
+        'name' => 'nome',
+        'date_birthday' => 'data de nascimento',
+        'document_id' => 'ID do documento',
+        'document_file' => 'arquivo do documento',
+        'operation_areas' => 'áreas de operação',
+        'price_rate' => 'taxa de preço',
+        'services_types' => 'tipos de serviços',
+        'password' => 'senha',
+        'documents' => 'documentos',
+        'today' => 'hoje',
+        'avatar' => 'avatar',
+        'address' => 'endereço',
+        'postal_code' => 'código postal',
+        'locality' => 'distrito'
+    ],
+];

@@ -1,0 +1,503 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\Services\AddressType;
+use App\Enums\Services\PaymentStatus;
+use App\Enums\Services\ServiceStatus;
+use App\Enums\Vendors\StatusVendor;
+use App\Models\Auth\ImpersonationCode;
+use App\Models\GeneralSettings\Document;
+use App\Models\GeneralSettings\AllowedZone;
+use App\Models\GeneralSettings\OperationArea;
+use App\Models\GeneralSettings\ServicesType;
+use App\Models\GeneralSettings\SurveyCity;
+use App\Models\GeneralSettings\VendorServiceTypes;
+use App\Models\Schedule\Schedule;
+use App\Models\Schedule\ScheduleAvailable;
+use App\Models\Vendor\Location;
+use App\Models\Vendor\Ratings;
+use App\Models\Vendor\VendorDocuments;
+use App\Observers\VendorObserver;
+use Bavix\Wallet\Models\Transaction;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
+use Laravel\Scout\Searchable;
+use OwenIt\Auditing\Contracts\Auditable;
+
+#[ObservedBy(VendorObserver::class)]
+class Vendor extends Model implements Auditable
+{
+    use \OwenIt\Auditing\Auditable, Searchable, SoftDeletes;
+
+    protected $fillable = ['user_id', 'status', 'price_rate', 'username', 'invoice_workspace', 'auth_token', 'company_name', 'invoice_account_id', 'at_user', 'at_password', 'iban'];
+
+    protected $appends = ['can_accept_service', 'price_rate', 'full_name'];
+
+    protected $with = ['user', 'servicesTypes', 'operationAreas', 'currentLocation'];
+
+    protected $casts = [
+        'status' => StatusVendor::class,
+        'auth_token' => 'encrypted',
+        'at_password' => 'encrypted',
+        'at_valid' => 'boolean',
+        'at_validated_at' => 'datetime',
+    ];
+
+    protected $hidden = [
+        'auth_token',
+        'invoice_account_id',
+        'at_user',
+        'at_password',
+    ];
+
+    protected $auditExclude = [
+        'at_password',
+    ];
+
+    public function getNameAttribute(): string
+    {
+        return $this->user->full_name;
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function servicesTypes(): BelongsToMany
+    {
+        return $this->belongsToMany(ServicesType::class)->using(VendorServiceTypes::class)->whereNull('services_types.deleted_at')->wherePivot('services_type_vendor.deleted_at', null);
+    }
+
+    public function canAcceptService(): Attribute
+    {
+        return Attribute::make(get: function () {
+            return $this->user?->hasVerifiedPhoneNumber() &&
+                $this->user?->hasVerifiedEmail() &&
+                $this->all_documents_verified &&
+                ! $this->openServices()->exists() &&
+                $this->iban != null &&
+                $this->invoice_workspace != null &&
+                $this->at_valid &&
+                str_contains($this->at_user, '/');
+        })->shouldCache();
+    }
+
+    /**
+     * Translated reasons for each failing condition of canAcceptService().
+     * Must stay consistent with the checks in canAcceptService().
+     */
+    public function cannotAcceptServiceReasons(): Collection
+    {
+        $reasons = collect();
+
+        if (! $this->user?->hasVerifiedPhoneNumber()) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.phone_not_verified'));
+        }
+
+        if (! $this->user?->hasVerifiedEmail()) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.email_not_verified'));
+        }
+
+        if (! $this->all_documents_verified) {
+            $expiredNames = $this->documents()
+                ->where('status', 'approved')
+                ->whereNotNull('expiration_date')
+                ->where('expiration_date', '<=', now())
+                ->get()
+                ->map(fn ($document) => $document->type?->name)
+                ->filter()
+                ->unique();
+
+            $pendingNames = $this->pending_documents->pluck('name')->filter()->unique();
+
+            $missingNames = $this->missing_documents->pluck('name')->filter()
+                ->diff($expiredNames)
+                ->unique();
+
+            $reason = __('backoffice/vendor.infolist.eligibility.documents_not_verified');
+
+            if ($missingNames->isNotEmpty()) {
+                $reason .= ' '.__('backoffice/vendor.infolist.eligibility.documents_missing', ['documents' => $missingNames->join(', ')]);
+            }
+
+            if ($pendingNames->isNotEmpty()) {
+                $reason .= ' '.__('backoffice/vendor.infolist.eligibility.documents_pending', ['documents' => $pendingNames->join(', ')]);
+            }
+
+            if ($expiredNames->isNotEmpty()) {
+                $reason .= ' '.__('backoffice/vendor.infolist.eligibility.documents_expired', ['documents' => $expiredNames->join(', ')]);
+            }
+
+            $reasons->push($reason);
+        }
+
+        if ($this->openServices()->exists()) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.open_service'));
+        }
+
+        if ($this->iban == null) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.no_iban'));
+        }
+
+        if ($this->invoice_workspace == null) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.no_workspace'));
+        }
+
+        if (! $this->at_valid) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.at_invalid'));
+        }
+
+        if (! str_contains($this->at_user ?? '', '/')) {
+            $reasons->push(__('backoffice/vendor.infolist.eligibility.at_user_invalid'));
+        }
+
+        return $reasons;
+    }
+
+    public function fullName(): Attribute
+    {
+        return Attribute::make(get: function () {
+            return $this->user?->full_name;
+        });
+    }
+
+    public function openServices(): HasMany
+    {
+        return $this->services()->whereIn('status', [
+            // ServiceStatus::PENDING,
+            ServiceStatus::ACCEPTED,
+            ServiceStatus::FINISHED,
+            ServiceStatus::ARRIVED,
+        ])
+            ->whereDoesntHave('schedule')
+            ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING]);
+    }
+
+    public function addresses(): HasManyThrough
+    {
+        return $this->hasManyThrough(Address::class, User::class, 'id', 'user_id', 'user_id');
+    }
+
+    public function transactions(): HasManyThrough
+    {
+        return $this->hasManyThrough(Transaction::class, User::class, 'id', 'payable_id', 'user_id');
+    }
+
+    public function impersonationCodes(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            ImpersonationCode::class,
+            User::class,
+            'id',
+            'user_id',
+            'user_id',
+        );
+    }
+
+    public function operationAreas(): BelongsToMany
+    {
+        return $this->belongsToMany(OperationArea::class, 'operation_area_vendors');
+    }
+
+    public function surveyCityVotes(): BelongsToMany
+    {
+        return $this->belongsToMany(SurveyCity::class, 'vendor_city_votes')->withTimestamps();
+    }
+
+    public function allowedZones(): BelongsToMany
+    {
+        return $this->belongsToMany(AllowedZone::class, 'vendor_allowed_zones')->withTimestamps();
+    }
+
+    public function services(): HasMany
+    {
+        return $this->hasMany(Service::class);
+    }
+
+    public function currentLocation(): HasOne
+    {
+        return $this->hasOne(Location::class);
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(Schedule::class);
+    }
+
+    public function scheduleAvailable(): HasMany
+    {
+        return $this->hasMany(ScheduleAvailable::class);
+    }
+
+    public function shouldBeSearchable(): bool
+    {
+        return $this->user?->hasVerifiedPhoneNumber() &&
+            $this->user?->hasVerifiedEmail() &&
+            $this->all_documents_verified &&
+            $this->iban != null &&
+            $this->invoice_workspace != null &&
+            str_contains($this->at_user ?? '', '/');
+    }
+
+    public function toSearchableArray(): array
+    {
+        $this->updateRatting();
+        $this->refresh();
+        $this->load('servicesTypes', 'averageRating');
+
+        $attributes = $this->toArray();
+        $attributes['_geo'] = [
+            'lat' => $this->currentLocation?->latitude ?? 0,
+            'lng' => $this->currentLocation?->longitude ?? 0,
+        ];
+        $attributes['geoTime'] = $this->currentLocation?->updated_at->timestamp;
+        $attributes['services_types'] = $this->servicesTypes;
+        $attributes['ratings'] = $this->averageRating;
+        $attributes['status'] = $this->status->value;
+        $attributes['is_test'] = $this->user?->is_test ?? false;
+
+        return $attributes;
+    }
+
+    public function setServices(array $data): void
+    {
+        $this->servicesTypes()->sync(collect($data)->pluck('services_type_id')->toArray());
+        $this->load('servicesTypes');
+        $this->searchable();
+    }
+
+    public function updateRatting()
+    {
+        $this->operationAreas->each(function ($operationArea) {
+            $servicesTypes = ServicesType::where('operation_area_id', $operationArea->id)->pluck('id');
+
+            $ratting = $this->services()->where('status', ServiceStatus::CLOSED)
+                ->whereIn('services_type_id', $servicesTypes)->avg('rating_by_vendor');
+
+            if ($ratting === 0) {
+                $ratting = 5;
+            }
+
+            $ratting = round($ratting);
+
+            $totalRatings = $this->services()->where('status', ServiceStatus::CLOSED)
+                ->whereIn('services_type_id', $servicesTypes)->count();
+            if ($totalRatings === 0) {
+                $totalRatings = 1;
+                $ratting = 5;
+            }
+
+            Ratings::updateOrCreate([
+                'vendor_id' => $this->id,
+                'operation_area_id' => $operationArea->id,
+            ], [
+                'average_rating' => $ratting,
+                'total_ratings' => $totalRatings,
+            ]);
+        });
+    }
+
+    public function calculateDistance(Address|array $address, ?float $latitude = null, ?float $longitude = null): float|int
+    {
+        if (! $latitude && ! $longitude) {
+            $currentLocation = $this->currentLocation;
+
+            $latitude = $currentLocation?->latitude;
+            $longitude = $currentLocation?->longitude;
+        }
+
+        if (! $latitude || ! $longitude) {
+            $fallback = $this->addresses()
+                ->where('address_type', AddressType::SCHEDULE_ADDRESS)
+                ->first()
+                ?? $this->addresses()
+                    ->where('address_type', AddressType::FISCAL_ADDRESS)
+                    ->first();
+
+            if (! $fallback) {
+                throw new \Exception('Vendor location is not available');
+            }
+
+            $latitude = $fallback->latitude;
+            $longitude = $fallback->longitude;
+        }
+
+        if ($address instanceof Address) {
+            $address = $address->toArray();
+        }
+
+        return calculate_distance((float) $latitude, (float) $longitude, (float) $address['latitude'], (float) $address['longitude']);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(VendorDocuments::class);
+    }
+
+    public function averageRating(): HasMany
+    {
+        return $this->hasMany(Ratings::class);
+    }
+
+    public function getLastCcAttribute()
+    {
+        return $this->documents->where('type', 'cc')->sortBy('updated_at')->last();
+    }
+
+    public function getLastCriminalRecordAttribute()
+    {
+        return $this->documents->where('type', 'criminal record')->sortBy('updated_at')->last();
+    }
+
+    public function allDocumentsVerified(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $hasAllFiles = true;
+
+            $this->required_documents->each(function ($document) use (&$hasAllFiles) {
+                $exists = $this->documents()
+                    ->where('document_id', $document->id)
+                    ->where('status', 'approved')
+                    ->where(function ($query) {
+                        $query->where('expiration_date', '>', now())
+                            ->orWhereNull('expiration_date');
+                    })
+                    ->exists();
+
+                if (! $exists) {
+                    $hasAllFiles = false;
+                }
+            });
+
+            return $hasAllFiles;
+        })->shouldCache();
+    }
+
+    public function missingDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $missingFiles = collect();
+
+            $this->required_documents->each(function ($document) use (&$missingFiles) {
+                $hasValidDocument = $this->documents()
+                    ->where('document_id', $document->id)
+                    ->whereIn('status', ['approved', 'pending'])
+                    ->where(function ($query) {
+                        $query->where('expiration_date', '>', now())
+                            ->orWhereNull('expiration_date');
+                    })
+                    ->exists();
+
+                if (! $hasValidDocument) {
+                    $missingFiles->add([
+                        'id' => $document->id,
+                        'name' => $document->name,
+                        'reason' => VendorDocuments::where('document_id', $document->id)
+                            ->where('status', 'declined')
+                            ?->latest()
+                            ?->value('reason') ?? null,
+                    ]);
+                }
+            });
+
+            return $missingFiles;
+        });
+    }
+
+    public function pendingDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $pendingFiles = collect();
+
+            $this->documents()
+                ->where('status', 'pending')
+                ->get()
+                ->each(function ($document) use (&$pendingFiles) {
+                    $pendingDocument = Document::where('id', $document->document_id)->first();
+                    $pendingFiles->add([
+                        'id' => $pendingDocument->id,
+                        'name' => $pendingDocument->name,
+                        'reason' => VendorDocuments::where('document_id', $document->document_id)
+                            ->where('status', 'declined')
+                            ?->latest()
+                            ?->value('reason') ?? null,
+                    ]);
+                });
+
+            return $pendingFiles;
+        });
+    }
+
+    public function optionalDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $pendingFiles = collect();
+            $this->unrequired_documents->each(function ($document) use (&$pendingFiles) {
+                $validDocumentExists = $this->documents()
+                    ->where('document_id', $document->id)
+                    ->where('vendor_id', $this->id)
+                    ->whereIn('status', ['approved', 'pending'])
+                    ->where(function ($query) {
+                        $query->where('expiration_date', '>', now())
+                            ->orWhereNull('expiration_date');
+                    })
+                    ->exists();
+
+                if (! $validDocumentExists) {
+                    $pendingFiles->add($document);
+                }
+            });
+
+            return $this->required_documents
+                ->filter(function ($doc) use ($pendingFiles) {
+                    return in_array($doc->id, $pendingFiles->toArray());
+                })
+                ->values();
+        })->shouldCache();
+    }
+
+    public function priceRate(): Attribute
+    {
+        return Attribute::make(get: function ($value) {
+            return number_format($value / 100, 2, '.', ',');
+        }, set: fn (string $value) => [
+            'price_rate' => (int) round(((float) str_replace(',', '', $value)) * 100),
+        ])->shouldCache();
+    }
+
+    public function requiredDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $documents = collect();
+            $documents = $documents->merge(Document::where('required', true)->get());
+            $this->operationAreas->each(function ($operationArea) use (&$documents) {
+                $documents = $documents->merge($operationArea->certifications);
+            });
+
+            return $documents = $documents->unique();
+        });
+    }
+
+    public function unrequiredDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $documents = collect();
+            $documents = $documents->merge(Document::where('required', false)->get());
+            $this->operationAreas->each(function ($operationArea) use (&$documents) {
+                $documents = $documents->merge($operationArea->certifications);
+            });
+
+            return $documents = $documents->unique();
+        });
+    }
+}

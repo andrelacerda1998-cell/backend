@@ -1,0 +1,167 @@
+@import '/vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+/*:root {
+    @apply font-inter;
+}*/
+
+h1.fi-header-heading.text-2xl {
+    @apply text-primary-500;
+}
+
+.dark h1.fi-header-heading.text-2xl {
+    @apply text-primary-500;
+}
+
+/*.fi-breadcrumbs {
+    display: none !important;
+}*/
+
+aside.fi-sidebar,
+header.fi-sidebar-header {
+    @apply !ring-0 shadow-none;
+    /*background: #ffffff !important;*/
+    @apply bg-primary-500;
+
+    @apply justify-center
+}
+
+.dark aside.fi-sidebar,
+.dark header.fi-sidebar-header {
+    @apply !ring-0 shadow-none;
+    @apply bg-primary-500;
+}
+
+li.fi-sidebar-item {
+    .fi-sidebar-item-icon {
+        color: #1b1b1b;
+    }
+
+    .fi-sidebar-item-label {
+        color: #1b1b1b;
+
+    }
+
+    &.fi-active {
+        color: #1b1b1b;
+
+        .fi-sidebar-item-icon,
+        .fi-sidebar-item-label {
+            color: #1b1b1b;
+        }
+    }
+}
+
+.dark li.fi-sidebar-item {
+    transition: all;
+    transition-duration: 300ms;
+
+    .fi-sidebar-item-button{
+        transition: all;
+        transition-duration: 300ms;
+    }
+
+    .fi-sidebar-item-icon {
+        color: #1b1b1b;
+        transition: all;
+        transition-duration: 300ms;
+
+        path:hover{
+            @apply text-primary-500 !important;
+        }
+    }
+
+    .fi-sidebar-item-label {
+        color: #1b1b1b;
+        transition: all;
+        transition-duration: 300ms;
+    }
+
+    &.fi-active {
+        color: #1b1b1b;
+        background-color:  #1b1b1b;
+        @apply  rounded-md;
+        .fi-sidebar-item-icon,
+        .fi-sidebar-item-label {
+            @apply text-primary-500
+        }
+    }
+
+    :hover:not(.fi-sidebar-item-label, .fi-sidebar-item-icon) {
+        color: #1b1b1b;
+        background-color: #1b1b1b;
+        @apply  rounded-md;
+        .fi-sidebar-item-icon,
+        .fi-sidebar-item-label {
+            @apply text-primary-500;
+        }
+    }
+}
+
+.fi-topbar > .flex {
+    @apply !ring-0 shadow-none;
+
+    background: #1b1b1b;
+    .fi-icon-btn {
+        @apply text-white;
+    }
+
+    /*.fi-dropdown-trigger button.outline-none {
+        @apply border-white ring-1 ring-white;
+    }*/
+}
+
+.dark .fi-topbar > .flex {
+    @apply bg-secondary-500 !ring-0 shadow-none;
+
+    .fi-icon-btn {
+        @apply text-white;
+    }
+
+    /*.fi-dropdown-trigger button.outline-none {
+        @apply border-white ring-1 ring-primary-700;
+    }*/
+}
+
+.fi-main, .fi-main-ctn {
+    background: #ffffff;
+}
+
+.dark .fi-main, .dark .fi-main-ctn {
+    background: #101010;
+}
+
+.fi-ta-search-field .fi-input-wrp {
+    width: 100%;
+}
+
+.dark .fi-color-gray{
+    color: rgb(161 161 170)!important;
+}
+
+.fi-icon-btn-icon{
+    color: rgb(161 161 170)!important;
+}
+
+.fi-ta-header-toolbar {
+    .ms-auto.flex.items-center.gap-x-4 {
+        width: 100%;
+
+        .fi-ta-search-field {
+            width: 100%;
+        }
+    }
+}
+
+/*body.fi-body.fi-panel-login {
+    background: linear-gradient(to bottom, rgba(142, 196, 204, 0.5) 0%, rgba(255, 255, 255, 1) 100%);
+}*/
+
+span.fi-sidebar-group-label{
+    color: #1b1b1b!important;
+}
+
+.fi-icon-btn-icon{
+    color: #1b1b1b;
+}

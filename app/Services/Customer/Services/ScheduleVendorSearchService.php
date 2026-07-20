@@ -1,0 +1,359 @@
+<?php
+
+namespace App\Services\Customer\Services;
+
+use App\DTO\Services\AddressCoordinatesDTO;
+use App\Enums\Schedule\ScheduleDay;
+use App\Enums\Services\ServiceStatus;
+use App\Models\Address;
+use App\Models\GeneralSettings\ServicesType;
+use App\Models\Vendor;
+use App\Models\VendorScheduleSearch;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
+use Meilisearch\Endpoints\Indexes;
+
+/**
+ * Service for searching vendors available for scheduled services.
+ *
+ * Ranking criteria (in order of importance):
+ * 1. Distance from schedule address - closer is better
+ * 2. Rating for the requested service type - higher is better
+ * 3. Auto-accept enabled - vendors with auto-accept rank higher
+ * 4. Has availability in the next 15 days
+ * 5. Currently online - online vendors rank higher
+ */
+class ScheduleVendorSearchService
+{
+    private Address|AddressCoordinatesDTO $address;
+
+    private ServicesType $servicesType;
+
+    private int $limit = 20;
+
+    private int $daysAhead = 15;
+
+    private ?int $serviceDurationMinutes = null;
+
+    /**
+     * Search for vendors available for scheduling in the next 15 days.
+     *
+     * @param  Address  $address  The customer's address for the service
+     * @param  ServicesType  $servicesType  The type of service requested
+     */
+    public function search(Address|AddressCoordinatesDTO $address, ServicesType $servicesType, bool $isTestCustomer = false): Collection
+    {
+        $this->address = $address;
+        $this->servicesType = $servicesType;
+        $this->serviceDurationMinutes = $servicesType->time ? (int) $servicesType->time : null;
+
+        $query = $this->buildSearchQuery();
+        $vendorIds = $query->take($this->limit * 2)->keys();
+
+        // Fetch full vendor models with relationships
+        $vendors = Vendor::with([
+            'user',
+            'servicesTypes',
+            'operationAreas',
+            'currentLocation',
+            'scheduleAvailable.scheduleDay',
+            'averageRating',
+            'schedules',
+        ])
+            ->whereIn('id', $vendorIds)
+            ->where('at_valid', true)
+            ->whereHas('user', fn ($q) => $q->where('is_test', $isTestCustomer))
+            ->get();
+
+        // Filter vendors that have availability in the next 15 days
+        $vendors = $this->filterByAvailabilityNext15Days($vendors);
+
+        // Maintain Meilisearch ordering
+        $vendors = $vendors->sortBy(function ($vendor) use ($vendorIds) {
+            return array_search($vendor->id, $vendorIds->toArray());
+        })->values();
+
+        return $vendors->take($this->limit);
+    }
+
+    /**
+     * Set the maximum number of results to return.
+     */
+    public function setLimit(int $limit): self
+    {
+        $this->limit = $limit;
+
+        return $this;
+    }
+
+    /**
+     * Set the number of days ahead to check for availability.
+     */
+    public function setDaysAhead(int $days): self
+    {
+        $this->daysAhead = $days;
+
+        return $this;
+    }
+
+    /**
+     * Get available hourly slots for a vendor in the next 15 days.
+     * Only returns slots that are not already booked.
+     */
+    public function getAvailableSlots(Vendor $vendor, ?int $serviceDurationMinutes = null): Collection
+    {
+        $slots = collect();
+        // Slots e horas de schedule são hora local de parede (Portugal). Ancorar today()/now() em
+        // Europe/Lisbon para o filtro de slots passados e o limite do dia não desviarem em WET/WEST.
+        $today = Carbon::today('Europe/Lisbon');
+        $now = Carbon::now('Europe/Lisbon');
+        $resolvedDurationMinutes = $serviceDurationMinutes ?? $this->serviceDurationMinutes;
+        $requiredMinutes = $this->getRequiredMinutes($resolvedDurationMinutes);
+
+        // Get all existing schedules for the vendor in the next 15 days
+        $existingSchedules = $vendor->schedules()
+            ->whereDate('scheduled_day', '>=', $today)
+            ->whereDate('scheduled_day', '<=', $today->copy()->addDays($this->daysAhead))
+            ->whereHas('service', function ($query) {
+                $query->whereNotIn('status', [ServiceStatus::REFUSED, ServiceStatus::CANCELED, ServiceStatus::CANCELED_MBWAY, ServiceStatus::REFUSED_MBWAY, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::ARCHIVED, ServiceStatus::PENDING_3DS]);
+            })
+            ->get();
+
+        for ($i = 0; $i < $this->daysAhead; $i++) {
+            $date = $today->copy()->addDays($i);
+            $dayOfWeek = $this->carbonDayToScheduleDay($date);
+
+            // Find availability for this day of week
+            $availability = $vendor->scheduleAvailable
+                ->first(fn ($sa) => $sa->scheduleDay?->day_name === $dayOfWeek && $sa->is_enabled);
+
+            if (! $availability) {
+                continue;
+            }
+
+            // Generate hourly slots
+            $hourlySlots = $this->generateHourlySlots(
+                $date,
+                $availability->time_start,
+                $availability->time_end,
+                $availability->auto_accept,
+                $dayOfWeek,
+                $existingSchedules,
+                $now,
+                $requiredMinutes
+            );
+
+            $slots = $slots->merge($hourlySlots);
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Generate hourly slots for a given day, excluding booked ones.
+     */
+    private function generateHourlySlots(
+        Carbon $date,
+        string $timeStart,
+        string $timeEnd,
+        bool $autoAccept,
+        string $dayName,
+        $existingSchedules,
+        Carbon $now,
+        ?int $requiredMinutes
+    ): Collection {
+        $slots = collect();
+
+        $availabilityStartTime = $date->copy()->setTimeFromTimeString($timeStart);
+        $availabilityEndTime = $date->copy()->setTimeFromTimeString($timeEnd);
+        $slotDurationMinutes = $requiredMinutes ?? 60;
+        $slotStepMinutes = 30;
+
+        // Get schedules for this specific date
+        $daySchedules = $existingSchedules->filter(
+            fn ($schedule) => Carbon::parse($schedule->scheduled_day, 'Europe/Lisbon')->isSameDay($date)
+        );
+
+        for ($slotStartTime = $availabilityStartTime->copy();
+            $slotStartTime->lt($availabilityEndTime);
+            $slotStartTime->addMinutes($slotStepMinutes)
+        ) {
+            $slotEndTime = $slotStartTime->copy()->addMinutes($slotDurationMinutes);
+            $slotStart = $slotStartTime->format('H:i');
+            $slotEnd = $slotStartTime->copy()->addMinutes($slotStepMinutes)->format('H:i');
+
+            // Skip if this slot is in the past (for today)
+            $isEnabled = true;
+            if ($date->isToday() && $slotStartTime->lte($now)) {
+                $isEnabled = false;
+            }
+
+            if ($requiredMinutes !== null && $slotEndTime->gt($availabilityEndTime)) {
+                $isEnabled = false;
+            }
+
+            // Check if this slot overlaps with any existing schedule
+            $isBooked = $daySchedules->contains(function ($schedule) use ($slotStartTime, $slotEndTime) {
+                $scheduleStart = Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start, 'Europe/Lisbon');
+                $scheduleEnd = Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_end, 'Europe/Lisbon');
+                if (! $schedule->is_pending) {
+                    $scheduleEnd = $scheduleEnd->copy()->addMinutes(
+                        (int) config('services.request.schedule_safety_margin_minutes', 60)
+                    );
+                }
+
+                // Check for overlap
+                return $slotStartTime < $scheduleEnd && $slotEndTime > $scheduleStart;
+            });
+
+            if (! $isBooked && $isEnabled) {
+                $slots->push([
+                    'date' => $date->format('Y-m-d'),
+                    'day_name' => $dayName,
+                    'time_start' => $slotStart,
+                    'time_end' => $slotEnd,
+                    'auto_accept' => $autoAccept,
+                ]);
+            }
+        }
+
+        return $slots;
+    }
+
+    private function getRequiredMinutes(?int $serviceDurationMinutes): ?int
+    {
+        if (! $serviceDurationMinutes || $serviceDurationMinutes <= 0) {
+            return null;
+        }
+
+        return $serviceDurationMinutes + (int) config('services.request.schedule_safety_margin_minutes', 60);
+    }
+
+    private function buildSearchQuery(): \Laravel\Scout\Builder
+    {
+        $address = $this->address;
+        $servicesType = $this->servicesType;
+        $relevantDays = $this->getRelevantDaysOfWeek();
+
+        return VendorScheduleSearch::search('', function (Indexes $meilisearch, string $query, array $options) use ($address, $servicesType, $relevantDays) {
+            $latitude = $address->latitude;
+            $longitude = $address->longitude;
+
+            // Build filters
+            $filters = [];
+
+            // Must have schedule address with valid coordinates
+            $filters[] = 'has_schedule_address = true';
+
+            // Filter by distance from customer address
+            $filters[] = $this->buildGeoFilter($latitude, $longitude);
+
+            // Filter by service type
+            $filters[] = $this->buildServiceTypeFilter($servicesType->id);
+
+            // Must have availability on at least one of the relevant days
+            $filters[] = $this->buildDaysAvailabilityFilter($relevantDays);
+
+            $options['filter'] = implode(' AND ', $filters);
+
+            // Sort criteria (order matters for ranking):
+            // 1. Distance (ascending - closer is better)
+            // 2. Has auto-accept (descending - true first)
+            // 3. Is online (descending - online first)
+            // 4. Average rating (descending - higher is better)
+            $options['sort'] = [
+                sprintf('_geoPoint(%F, %F):asc', $latitude, $longitude),
+                'has_auto_accept:desc',
+                'is_online:desc',
+                'average_rating:desc',
+            ];
+
+            return $meilisearch->search($query, $options);
+        });
+    }
+
+    /**
+     * Get the unique days of the week for the next 15 days.
+     */
+    private function getRelevantDaysOfWeek(): array
+    {
+        $days = [];
+        $today = Carbon::today('Europe/Lisbon');
+
+        for ($i = 0; $i < $this->daysAhead; $i++) {
+            $date = $today->copy()->addDays($i);
+            $dayOfWeek = $this->carbonDayToScheduleDay($date);
+            $days[$dayOfWeek] = true;
+        }
+
+        return array_keys($days);
+    }
+
+    /**
+     * Build filter for vendors available on specific days of the week.
+     */
+    private function buildDaysAvailabilityFilter(array $days): string
+    {
+        $dayFilters = array_map(
+            fn ($day) => sprintf('schedule_availability.day = "%s"', $day),
+            $days
+        );
+
+        return '('.implode(' OR ', $dayFilters).')';
+    }
+
+    private function buildGeoFilter(float $latitude, float $longitude): string
+    {
+        $distance = config('services.request.schedule_search_distance',
+            config('services.request.new_service_search_distance', 50000)
+        );
+
+        return sprintf('_geoRadius(%F, %F, %d)', $latitude, $longitude, $distance);
+    }
+
+    private function buildServiceTypeFilter(int $serviceTypeId): string
+    {
+        return sprintf('services_types.id = %d', $serviceTypeId);
+    }
+
+    /**
+     * Filter vendors that have at least one available slot in the next 15 days.
+     */
+    private function filterByAvailabilityNext15Days(Collection $vendors): Collection
+    {
+        return $vendors->filter(function (Vendor $vendor) {
+            $slots = $this->getAvailableSlots($vendor);
+
+            return $slots->isNotEmpty();
+        });
+    }
+
+    /**
+     * Convert Carbon day of week to ScheduleDay enum value.
+     */
+    private function carbonDayToScheduleDay(Carbon $date): string
+    {
+        return match ($date->dayOfWeek) {
+            Carbon::MONDAY => ScheduleDay::MONDAY->value,
+            Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
+            Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
+            Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
+            Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
+            Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
+            Carbon::SUNDAY => ScheduleDay::SUNDAY->value,
+            default => ScheduleDay::MONDAY->value,
+        };
+    }
+
+    /**
+     * Filter vendors that can accept services.
+     */
+    public static function filterByCanAcceptService(Collection $vendors, ?bool $canAccept = null): Collection
+    {
+        if ($canAccept === null) {
+            return $vendors;
+        }
+
+        return $vendors->filter(fn ($vendor) => $vendor->can_accept_service === $canAccept);
+    }
+}

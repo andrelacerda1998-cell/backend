@@ -1,0 +1,15 @@
+{
+    "agents": [
+        "claude_code",
+        "codex"
+    ],
+    "editors": [
+        "claude_code",
+        "codex"
+    ],
+    "guidelines": [
+        "filament/filament",
+        "laravel/fortify"
+    ],
+    "sail": true
+}
