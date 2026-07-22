@@ -32,12 +32,17 @@ class CampaignNotification extends Notification implements ShouldQueue
 
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
 
+        // Escolhe o primeiro valor preenchido (o Filament pode gravar '' na aba
+        // não preenchida, e '??' não pula string vazia): locale -> pt-pt -> en.
+        $pick = fn (array $m, $default) => collect([$m[$language] ?? null, $m['pt-pt'] ?? null, $m['en'] ?? null])
+            ->first(fn ($v) => filled($v)) ?? $default;
+
         $title = is_array($this->campaign->title)
-            ? ($this->campaign->title[$language] ?? $this->campaign->title['en'] ?? $this->campaign->name)
+            ? $pick($this->campaign->title, $this->campaign->name)
             : $this->campaign->title;
 
         $body = is_array($this->campaign->body)
-            ? ($this->campaign->body[$language] ?? $this->campaign->body['en'] ?? '')
+            ? $pick($this->campaign->body, '')
             : $this->campaign->body;
 
         return ExpoMessage::create($title)
@@ -57,12 +62,17 @@ class CampaignNotification extends Notification implements ShouldQueue
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
 
+        // Escolhe o primeiro valor preenchido (o Filament pode gravar '' na aba
+        // não preenchida, e '??' não pula string vazia): locale -> pt-pt -> en.
+        $pick = fn (array $m, $default) => collect([$m[$language] ?? null, $m['pt-pt'] ?? null, $m['en'] ?? null])
+            ->first(fn ($v) => filled($v)) ?? $default;
+
         $title = is_array($this->campaign->title)
-            ? ($this->campaign->title[$language] ?? $this->campaign->title['en'] ?? $this->campaign->name)
+            ? $pick($this->campaign->title, $this->campaign->name)
             : $this->campaign->title;
 
         $body = is_array($this->campaign->body)
-            ? ($this->campaign->body[$language] ?? $this->campaign->body['en'] ?? '')
+            ? $pick($this->campaign->body, '')
             : $this->campaign->body;
 
         return [

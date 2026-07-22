@@ -10,6 +10,7 @@ use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
 use App\Models\User;
 use App\Notifications\Auth\UserRegistered;
+use App\Support\Locale;
 use Exception;
 use Illuminate\Support\Facades\Hash;
 
@@ -28,7 +29,7 @@ class CreateUserController extends Controller
             }
 
             $data['password'] = Hash::make($data['password']);
-            $data['language'] = $data['language'] ?? 'en';
+            $data['language'] = Locale::normalize($data['language'] ?? null);
             $user = User::create($data);
 
             // try {

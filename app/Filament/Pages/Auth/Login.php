@@ -14,6 +14,7 @@ use Filament\Models\Contracts\FilamentUser;
 use Filament\Notifications\Notification;
 use Filament\Pages\Auth\Login as BaseLogin;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
@@ -44,7 +45,9 @@ class Login extends BaseLogin
         }
 
         // Se já há um desafio pendente (ex.: refresh), retoma o passo do código.
-        if ($this->twoFactor()->hasPending()) {
+        // Com o kill-switch desligado ignora-se qualquer desafio pendente, senão um
+        // utilizador a meio do fluxo ficava preso num campo de código já inútil.
+        if (config('backoffice-2fa.enabled', false) && $this->twoFactor()->hasPending()) {
             $this->step = 'code';
         }
 
@@ -84,6 +87,19 @@ class Login extends BaseLogin
      */
     public function authenticate(): ?LoginResponse
     {
+        // Kill-switch: com o 2FA desligado usa-se o login normal do Filament
+        // (validação, rate-limit e sessão são os do framework — não duplicar aqui).
+        // Default TRUE (fail-secure): se a config faltar (ex.: config:cache stale
+        // sem esta chave), o 2FA fica LIGADO — consistente com mount() acima e com
+        // o default do próprio config/backoffice-2fa.php.
+        if (! config('backoffice-2fa.enabled', false)) {
+            Log::warning('Backoffice login sem 2FA (BACKOFFICE_2FA_ENABLED desligado ou ausente).', [
+                'email' => $this->form->getState()['email'] ?? null,
+            ]);
+
+            return parent::authenticate();
+        }
+
         return $this->step === 'code'
             ? $this->confirmCode()
             : $this->sendCode();

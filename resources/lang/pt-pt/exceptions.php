@@ -24,7 +24,8 @@ return [
     ],
     'vendor' => [
         'service' => [
-            'service_in_not_pending' => 'O serviço não está pendente.',
+            'service_is_not_pending' => 'O serviço não está pendente.',
+            'service_is_not_accepted' => 'O serviço não foi aceite.',
         ],
         'vendor_cannot_accept_service' => 'O profissional não pode aceitar o serviço.',
         'has_service_open' => 'O profissional tem um serviço aberto.',

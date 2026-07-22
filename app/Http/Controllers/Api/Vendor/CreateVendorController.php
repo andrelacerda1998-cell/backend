@@ -8,6 +8,7 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
 use App\Models\User;
 use App\Notifications\Auth\UserRegistered;
+use App\Support\Locale;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -35,7 +36,7 @@ class CreateVendorController extends Controller
                 'password' => Hash::Make($request->input('password')),
                 // 'gender_id' => $request->input('gender_id') ?? null,
                 'phone_number' => $request->input('phone_number'),
-                'language' => $request->input('language'),
+                'language' => Locale::normalize($request->input('language')),
                 // 'nif' => $request->input('nif'),
             ]);
 

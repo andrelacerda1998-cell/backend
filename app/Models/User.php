@@ -13,6 +13,7 @@ use App\Models\Schedule\Schedule;
 use App\Models\User\UserBillingInfo;
 use App\Notifications\Auth\PasswordReset;
 use App\Observers\UserObserver;
+use App\Support\Locale;
 use Bavix\Wallet\Interfaces\Customer;
 use Bavix\Wallet\Interfaces\Wallet;
 use Bavix\Wallet\Interfaces\WalletFloat;
@@ -401,7 +402,24 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
 
     public function preferredLocale(): string
     {
-        return $this->language ?? app()->getLocale() ?? config('app.fallback_locale');
+        // Normalizado: há utilizadores gravados com language='pt', para o qual não
+        // existe catálogo — sem isto caíam em inglês. Ver App\Support\Locale.
+        return Locale::normalize($this->language ?? app()->getLocale());
+    }
+
+    /**
+     * Normaliza o idioma em qualquer leitura de $user->language.
+     *
+     * As ~24 notificações resolvem o locale via `$notifiable->language ?? ...`,
+     * pelo que o valor cru ('pt', 'pt_BR', …) ganhava e as mensagens caíam em
+     * inglês — o preferredLocale() sozinho não as cobre. Normalizar aqui, com a
+     * mesma regra, corrige-as todas sem as editar. Ver App\Support\Locale.
+     */
+    public function language(): Attribute
+    {
+        return Attribute::make(
+            get: fn ($value) => Locale::normalize($value),
+        );
     }
 
     public function routeNotificationForTwilio(Notification $notification): string
