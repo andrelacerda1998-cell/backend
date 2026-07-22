@@ -11,7 +11,7 @@ class CampaignNotificationTrackingController extends Controller
 {
     public function open(NotificationCampaignLog $log): ApiSuccessResponse
     {
-        //abort_if($log->user_id !== auth()->id(), Response::HTTP_FORBIDDEN);
+        abort_if($log->user_id !== auth()->id(), Response::HTTP_FORBIDDEN);
 
         if ($log->opened_at === null) {
             $log->update(['opened_at' => now()]);
@@ -22,7 +22,7 @@ class CampaignNotificationTrackingController extends Controller
 
     public function click(NotificationCampaignLog $log): ApiSuccessResponse
     {
-        //abort_if($log->user_id !== auth()->id(), Response::HTTP_FORBIDDEN);
+        abort_if($log->user_id !== auth()->id(), Response::HTTP_FORBIDDEN);
 
         if ($log->deep_link_clicked_at === null) {
             $log->update(['deep_link_clicked_at' => now()]);
