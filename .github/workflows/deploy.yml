@@ -6,7 +6,12 @@ name: Deploy Piquet backend (produção)
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Fazer deploy em produção no fim (desmarcado = só valida testes/build, não mexe no servidor)"
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-production
@@ -179,6 +184,7 @@ jobs:
   deploy:
     name: Deploy em produção
     needs: build-app
+    if: github.event_name == 'push' || inputs.deploy == true
     runs-on: ubuntu-latest
     environment: production
     steps:
