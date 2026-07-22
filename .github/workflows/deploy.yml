@@ -220,7 +220,16 @@ jobs:
             mv .env.production .env
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             sed -i -E "s#image: .*piquet-laravel.*#image: ${APP_IMAGE}#" docker-compose.yaml
-            docker compose pull
-            docker compose up -d
+            # IMPORTANTE: pull/up só do serviço laravel-prod (a app). Nunca "docker compose pull"
+            # ou "up -d" sem argumento aqui — isso puxa e recria TODOS os serviços do compose,
+            # incluindo mysql-laravel-prod/redis-laravel-prod/meilisearch-laravel-prod. Se essas
+            # imagens tiverem tag flutuante (ex: "mysql" sem versão), um pull destes puxa a major
+            # version mais recente do Docker Hub e recria o container de dados com ela -- ja
+            # aconteceu (2026-07-22) e derrubou a base de dados de producao por incompatibilidade
+            # de "data dictionary" entre major versions do MySQL. Corrigido nesse dia fixando a
+            # tag exata (mysql:9.2.0-piquet-restore) no docker-compose.yaml do servidor -- mas o
+            # pipeline nunca deve depender disso: só toca no serviço da app.
+            docker compose pull laravel-prod
+            docker compose up -d laravel-prod
             docker image prune -f
             docker logout ghcr.io
