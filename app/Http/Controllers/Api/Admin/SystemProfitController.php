@@ -32,17 +32,24 @@ class SystemProfitController extends Controller
         $transactions = $query->paginate($perPage);
 
         // Nomes de admin resolvidos num único query, em vez de N+1 dentro do map.
-        // Chaves normalizadas para string: 'admin_id' vem do JSON da coluna `meta`
-        // (json_decode preserva o tipo, normalmente int), mas pluck('name', 'id')
-        // devolve os valores tal como o driver PDO os dá (frequentemente string) --
-        // sem normalizar, a comparação de chaves falhava silenciosamente (null).
+        // Chaves normalizadas para string por segurança (admin_id vem do JSON
+        // da coluna `meta`, tipo pode variar consoante o driver).
+        //
+        // NÃO usar a coluna `name`: User::setNameAttribute() intercepta qualquer
+        // escrita a 'name' e separa-a em first_name/last_name, mas nunca chega a
+        // gravar a própria coluna `name` -- fica sempre NULL para qualquer registo
+        // criado (incluindo, possivelmente, admins criados pelo form do Filament,
+        // que também escreve via 'name'). first_name/last_name são fiáveis porque
+        // é precisamente isso que o mutator preenche.
         $adminIds = collect($transactions->items())
             ->map(fn (Transaction $t) => $t->meta['admin_id'] ?? null)
             ->filter()
             ->unique();
         $adminNames = User::whereIn('id', $adminIds)
-            ->get(['id', 'name'])
-            ->mapWithKeys(fn (User $u) => [(string) $u->id => $u->name]);
+            ->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn (User $u) => [
+                (string) $u->id => trim(($u->first_name ?? '').' '.($u->last_name ?? '')) ?: null,
+            ]);
 
         return ApiSuccessResponse::make([
             'wallet_balance' => $wallet->balance_float,

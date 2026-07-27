@@ -3,27 +3,17 @@
 namespace Tests\Feature;
 
 use App\Settings\RateSettings;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AdminFeeSettingsApiTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // RateSettings::fake() (padrão já usado em tests/Unit/RateServiceTest.php) --
-        // evita depender das migrations de database/settings e de RefreshDatabase,
-        // e não deixa valores alterados para trás para outros testes.
-        RateSettings::fake([
-            'daytime' => 100,
-            'evening' => 120,
-            'night' => 150,
-            'late_night' => 190,
-            'midnight' => 190,
-            'kilometer_price' => 80,
-            'system_commission' => 25,
-        ]);
-    }
+    // NOTA: tentámos RateSettings::fake() primeiro (como em tests/Unit/RateServiceTest.php),
+    // mas esse fake só cobre leituras -- Spatie\LaravelSettings\Settings::save() faz sempre
+    // uma query real à BD para verificar "propriedades bloqueadas" (getLockedProperties),
+    // ignorando o fake por completo. RefreshDatabase usa a BD a sério, com os valores
+    // por omissão vindos das migrations em database/settings/.
+    use RefreshDatabase;
 
     private function withAuth(): static
     {
@@ -34,9 +24,12 @@ class AdminFeeSettingsApiTest extends TestCase
 
     public function test_it_returns_the_current_fee_settings(): void
     {
+        // Valores das migrations database/settings/*_create_rate_settings.php.
         $this->withAuth()
             ->getJson('/api/v1/admin/fee-settings')
             ->assertOk()
+            ->assertJsonPath('data.daytime', 100)
+            ->assertJsonPath('data.night', 150)
             ->assertJsonPath('data.system_commission', 25)
             ->assertJsonPath('data.kilometer_price', 0.8)
             ->assertJsonStructure([

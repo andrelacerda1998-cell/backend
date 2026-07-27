@@ -31,7 +31,10 @@ class AdminSystemProfitApiTest extends TestCase
             ->getJson('/api/v1/admin/system-profit')
             ->assertOk();
 
-        $response->assertJsonPath('data.items.0.admin_name', $admin->name);
+        // Não usar $admin->name -- User::setNameAttribute() nunca grava essa coluna
+        // (só first_name/last_name), fica sempre null. Ver nota no controller.
+        $expectedName = trim($admin->first_name.' '.$admin->last_name);
+        $response->assertJsonPath('data.items.0.admin_name', $expectedName);
         $response->assertJsonPath('data.items.0.type', 'system_fee');
         $this->assertGreaterThan(0, $response->json('data.wallet_balance'));
     }
