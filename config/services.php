@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    // Token partilhado com o backoffice Next.js (piquet-backoffice) para as rotas
+    // v1/admin/* — ver App\Http\Middleware\AdminApiToken.
+    'admin_api' => [
+        'token' => env('ADMIN_API_TOKEN'),
+    ],
+
     'invoiceExpress' => [
         'account_name' => env('INVOICE_XPRESS_ACCOUNT'),
         'account_id' => env('INVOICE_XPRESS_ACCOUNT_ID'),

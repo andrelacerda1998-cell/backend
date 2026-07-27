@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'locale' => App\Http\Middleware\HandleLocale::class,
             'isVendor' => App\Http\Middleware\EnsureUserIsVendor::class,
+            'admin.api' => App\Http\Middleware\AdminApiToken::class,
         ]);
         // Aplica o limiter base 'api' (definido em AppServiceProvider) a todas as rotas de
         // API. Fecha o DoS não autenticado (108/119 rotas sem limite). Rotas afiadas têm
