@@ -32,11 +32,17 @@ class SystemProfitController extends Controller
         $transactions = $query->paginate($perPage);
 
         // Nomes de admin resolvidos num único query, em vez de N+1 dentro do map.
+        // Chaves normalizadas para string: 'admin_id' vem do JSON da coluna `meta`
+        // (json_decode preserva o tipo, normalmente int), mas pluck('name', 'id')
+        // devolve os valores tal como o driver PDO os dá (frequentemente string) --
+        // sem normalizar, a comparação de chaves falhava silenciosamente (null).
         $adminIds = collect($transactions->items())
             ->map(fn (Transaction $t) => $t->meta['admin_id'] ?? null)
             ->filter()
             ->unique();
-        $adminNames = User::whereIn('id', $adminIds)->pluck('name', 'id');
+        $adminNames = User::whereIn('id', $adminIds)
+            ->get(['id', 'name'])
+            ->mapWithKeys(fn (User $u) => [(string) $u->id => $u->name]);
 
         return ApiSuccessResponse::make([
             'wallet_balance' => $wallet->balance_float,
@@ -48,7 +54,7 @@ class SystemProfitController extends Controller
                     'type' => $t->meta['type'] ?? $t->type,
                     'description_key' => $t->meta['admin_description'] ?? null,
                     'admin_id' => $adminId,
-                    'admin_name' => $adminId ? ($adminNames[$adminId] ?? null) : null,
+                    'admin_name' => $adminId !== null ? ($adminNames[(string) $adminId] ?? null) : null,
                     'amount' => $t->amount_float,
                     'created_at' => $t->created_at?->toIso8601String(),
                 ];
