@@ -16,6 +16,10 @@ class AcceptNotification extends Notification implements ShouldQueue
 
     public function __construct(protected VendorDocuments $document) {}
 
+    /**
+     * Não respeita notification_preferences por opção: é operacionalmente crítico.
+     * Ver App\Notifications\Concerns\RespectsVendorPreference.
+     */
     public function via($notifiable): array
     {
         return ['mail', 'expo'];

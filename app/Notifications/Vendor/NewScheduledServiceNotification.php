@@ -3,6 +3,7 @@
 namespace App\Notifications\Vendor;
 
 use App\Models\Schedule\Schedule;
+use App\Notifications\Concerns\RespectsVendorPreference;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -11,13 +12,13 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class NewScheduledServiceNotification extends Notification implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, RespectsVendorPreference;
 
     public function __construct(private readonly Schedule $schedule) {}
 
     public function via($notifiable): array
     {
-        return ['expo'];
+        return $this->applyVendorPreference($notifiable, 'new_requests', ['expo']);
     }
 
     public function toExpo($notifiable): ExpoMessage
@@ -33,7 +34,12 @@ class NewScheduledServiceNotification extends Notification implements ShouldQueu
         return ExpoMessage::create($title)
             ->body($body)
             ->priority('high')
-            ->playSound();
+            ->playSound()
+            ->channelId('requests')
+            ->data([
+                'open_type' => 'request',
+                'open_id' => $schedule->service_id ?? $schedule->id,
+            ]);
     }
 
     private function formatWhen(Schedule $schedule, string $language): string
