@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
+use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
 use App\Http\Controllers\Api\Admin\VendorPaymentController;
 use App\Http\Controllers\Api\Admin\VoucherController;
@@ -44,4 +45,13 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/customers/by-source', [CustomerController::class, 'bySource']);
     Route::get('/customers/trend', [CustomerController::class, 'trend']);
     Route::get('/customers/retention', [CustomerController::class, 'retention']);
+
+    // Técnicos — equivalente ao Filament VendorResource. Suspender/Reativar
+    // usam soft-delete real, mas SEM a restrição de super-admin do Filament
+    // (ver nota extensa no VendorController) -- decisão explícita do
+    // utilizador. Só Lista + Suspender/Reativar nesta fatia; "Visão geral"
+    // fica para uma fatia futura.
+    Route::get('/vendors', [VendorController::class, 'index']);
+    Route::put('/vendors/{id}/suspend', [VendorController::class, 'suspend']);
+    Route::put('/vendors/{id}/restore', [VendorController::class, 'restore']);
 });
