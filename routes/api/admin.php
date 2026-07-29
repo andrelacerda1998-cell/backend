@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AllowedZoneController;
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
@@ -75,4 +76,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/operation-areas', [OperationAreaController::class, 'index']);
     Route::post('/operation-areas', [OperationAreaController::class, 'store']);
     Route::put('/operation-areas/{operationArea}', [OperationAreaController::class, 'update']);
+
+    // Zonas — equivalente ao Filament AllowedZoneResource. Lista + criar/
+    // editar, sem apagar (não é soft-delete) e sem a restrição de
+    // super-admin do Filament -- decisões explícitas do utilizador
+    // (2026-07-29, ver notas no controller).
+    Route::get('/allowed-zones', [AllowedZoneController::class, 'index']);
+    Route::post('/allowed-zones', [AllowedZoneController::class, 'store']);
+    Route::put('/allowed-zones/{allowedZone}', [AllowedZoneController::class, 'update']);
 });
