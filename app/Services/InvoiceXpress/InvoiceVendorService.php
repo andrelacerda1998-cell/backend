@@ -34,7 +34,10 @@ class InvoiceVendorService
         if ($address === null) {
             $address['address'] = $service->address?->street_name.' '.$service->address?->street_number;
             $address['postal_code'] = $service->address?->postal_code;
-            $address['locality'] = $service->address?->locality;
+            $address['locality'] = $service->address?->city; // `locality` é a chave que o prepareClientData mapeia para "city" na
+                // fatura; o modelo Address NÃO tem coluna `locality` (tem city,
+                // municipality e state), por isso isto chegava sempre a null e as
+                // faturas saíam sem localidade.
         } else {
             $address = $address->toArray();
         }
@@ -109,11 +112,17 @@ class InvoiceVendorService
             if (is_array($service->address)) {
                 $address['address'] = $service->address['street_name'].' '.$service->address['street_number'];
                 $address['postal_code'] = $service->address['postal_code'];
-                $address['locality'] = $service->address['state'];
+                // `state` é o distrito; a localidade da fatura é a cidade. O ramo
+                // de objeto (abaixo) e o updateFiscalDetails já usam city — este era
+                // o único caminho a preencher o campo "city" da fatura com o distrito.
+                $address['locality'] = $service->address['city'] ?? null;
             } else {
                 $address['address'] = $service->address?->street_name.' '.$service->address?->street_number;
                 $address['postal_code'] = $service->address?->postal_code;
-                $address['locality'] = $service->address?->locality;
+                $address['locality'] = $service->address?->city; // `locality` é a chave que o prepareClientData mapeia para "city" na
+                // fatura; o modelo Address NÃO tem coluna `locality` (tem city,
+                // municipality e state), por isso isto chegava sempre a null e as
+                // faturas saíam sem localidade.
             }
 
         } else {

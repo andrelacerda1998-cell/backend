@@ -25,6 +25,19 @@ class UpdateAtUserController extends Controller
             $vendor->at_password = $data['at_password'];
             $vendor->save();
 
+            // O NIF do técnico vive dentro do subutilizador AT (formato
+            // NIF/subutilizador, garantido pelo regex do UpdateAtUserRequest).
+            // Passa a ser derivado daqui em vez de escrito à mão no perfil:
+            // antes o mesmo número existia em dois sítios e nada garantia que
+            // coincidiam — as faturas podiam sair com NIFs diferentes conforme
+            // o caminho (SystemInvoiceService lê users.nif, o InvoiceVendorService
+            // já fazia explode do at_user).
+            $nifFromAtUser = explode('/', $data['at_user'])[0];
+            if ($user->nif !== $nifFromAtUser) {
+                $user->nif = $nifFromAtUser;
+                $user->save();
+            }
+
             DB::commit();
 
             if ($vendor->auth_token && $vendor->invoice_workspace) {

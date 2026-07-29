@@ -127,11 +127,22 @@ class UserController extends Controller
         $updateData = [
             'first_name' => $first_name,
             'last_name' => $last_name,
-            'date_birthday' => $date_birthday ?: null,
-            'nif' => $nif ?: null,
             'phone_number' => $phone_number,
             'profile_completion_pending' => false,
         ];
+
+        // Só mexer nestes campos quando vêm mesmo no pedido. Antes eram sempre
+        // reescritos com `?: null`, por isso um formulário que deixasse de os
+        // enviar APAGAVA o NIF e a data de nascimento já guardados. O NIF do
+        // técnico passou a derivar do subutilizador AT (UpdateAtUserController)
+        // e sairia do perfil na primeira gravação. Enviar a chave vazia continua
+        // a limpar o valor, para a app do cliente manter o que já fazia.
+        if ($request->has('date_birthday')) {
+            $updateData['date_birthday'] = $date_birthday ?: null;
+        }
+        if ($request->has('nif')) {
+            $updateData['nif'] = $nif ?: null;
+        }
         if ($email) {
             $updateData['email'] = $email;
         }
