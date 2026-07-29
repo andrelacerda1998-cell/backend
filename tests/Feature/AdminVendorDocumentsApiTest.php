@@ -16,6 +16,20 @@ class AdminVendorDocumentsApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Criar um Vendor dispara VendorObserver::created(), que por sua vez cria
+        // ScheduleAvailable por cada ScheduleDays (semeado por migration) -- e cada
+        // um desses dispara ScheduleAvailableObserver, que tenta indexar no
+        // Meilisearch (VendorScheduleSearch::searchable()). Vendor::withoutSyncingToSearch()
+        // só cobre o próprio Vendor, não essa cadeia de observers indireta -- por
+        // isso desliga-se o Scout globalmente no teste (driver 'null', suportado
+        // nativamente, ver config/scout.php) em vez de tentar apanhar cada observer.
+        config(['scout.driver' => 'null']);
+    }
+
     private function withAuth(): static
     {
         config(['services.admin_api.token' => 'a-valid-token']);
@@ -25,16 +39,15 @@ class AdminVendorDocumentsApiTest extends TestCase
 
     /**
      * Não há factories para Vendor/VendorDocuments/Document (só UserFactory
-     * existe) — criados diretamente. Vendor::withoutSyncingToSearch() evita
-     * que o VendorObserver tente indexar no Meilisearch durante os testes.
+     * existe) — criados diretamente.
      */
     private function makeVendorDocument(string $status = 'pending'): VendorDocuments
     {
         $user = User::factory()->create(['first_name' => 'Ana', 'last_name' => 'Ferreira']);
-        $vendor = Vendor::withoutSyncingToSearch(fn () => Vendor::create([
+        $vendor = Vendor::create([
             'user_id' => $user->id,
             'username' => 'ana_'.$user->id,
-        ]));
+        ]);
         $document = Document::create(['name' => 'Cartão de Cidadão']);
 
         return VendorDocuments::create([
