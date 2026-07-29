@@ -15,10 +15,15 @@ class ServiceExtra extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['service_id', 'type', 'description', 'minutes', 'amount', 'status', 'rejection_reason', 'resolved_at'];
+    protected $fillable = [
+        'service_id', 'type', 'description', 'minutes', 'amount', 'status', 'rejection_reason', 'resolved_at',
+        'payment_status', 'payment_order_id', 'payment_error', 'charged_at', 'vendor_credited_at',
+    ];
 
     protected $casts = [
         'resolved_at' => 'datetime',
+        'charged_at' => 'datetime',
+        'vendor_credited_at' => 'datetime',
         'minutes' => 'integer',
         'amount' => 'integer',
     ];
@@ -26,5 +31,17 @@ class ServiceExtra extends Model
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    /** Ordem Payshop dedicada a este extra (criada na aprovação pelo cliente). */
+    public function paymentOrder(): BelongsTo
+    {
+        return $this->belongsTo(\RwInteractive\PayshopSdk\Models\PaymentOrder::class, 'payment_order_id');
+    }
+
+    /** O dinheiro deste extra está efetivamente garantido (capturado ou dispensado)? */
+    public function isCharged(): bool
+    {
+        return in_array($this->payment_status, ['paid', 'not_required'], true);
     }
 }

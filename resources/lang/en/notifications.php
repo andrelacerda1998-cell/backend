@@ -138,6 +138,16 @@ return [
             'description' => 'The customer declined your request: ',
             'reason' => 'Reason: :reason',
         ],
+        'chargeFailed' => [
+            'vendor' => [
+                'title' => 'Extra not charged',
+                'description' => 'We could not charge the approved extra — this amount will not be paid out: ',
+            ],
+            'customer' => [
+                'title' => 'Extra charge failed',
+                'description' => 'We could not charge the extra you approved. Please check your payment method: ',
+            ],
+        ],
     ],
     'serviceCanceledByVendor' => [
         'title' => 'Service canceled',

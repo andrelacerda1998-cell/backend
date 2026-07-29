@@ -138,6 +138,16 @@ return [
             'description' => 'O cliente recusou o teu pedido: ',
             'reason' => 'Motivo: :reason',
         ],
+        'chargeFailed' => [
+            'vendor' => [
+                'title' => 'Extra não cobrado',
+                'description' => 'Não foi possível cobrar o extra aprovado — este valor não vai ser pago: ',
+            ],
+            'customer' => [
+                'title' => 'Falha na cobrança do extra',
+                'description' => 'Não conseguimos cobrar o extra que aprovaste. Verifica o teu método de pagamento: ',
+            ],
+        ],
     ],
     'serviceCanceledByVendor' => [
         'title' => 'Serviço cancelado',

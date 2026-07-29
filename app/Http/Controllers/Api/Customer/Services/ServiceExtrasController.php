@@ -7,16 +7,22 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Service;
 use App\Models\ServiceExtra;
+use App\Notifications\Customer\ServiceExtraChargeFailedNotification as CustomerChargeFailedNotification;
+use App\Notifications\Vendor\ServiceExtraChargeFailedNotification as VendorChargeFailedNotification;
 use App\Notifications\Vendor\ServiceExtraResolvedNotification;
+use App\Services\Common\Services\ChargeServiceExtra;
 use Exception;
 use Illuminate\Http\Request;
 
 /**
  * Lado do CLIENTE dos extras (tempo extra / peças) pedidos pelo técnico.
  *
- * IMPORTANTE: aprovar um extra apenas muda o estado do pedido. NÃO mexe em
- * `amount`, `amount_for_vendor`, comissão nem em qualquer ordem de pagamento —
- * o comportamento financeiro do serviço fica exatamente como estava.
+ * Aprovar um extra COBRA o valor ao cliente numa ordem Payshop dedicada
+ * (ChargeServiceExtra), reutilizando o método de pagamento do serviço base.
+ * O serviço base nunca é tocado: `amount`, `amount_for_vendor`, comissão e a
+ * ordem de pagamento original ficam exatamente como estavam. O crédito do
+ * extra ao técnico acontece no fecho (CloseService), só se a cobrança tiver
+ * sido efetivamente garantida.
  */
 class ServiceExtrasController extends Controller
 {
@@ -35,6 +41,7 @@ class ServiceExtrasController extends Controller
             'minutes' => $e->minutes,
             'amount' => (int) $e->amount,
             'status' => $e->status,
+            'payment_status' => $e->payment_status,
             'rejection_reason' => $e->rejection_reason,
             'created_at' => $e->created_at?->toIso8601String(),
             'resolved_at' => $e->resolved_at?->toIso8601String(),
@@ -86,19 +93,58 @@ class ServiceExtrasController extends Controller
             return new ApiErrorResponse(new Exception, 'Not found', 404);
         }
 
-        if ($extra->status !== 'pending') {
+        // Transição pending→resolved sob lock: duas aprovações concorrentes (double-tap,
+        // retry de rede) nunca passam as duas o guard — só a primeira resolve e cobra.
+        $transitioned = \DB::transaction(function () use ($extra, $approved, $reason): bool {
+            $locked = ServiceExtra::whereKey($extra->getKey())->lockForUpdate()->first();
+
+            if (! $locked || $locked->status !== 'pending') {
+                return false;
+            }
+
+            $locked->update([
+                'status' => $approved ? 'approved' : 'rejected',
+                'rejection_reason' => $approved ? null : $reason,
+                'resolved_at' => now(),
+            ]);
+
+            return true;
+        });
+
+        if (! $transitioned) {
             return new ApiErrorResponse(new Exception, 'This request was already resolved', 422);
         }
 
-        $extra->update([
-            'status' => $approved ? 'approved' : 'rejected',
-            'rejection_reason' => $approved ? null : $reason,
-            'resolved_at' => now(),
-        ]);
+        $extra->refresh();
+
+        // Cobrança FORA da transação (chamada HTTP externa). Idempotente: ChargeServiceExtra
+        // só cobra quando ainda não há ordem/estado, e payment_order_id é UNIQUE na BD.
+        if ($approved) {
+            $chargeResult = app(ChargeServiceExtra::class)->charge($service, $extra);
+
+            if ($chargeResult === 'failed') {
+                $this->notifyChargeFailed($service, $extra->refresh());
+            }
+        }
 
         $this->notifyVendor($service, $extra->refresh(), $approved);
 
         return new ApiSuccessResponse(['extra' => $this->present($extra)]);
+    }
+
+    /** Cobrança falhou: avisar técnico (não vai receber o extra) e cliente. */
+    private function notifyChargeFailed(Service $service, ServiceExtra $extra): void
+    {
+        try {
+            $vendorUser = $service->vendor?->user;
+            if ($vendorUser && ! $vendorUser->trashed() && $vendorUser->devices()->exists()) {
+                $vendorUser->notify(new VendorChargeFailedNotification($service, $extra));
+            }
+
+            $service->customer?->notify(new CustomerChargeFailedNotification($service, $extra));
+        } catch (\Throwable $e) {
+            report($e); // falha de push nunca quebra a resposta
+        }
     }
 
     private function notifyVendor(Service $service, ServiceExtra $extra, bool $approved): void
