@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -44,33 +45,27 @@ class AdminCustomersApiTest extends TestCase
         bool $isTest = false,
         ?Carbon $createdAt = null,
     ): Service {
-        $service = Service::create([
+        // INSERT direto pela query builder, não Service::create(): 'price_rate'
+        // e 'payment_status' não estão no $fillable do model -- create() ignora-os
+        // em silêncio, e 'payment_status' é NOT NULL sem default na coluna, o que
+        // rebenta logo no INSERT (não dava para gravar a seguir com um UPDATE).
+        // 'price_rate' também não pode ser atribuído via ->price_rate = ... depois:
+        // o Attribute priceRate() tem um `set` que espera EUROS e multiplica por
+        // 100, o que duplicaria a conversão para um valor já em cêntimos.
+        $timestamp = $createdAt ?? now();
+
+        $id = DB::table('services')->insertGetId([
             'customer_id' => $customer->id,
-            'status' => $status,
+            'status' => $status->value,
+            'payment_status' => PaymentStatus::PAID->value,
+            'price_rate' => $priceRateCents,
             'rating_by_customer' => $ratingByCustomer,
             'is_test' => $isTest,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
         ]);
 
-        // price_rate NÃO é mass-assignable (fora do $fillable do Service --
-        // só existe via o Attribute priceRate(), cujo `set` espera EUROS e
-        // multiplica por 100, o que duplicaria a conversão se usássemos
-        // ->price_rate = $cents aqui). payment_status é NOT NULL sem default
-        // na coluna. Gravados os dois diretamente pela query builder.
-        $service->newQuery()->where('id', $service->id)->update([
-            'price_rate' => $priceRateCents,
-            'payment_status' => PaymentStatus::PAID,
-        ]);
-        $service->refresh();
-
-        if ($createdAt) {
-            // saveQuietly -- ServiceObserver::updating()/updated() só reage a
-            // isDirty('status'), mas nada aqui depende de status mudar; evita
-            // simplesmente disparar observers fora do que o teste pretende.
-            $service->created_at = $createdAt;
-            $service->saveQuietly();
-        }
-
-        return $service;
+        return Service::findOrFail($id);
     }
 
     public function test_it_lists_customers_excluding_admins_vendors_and_test_users(): void
