@@ -22,7 +22,14 @@ class AdminVendorsApiTest extends TestCase
     // de quem as sujou.
     use DatabaseTruncation;
 
-    protected array $tablesToTruncate = ['users', 'vendors', 'schedule_available'];
+    // 'wallets' tem de entrar aqui também: UserObserver cria uma wallet
+    // "default-wallet" para cada User novo (unique em holder_type+holder_id+
+    // slug). Sem truncar 'wallets', o TRUNCATE de 'users' reinicia o
+    // auto_increment (users volta a começar em 1), mas a wallet antiga do
+    // User#1 de um teste anterior continua na tabela -- o próximo User#1
+    // criado colide com ela. Mesma lista de tabelas que
+    // AdminVendorPaymentsApiTest usa, e pela mesma razão.
+    protected array $tablesToTruncate = ['users', 'vendors', 'wallets', 'schedule_available'];
 
     protected function setUp(): void
     {
