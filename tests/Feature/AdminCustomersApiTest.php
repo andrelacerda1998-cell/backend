@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\Services\AddressType;
+use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Address;
 use App\Models\Service;
@@ -46,10 +47,20 @@ class AdminCustomersApiTest extends TestCase
         $service = Service::create([
             'customer_id' => $customer->id,
             'status' => $status,
-            'price_rate' => $priceRateCents,
             'rating_by_customer' => $ratingByCustomer,
             'is_test' => $isTest,
         ]);
+
+        // price_rate NÃO é mass-assignable (fora do $fillable do Service --
+        // só existe via o Attribute priceRate(), cujo `set` espera EUROS e
+        // multiplica por 100, o que duplicaria a conversão se usássemos
+        // ->price_rate = $cents aqui). payment_status é NOT NULL sem default
+        // na coluna. Gravados os dois diretamente pela query builder.
+        $service->newQuery()->where('id', $service->id)->update([
+            'price_rate' => $priceRateCents,
+            'payment_status' => PaymentStatus::PAID,
+        ]);
+        $service->refresh();
 
         if ($createdAt) {
             // saveQuietly -- ServiceObserver::updating()/updated() só reage a
