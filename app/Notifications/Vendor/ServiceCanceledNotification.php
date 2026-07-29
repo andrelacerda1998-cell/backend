@@ -14,6 +14,10 @@ class ServiceCanceledNotification extends Notification implements ShouldQueue
 
     public function __construct(private readonly Service $service) {}
 
+    /**
+     * Não respeita notification_preferences por opção: é operacionalmente crítico.
+     * Ver App\Notifications\Concerns\RespectsVendorPreference.
+     */
     public function via($notifiable): array
     {
         return ['expo', 'database'];
@@ -27,7 +31,11 @@ class ServiceCanceledNotification extends Notification implements ShouldQueue
         return ExpoMessage::create(__('notifications.canceledService.title', [], $language))
             ->body(__('notifications.canceledService.description', [], $language).$serviceType)
             ->priority('high')
-            ->playSound();
+            ->playSound()
+            ->data([
+                'open_type' => 'service',
+                'open_id' => $this->service->id,
+            ]);
     }
 
     public function toArray($notifiable): array
@@ -39,6 +47,8 @@ class ServiceCanceledNotification extends Notification implements ShouldQueue
             'title' => __('notifications.canceledService.title', [], $language),
             'body' => __('notifications.canceledService.description', [], $language).$serviceType,
             'service_id' => $this->service->id,
+            'open_type' => 'service',
+            'open_id' => $this->service->id,
         ];
     }
 }

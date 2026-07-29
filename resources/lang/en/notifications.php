@@ -119,6 +119,26 @@ return [
             'description' => ':customer_name has canceled the :service_type service appointment',
         ],
     ],
+    'serviceExtra' => [
+        'item' => [
+            'time' => '+:minutes min (:amount€)',
+            'part' => ':description (:amount€)',
+        ],
+        'requested' => [
+            'title' => 'Request from the professional',
+            'time' => 'The professional requested :minutes extra min (:amount€) on your :service_type service. Approve or decline in the app.',
+            'part' => 'The professional requested :description (:amount€) on your :service_type service. Approve or decline in the app.',
+        ],
+        'approved' => [
+            'title' => 'Request approved',
+            'description' => 'The customer approved your request: ',
+        ],
+        'rejected' => [
+            'title' => 'Request declined',
+            'description' => 'The customer declined your request: ',
+            'reason' => 'Reason: :reason',
+        ],
+    ],
     'serviceCanceledByVendor' => [
         'title' => 'Service canceled',
         'description' => ':vendor_name has canceled your :service_type service',
@@ -131,6 +151,16 @@ return [
         'deny' => [
             'title' => 'denied',
             'description' => 'Your document has been denied.',
+        ],
+        // Expiry reminders (30/15/7/3 days). Document type and deadline only — never document data.
+        'expiring' => [
+            'title' => ':document expires in :days days',
+            'description' => 'Renew it to keep receiving requests. Tap to upload the new document.',
+        ],
+        // Last call (1 day): more direct tone.
+        'expiring_last_call' => [
+            'title' => 'Last warning: :document expires tomorrow',
+            'description' => 'From the day after tomorrow you will not be able to accept services. Upload the new document now.',
         ],
     ],
     'phoneNumberValidation' => 'Piquet: Your validation code is :code',

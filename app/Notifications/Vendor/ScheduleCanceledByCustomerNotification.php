@@ -31,6 +31,10 @@ class ScheduleCanceledByCustomerNotification extends Notification implements Sho
         $this->customerName = $schedule->customer?->name ?? '';
     }
 
+    /**
+     * Não respeita notification_preferences por opção: é operacionalmente crítico.
+     * Ver App\Notifications\Concerns\RespectsVendorPreference.
+     */
     public function via($notifiable): array
     {
         return ['expo', 'database'];

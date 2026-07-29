@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Vendor;
 
+use App\Notifications\Concerns\RespectsVendorPreference;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -9,13 +10,13 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class PaymentSentNotification extends Notification implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, RespectsVendorPreference;
 
     public function __construct(private string $amount) {}
 
     public function via($notifiable): array
     {
-        return ['expo', 'database'];
+        return $this->applyVendorPreference($notifiable, 'payments', ['expo', 'database']);
     }
 
     public function toExpo($notifiable): ExpoMessage

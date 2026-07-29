@@ -119,6 +119,26 @@ return [
             'description' => ':customer_name cancelou o agendamento do serviço de :service_type',
         ],
     ],
+    'serviceExtra' => [
+        'item' => [
+            'time' => '+:minutes min (:amount€)',
+            'part' => ':description (:amount€)',
+        ],
+        'requested' => [
+            'title' => 'Pedido do profissional',
+            'time' => 'O profissional pediu mais :minutes min (:amount€) no serviço de :service_type. Aprova ou recusa na app.',
+            'part' => 'O profissional pediu :description (:amount€) no serviço de :service_type. Aprova ou recusa na app.',
+        ],
+        'approved' => [
+            'title' => 'Pedido aprovado',
+            'description' => 'O cliente aprovou o teu pedido: ',
+        ],
+        'rejected' => [
+            'title' => 'Pedido recusado',
+            'description' => 'O cliente recusou o teu pedido: ',
+            'reason' => 'Motivo: :reason',
+        ],
+    ],
     'serviceCanceledByVendor' => [
         'title' => 'Serviço cancelado',
         'description' => ':vendor_name cancelou o teu serviço de :service_type',
@@ -131,6 +151,18 @@ return [
         'deny' => [
             'title' => 'recusado',
             'description' => 'O teu documento foi recusado.',
+        ],
+        // Avisos de expiração (30/15/7/3 dias). Só o tipo de documento e o prazo — nunca dados do documento.
+        // Sem artigo antes de :document: o nome do documento tanto pode ser masculino
+        // ("o Registo Criminal") como feminino ("a Declaração de Início de Atividade").
+        'expiring' => [
+            'title' => ':document expira em :days dias',
+            'description' => 'Renova já para continuares a receber pedidos. Toca para enviar o novo documento.',
+        ],
+        // Último aviso (1 dia): tom mais direto.
+        'expiring_last_call' => [
+            'title' => 'Último aviso: :document expira amanhã',
+            'description' => 'A partir de depois de amanhã deixas de poder aceitar serviços. Envia já o novo documento.',
         ],
     ],
     'phoneNumberValidation' => 'Piquet: Seu código de validação é :code',
