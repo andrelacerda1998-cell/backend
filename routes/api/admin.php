@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
@@ -28,4 +29,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // interno + email/notificação; a transferência bancária é manual).
     Route::get('/vendor-payments', [VendorPaymentController::class, 'index']);
     Route::put('/vendor-payments/{vendor}/pay', [VendorPaymentController::class, 'pay']);
+
+    // Clientes — equivalente ao Filament CustomerResource. Bloquear/Reativar
+    // usam soft-delete real (ver nota no controller); sem ForceDelete, reset
+    // de password ou impersonação nesta fatia (decisão explícita).
+    Route::get('/customers', [CustomerController::class, 'index']);
+    Route::put('/customers/{id}/block', [CustomerController::class, 'block']);
+    Route::put('/customers/{id}/restore', [CustomerController::class, 'restore']);
 });
