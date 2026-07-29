@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
+use App\Http\Controllers\Api\Admin\VendorPaymentController;
 use App\Http\Controllers\Api\Admin\VoucherController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,4 +23,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/vendor-documents', [VendorDocumentController::class, 'index']);
     Route::put('/vendor-documents/{vendorDocument}/approve', [VendorDocumentController::class, 'approve']);
     Route::put('/vendor-documents/{vendorDocument}/decline', [VendorDocumentController::class, 'decline']);
+
+    // Pagamentos a vendors — equivalente ao Filament VendorPayments (ledger
+    // interno + email/notificação; a transferência bancária é manual).
+    Route::get('/vendor-payments', [VendorPaymentController::class, 'index']);
+    Route::put('/vendor-payments/{vendor}/pay', [VendorPaymentController::class, 'pay']);
 });
