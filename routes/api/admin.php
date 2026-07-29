@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
+use App\Http\Controllers\Api\Admin\OperationAreaController;
+use App\Http\Controllers\Api\Admin\ServicesTypeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
@@ -61,4 +63,16 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/vendors/by-location', [VendorController::class, 'byLocation']);
     Route::get('/vendors/top', [VendorController::class, 'top']);
     Route::get('/vendors/coverage', [VendorController::class, 'coverage']);
+
+    // Catálogo (tipos de serviço) + Categorias — equivalentes ao Filament
+    // ServicesTypeResource/OperationAreaResource. Só Lista + criar/editar
+    // (sem apagar) e sem Zonas/AllowedZone -- decisão explícita do utilizador
+    // (2026-07-29, ver notas nos controllers).
+    Route::get('/services-types', [ServicesTypeController::class, 'index']);
+    Route::post('/services-types', [ServicesTypeController::class, 'store']);
+    Route::put('/services-types/{servicesType}', [ServicesTypeController::class, 'update']);
+
+    Route::get('/operation-areas', [OperationAreaController::class, 'index']);
+    Route::post('/operation-areas', [OperationAreaController::class, 'store']);
+    Route::put('/operation-areas/{operationArea}', [OperationAreaController::class, 'update']);
 });
