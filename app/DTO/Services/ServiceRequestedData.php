@@ -51,7 +51,11 @@ readonly class ServiceRequestedData
                 ],
             ],
             customer: $service->customer?->only(['id', 'name', 'address']),
-            address: ['name' => $service->address?$service->address['city'].', '.ucfirst($service->address['state'])  : null],
+            // Moradas guardadas nem sempre têm city/state (há registos só com nome e
+            // coordenadas) — o acesso direto rebentava a lista inteira com 500.
+            address: ['name' => $service->address
+                ? trim(($service->address['city'] ?? '').', '.ucfirst($service->address['state'] ?? ''), ', ') ?: ($service->address['name'] ?? null)
+                : null],
             address_details: $service->formatVendorAddress(),
             customer_notes: $service->customer_notes,
             service_area: $service->serviceType->operationArea->only(['name']),
