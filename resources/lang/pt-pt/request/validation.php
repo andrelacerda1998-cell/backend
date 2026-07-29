@@ -23,6 +23,9 @@ return [
         'must_be_selected' => 'Deve ser seleccionado, no mínimo, um campo :attribute.',
         'only_one_must_be_selected' => 'Apenas um campo :attribute deve ser seleccionado.',
     ],
+    'cities' => [
+        'min' => 'Escolhe pelo menos :min concelhos onde queres trabalhar.',
+    ],
     'password' => [
         'letters' => 'A senha deve conter pelo menos uma letra.',
         'mixed_case' => 'A senha deve conter letras maiúsculas e minúsculas.',
