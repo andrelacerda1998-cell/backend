@@ -41,6 +41,10 @@ Route::group(['prefix' => 'common', 'middleware' => 'locale'], function () {
         Route::post('/opt-out', [App\Http\Controllers\Api\Common\NotificationOptOutController::class, 'store']);
         Route::delete('/opt-out', [App\Http\Controllers\Api\Common\NotificationOptOutController::class, 'destroy']);
     });
+    // Eventos de produto da app, em lote. Throttle generoso porque a app envia
+    // agregado; auth opcional para não perder os eventos de onboarding.
+    Route::post('/analytics/events', App\Http\Controllers\Api\Common\AnalyticsController::class)
+        ->middleware(['throttle:60,1']);
     Route::post('/places/autocomplete', GooglePlacesAutocompleteController::class)
         ->middleware(['throttle:30,1']);
     Route::post('/check-zone', CheckZoneController::class)

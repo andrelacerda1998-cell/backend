@@ -26,6 +26,11 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
             Route::post('/cancel-pending-3ds', App\Http\Controllers\Api\Customer\Services\CancelPending3DSController::class);
             Route::post('/close', App\Http\Controllers\Api\Customer\Services\CloseServiceController::class);
             Route::put('/rate', App\Http\Controllers\Api\Customer\Services\CustomerRateServiceController::class);
+
+            // Tempo extra / peças pedidos pelo técnico — o cliente aprova ou recusa
+            Route::get('/extras', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'index']);
+            Route::post('/extras/{extra}/approve', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'approve']);
+            Route::post('/extras/{extra}/reject', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'reject']);
         });
 
     });

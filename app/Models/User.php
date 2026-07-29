@@ -288,6 +288,19 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
         return $this->vendor()->withTrashed()->exists();
     }
 
+    /**
+     * O utilizador quer receber push deste tipo de notificação de técnico?
+     *
+     * Só se aplica a técnicos: clientes (e utilizadores sem registo de vendor)
+     * devolvem sempre true, para não silenciar notificações do lado do cliente.
+     */
+    public function wantsVendorNotification(string $preference): bool
+    {
+        $vendor = $this->relationLoaded('vendor') ? $this->getRelation('vendor') : $this->vendor;
+
+        return $vendor?->shouldReceive($preference) ?? true;
+    }
+
     public function isCustomer(): bool
     {
         // Assuming a user is a customer if they are not a vendor

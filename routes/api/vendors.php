@@ -36,8 +36,16 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
             Route::post('/cancel', App\Http\Controllers\Api\Vendor\Services\CancelServiceController::class);
             Route::post('/finish', App\Http\Controllers\Api\Vendor\Services\FinishServiceController::class);
             Route::post('/refuse', App\Http\Controllers\Api\Vendor\Services\RefuseServiceController::class);
+            Route::post('/on-the-way', App\Http\Controllers\Api\Vendor\Services\OnTheWayController::class);
             Route::post('/arrived', App\Http\Controllers\Api\Vendor\Services\ArrivedServiceController::class);
             Route::put('/rate', App\Http\Controllers\Api\Vendor\Services\VendorRateServiceController::class);
+
+            // Tempo extra / peças (aprovados pelo cliente) e fotos antes/depois
+            Route::get('/extras', [App\Http\Controllers\Api\Vendor\Services\ServiceExtrasController::class, 'index']);
+            Route::post('/extras', [App\Http\Controllers\Api\Vendor\Services\ServiceExtrasController::class, 'store']);
+            Route::delete('/extras/{extra}', [App\Http\Controllers\Api\Vendor\Services\ServiceExtrasController::class, 'destroy']);
+            Route::get('/photos', [App\Http\Controllers\Api\Vendor\Services\ServicePhotosController::class, 'index']);
+            Route::post('/photos', [App\Http\Controllers\Api\Vendor\Services\ServicePhotosController::class, 'store']);
         });
     });
 
@@ -57,6 +65,8 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
     });
 
     Route::group(['prefix' => 'settings'], function () {
+        Route::get('/notifications', [App\Http\Controllers\Api\Vendor\Settings\NotificationSettingsController::class, 'show']);
+        Route::put('/notifications', [App\Http\Controllers\Api\Vendor\Settings\NotificationSettingsController::class, 'update']);
         Route::put('/price-rate', App\Http\Controllers\Api\Vendor\Settings\UpdatePriceRateController::class);
         Route::put('/update/payment', [App\Http\Controllers\Api\Vendor\Settings\UpdatePaymentController::class, 'update']);
     });
@@ -64,6 +74,14 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
     Route::group(['prefix' => 'wallet'], function () {
         Route::get('/', App\Http\Controllers\Api\Vendor\Wallet\WalletController::class);
         Route::post('/history', App\Http\Controllers\Api\Vendor\Wallet\WalletHistoryController::class);
+    });
+
+    Route::get('/stats', App\Http\Controllers\Api\Vendor\StatsController::class);
+    Route::get('/reviews', App\Http\Controllers\Api\Vendor\ReviewsController::class);
+
+    Route::group(['prefix' => 'support'], function () {
+        Route::get('/tickets', [App\Http\Controllers\Api\Vendor\SupportTicketController::class, 'index']);
+        Route::post('/tickets', [App\Http\Controllers\Api\Vendor\SupportTicketController::class, 'store']);
     });
 
     Route::group(['prefix' => 'survey'], function () {
@@ -75,6 +93,7 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::get('/settings/{userId}', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'settings']);
         Route::post('/update', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'update']);
         Route::post('/update-availability', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'updateAvailability']);
+        Route::put('/auto-accept', App\Http\Controllers\Api\Vendor\Schedule\AutoAcceptController::class);
         Route::get('/schedules', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'schedules']);
         Route::post('/accept', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'storeSchedule']);
         Route::get('/pending-schedules', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'pendingSchedules']);
