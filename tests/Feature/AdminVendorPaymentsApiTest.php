@@ -93,7 +93,10 @@ class AdminVendorPaymentsApiTest extends TestCase
             ->assertJsonPath('data.amount_paid', 150); // ver nota acima sobre json_encode(float)
 
         $this->assertEquals(0, (int) $vendor->user->wallet->fresh()->balance);
-        Mail::assertSent(PaymentSentMail::class);
+        // PaymentSentMail implementa ShouldQueue -- Mail::to(...)->send() com um
+        // mailable ShouldQueue é automaticamente encaminhado para a queue pelo
+        // Laravel, por isso é assertQueued() e não assertSent().
+        Mail::assertQueued(PaymentSentMail::class);
         Notification::assertSentTo($vendor->user, PaymentSentNotification::class);
     }
 

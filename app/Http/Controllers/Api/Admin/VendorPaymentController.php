@@ -83,7 +83,9 @@ class VendorPaymentController extends Controller
             'vendor_name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: null,
             // Espaçado a cada 4 caracteres, tal como o Filament (formatStateUsing).
             'iban' => $vendor->iban ? trim(preg_replace('/(\w{4})(?=\w)/', '$1 ', $vendor->iban)) : null,
-            'balance' => $user->wallet->balance_float,
+            // balance_float vem como string (contrato do bavix/laravel-wallet) --
+            // sem o cast, o JSON manda "150.00" como string em vez de número.
+            'balance' => (float) $user->wallet->balance_float,
         ];
     }
 }
