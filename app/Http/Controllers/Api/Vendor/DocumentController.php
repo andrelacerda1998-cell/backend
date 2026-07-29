@@ -21,7 +21,26 @@ class DocumentController extends Controller
 {
     public function index()
     {
-        $documents = VendorDocuments::where('vendor_id', auth()->user()->vendor->id)->get();
+        $documents = VendorDocuments::where('vendor_id', auth()->user()->vendor->id)
+            ->with('document')
+            ->get()
+            ->map(function (VendorDocuments $d) {
+                $expiration = $d->expiration_date ? \Illuminate\Support\Carbon::parse($d->expiration_date) : null;
+                $daysToExpire = $expiration ? (int) now()->startOfDay()->diffInDays($expiration->startOfDay(), false) : null;
+
+                return [
+                    'id' => $d->id,
+                    'document_id' => $d->document_id,
+                    'name' => $d->document?->name,
+                    'status' => $d->status,
+                    'reason' => $d->reason,
+                    'expiration_date' => $expiration?->toDateString(),
+                    'days_to_expire' => $daysToExpire,
+                    'is_expired' => $daysToExpire !== null && $daysToExpire < 0,
+                    // avisa com 30 dias de antecedência
+                    'is_expiring_soon' => $daysToExpire !== null && $daysToExpire >= 0 && $daysToExpire <= 30,
+                ];
+            });
 
         return new ApiSuccessResponse(compact('documents'));
     }

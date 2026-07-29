@@ -23,7 +23,9 @@ class VendorDocumentTextEntry
             ->icon(function (Vendor\VendorDocuments $record, TextEntry $component) use ($name) {
                 switch ($record->status) {
                     case 'approved':
-                        if ($record->expiration_date && Carbon::parse($record->expiration_date)->isPast()) {
+                        // Último dia de validade inclusive: só marca como expirado a partir
+                        // do dia seguinte (ver Vendor::allDocumentsVerified()).
+                        if ($record->expiration_date && Carbon::parse($record->expiration_date)->startOfDay()->isBefore(Carbon::today())) {
                             $component->iconColor('danger');
                             $component->tooltip(__('backoffice/vendor.infolist.field_expired', ['field' => $record->type?->name]));
 
