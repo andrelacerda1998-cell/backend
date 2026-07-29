@@ -49,9 +49,16 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // Técnicos — equivalente ao Filament VendorResource. Suspender/Reativar
     // usam soft-delete real, mas SEM a restrição de super-admin do Filament
     // (ver nota extensa no VendorController) -- decisão explícita do
-    // utilizador. Só Lista + Suspender/Reativar nesta fatia; "Visão geral"
-    // fica para uma fatia futura.
+    // utilizador.
     Route::get('/vendors', [VendorController::class, 'index']);
     Route::put('/vendors/{id}/suspend', [VendorController::class, 'suspend']);
     Route::put('/vendors/{id}/restore', [VendorController::class, 'restore']);
+
+    // Aba "Visão geral" -- indicadores reais (sem avgApprovalTime, ver nota
+    // em VendorController::metrics()).
+    Route::get('/vendors/metrics', [VendorController::class, 'metrics']);
+    Route::get('/vendors/by-category', [VendorController::class, 'byCategory']);
+    Route::get('/vendors/by-location', [VendorController::class, 'byLocation']);
+    Route::get('/vendors/top', [VendorController::class, 'top']);
+    Route::get('/vendors/coverage', [VendorController::class, 'coverage']);
 });

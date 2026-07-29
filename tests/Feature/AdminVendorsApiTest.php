@@ -2,10 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Services\PaymentStatus;
+use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
+use App\Models\GeneralSettings\AllowedZone;
+use App\Models\GeneralSettings\OperationArea;
+use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AdminVendorsApiTest extends TestCase
@@ -29,7 +36,15 @@ class AdminVendorsApiTest extends TestCase
     // User#1 de um teste anterior continua na tabela -- o próximo User#1
     // criado colide com ela. Mesma lista de tabelas que
     // AdminVendorPaymentsApiTest usa, e pela mesma razão.
-    protected array $tablesToTruncate = ['users', 'vendors', 'wallets', 'schedule_available'];
+    // 'services', 'operation_areas'/'operation_area_vendors' e
+    // 'allowed_zone'/'vendor_allowed_zones' entram por causa dos testes de
+    // métricas (Visão geral) -- nenhuma delas tem factory/seeder corrido em
+    // testes, por isso são criadas diretamente em cada teste que precisa.
+    protected array $tablesToTruncate = [
+        'users', 'vendors', 'wallets', 'schedule_available',
+        'services', 'operation_areas', 'operation_area_vendors',
+        'allowed_zone', 'vendor_allowed_zones',
+    ];
 
     protected function setUp(): void
     {
@@ -172,5 +187,145 @@ class AdminVendorsApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data.items')
             ->assertJsonPath('data.items.0.id', $suspended->id);
+    }
+
+    /**
+     * Um vendor elegível para aceitar serviço (Vendor::canAcceptService) --
+     * mesmas 8 condições que o Filament exige. Sem Document nenhum na BD,
+     * Vendor::allDocumentsVerified é `true` por omissão (o accessor só
+     * itera required_documents, que fica vazio) -- por isso um vendor
+     * "vazio" já conta como docComplete/elegível desde que os outros campos
+     * estejam certos.
+     */
+    private function makeEligibleVendor(array $userAttrs = []): Vendor
+    {
+        return $this->makeVendor($userAttrs, [
+            'invoice_workspace' => 'ws-'.uniqid(),
+            'at_valid' => true,
+            'at_user' => 'sub/user',
+        ]);
+    }
+
+    /**
+     * INSERT direto pela query builder -- 'status' e 'payment_status' são os
+     * únicos NOT NULL sem default em `services` (mesma lição de
+     * AdminCustomersApiTest::makeService()); 'address' é json, tem de ir
+     * já codificado porque bypassa o cast do Eloquent.
+     */
+    private function makeService(
+        Vendor $vendor,
+        ServiceStatus $status = ServiceStatus::CLOSED,
+        ?int $amount = null,
+        ?int $amountForVendor = null,
+        ?int $ratingByVendor = null,
+        ?string $city = null,
+        bool $isTest = false,
+        ?Carbon $createdAt = null,
+    ): int {
+        $timestamp = $createdAt ?? now();
+
+        return DB::table('services')->insertGetId([
+            'vendor_id' => $vendor->id,
+            'status' => $status->value,
+            'payment_status' => PaymentStatus::PAID->value,
+            'amount' => $amount,
+            'amount_for_vendor' => $amountForVendor,
+            'rating_by_vendor' => $ratingByVendor,
+            'address' => $city ? json_encode(['city' => $city]) : null,
+            'is_test' => $isTest,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ]);
+    }
+
+    public function test_metrics_computes_real_indicators(): void
+    {
+        $eligible = $this->makeEligibleVendor();
+        $this->makeVendor(); // sem invoice_workspace/at_user -- não elegível
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.registered', 2)
+            ->assertJsonPath('data.eligible', 1)
+            ->assertJsonPath('data.docComplete', 2) // sem Document nenhum -> true por omissão
+            ->assertJsonPath('data.inValidation', 0)
+            ->assertJsonPath('data.noServices', 1) // o elegível ainda não tem serviços
+            ->assertJsonPath('data.approvalRate', 50)
+            ->assertJsonPath('data.profileCompletionRate', 100)
+            ->assertJsonPath('data.avgTimeToFirstService', 0);
+
+        $this->makeService($eligible, createdAt: $eligible->created_at->copy()->addDays(3));
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.noServices', 0)
+            ->assertJsonPath('data.avgTimeToFirstService', 3);
+    }
+
+    public function test_by_category_counts_vendors_per_operation_area(): void
+    {
+        $area = OperationArea::create(['name' => 'Canalização']);
+        $vendor = $this->makeVendor();
+        $vendor->operationAreas()->attach($area->id);
+        $this->makeVendor(); // sem categoria -- não deve entrar na contagem
+
+        $res = $this->withAuth()->getJson('/api/v1/admin/vendors/by-category')->assertOk();
+        $data = collect($res->json('data'))->keyBy('name');
+
+        $this->assertSame(1, $data['Canalização']['value']);
+    }
+
+    public function test_by_location_counts_vendors_per_allowed_zone(): void
+    {
+        $zone = AllowedZone::create(['city' => 'Lisboa', 'district' => 'Lisboa']);
+        $vendor = $this->makeVendor();
+        $vendor->allowedZones()->attach($zone->id);
+        $this->makeVendor(); // sem zona -- não deve entrar na contagem
+
+        $res = $this->withAuth()->getJson('/api/v1/admin/vendors/by-location')->assertOk();
+        $data = collect($res->json('data'))->keyBy('name');
+
+        $this->assertSame(1, $data['Lisboa']['value']);
+    }
+
+    public function test_top_ranks_vendors_by_revenue_generated(): void
+    {
+        $vendor = $this->makeVendor(['first_name' => 'Ana', 'last_name' => 'Silva']);
+        // amount=100,00€, amount_for_vendor=70,00€ -> comissão (receita gerada) 30,00€.
+        $this->makeService($vendor, amount: 10000, amountForVendor: 7000, ratingByVendor: 5);
+        // Não deve contar: serviço não-CLOSED e serviço de teste.
+        $other = $this->makeVendor(['first_name' => 'Bruno', 'last_name' => 'Costa']);
+        $this->makeService($other, status: ServiceStatus::PENDING, amount: 99999999, amountForVendor: 0);
+        $this->makeService($other, amount: 99999999, amountForVendor: 0, isTest: true);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/top')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Ana Silva')
+            ->assertJsonPath('data.0.servicesCompleted', 1)
+            ->assertJsonPath('data.0.averageRating', 5)
+            ->assertJsonPath('data.0.piquetRevenue', 30)
+            ->assertJsonPath('data.0.amountReceived', 70);
+    }
+
+    public function test_coverage_compares_supply_and_demand_per_city(): void
+    {
+        $zone = AllowedZone::create(['city' => 'Lisboa', 'district' => 'Lisboa']);
+        $vendor = $this->makeEligibleVendor();
+        $vendor->allowedZones()->attach($zone->id);
+        $this->makeService($vendor, city: 'Lisboa');
+        $this->makeService($vendor, city: 'Lisboa');
+
+        $res = $this->withAuth()->getJson('/api/v1/admin/vendors/coverage')->assertOk();
+        $data = collect($res->json('data'))->keyBy('name');
+
+        $this->assertSame(2, $data['Lisboa']['procura']);
+        $this->assertSame(1, $data['Lisboa']['oferta']);
+        // json_encode(2.0) sai "2" (sem parte decimal) -- comparar com o int,
+        // não o float, mesma nota já documentada em AdminVendorPaymentsApiTest.
+        $this->assertSame(2, $data['Lisboa']['ratio']);
     }
 }
