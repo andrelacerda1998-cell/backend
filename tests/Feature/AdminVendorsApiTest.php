@@ -5,12 +5,24 @@ namespace Tests\Feature;
 use App\Enums\Vendors\StatusVendor;
 use App\Models\User;
 use App\Models\Vendor;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Tests\TestCase;
 
 class AdminVendorsApiTest extends TestCase
 {
-    use RefreshDatabase;
+    // NÃO RefreshDatabase aqui: AdminVendorPaymentsApiTest corre antes desta
+    // classe (ordem alfabética: "VendorPayments" < "Vendors") e usa
+    // DatabaseTruncation em modo autocommit -- os Vendors/Users que cria
+    // ficam mesmo gravados na BD, fora de qualquer transação. RefreshDatabase
+    // só embrulha CADA teste numa transação que é revertida no fim; não limpa
+    // linhas que outra classe já tinha committado antes de esta classe
+    // começar. Resultado: um "Carlos Mendes" residual do teste de pagamentos
+    // aparecia nas listagens daqui (contagens a mais). DatabaseTruncation
+    // resolve porque limpa mesmo as tabelas antes de cada teste, independente
+    // de quem as sujou.
+    use DatabaseTruncation;
+
+    protected array $tablesToTruncate = ['users', 'vendors', 'schedule_available'];
 
     protected function setUp(): void
     {
@@ -72,7 +84,11 @@ class AdminVendorsApiTest extends TestCase
 
     public function test_it_presents_price_rate_in_euros_and_status(): void
     {
-        $vendor = $this->makeVendor(vendorAttrs: ['price_rate' => 1250, 'status' => StatusVendor::ONLINE]);
+        // Vendor::priceRate() tem um `set` que espera uma STRING EM EUROS e
+        // multiplica por 100 para gravar em cêntimos (mesmo padrão do
+        // Service::priceRate(), ver nota em AdminCustomersApiTest) -- passar
+        // 1250 diretamente seria interpretado como 1250€, não 1250 cêntimos.
+        $vendor = $this->makeVendor(vendorAttrs: ['price_rate' => '12.50', 'status' => StatusVendor::ONLINE]);
 
         $this->withAuth()
             ->getJson('/api/v1/admin/vendors')

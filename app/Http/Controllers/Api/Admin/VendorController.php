@@ -35,7 +35,6 @@ class VendorController extends Controller
     private function baseQuery()
     {
         return Vendor::query()
-            ->whereHas('user')
             ->whereHas('user', fn ($q) => $q->where('is_test', false));
     }
 
