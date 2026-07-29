@@ -20,7 +20,6 @@ class CreateVendorRequest extends FormRequest
     public function messages()
     {
         return [
-            'username.required' => __('request/validation.required', ['attribute' => __('request/validation.attributes.username')]),
             'username.unique' => __('request/validation.unique', ['attribute' => __('request/validation.attributes.username')]),
             'name.required' => __('request/validation.required', ['attribute' => __('request/validation.attributes.name')]),
             // 'date_birthday.date' => __('request/validation.date', ['attribute' => __('request/validation.attributes.date_birthday')]),
@@ -36,10 +35,6 @@ class CreateVendorRequest extends FormRequest
             'password.string' => __('request/validation.string', ['attribute' => __('request/validation.attributes.password')]),
             'password.confirmed' => __('request/validation.confirmed', ['attribute' => __('request/validation.attributes.password')]),
             'password.min' => __('request/validation.min.string', ['attribute' => __('request/validation.attributes.password'), 'min' => 8]),
-            'password.letters' => __('request/validation.password.letters'),
-            'password.mixedCase' => __('request/validation.password.mixed_case'),
-            'password.numbers' => __('request/validation.password.numbers'),
-            'password.symbols' => __('request/validation.password.symbols'),
             'password.uncompromised' => __('request/validation.password.uncompromised'),
             'operation_areas.array' => __('request/validation.array', ['attribute' => __('request/validation.attributes.operation_areas')]),
             'operation_areas.*.integer' => __('request/validation.integer', ['attribute' => __('request/validation.attributes.operation_areas')]),
@@ -62,7 +57,11 @@ class CreateVendorRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'username' => 'required|string|max:50|unique:vendors,username',
+            // O `username` deixou de ser pedido no registo da app do técnico: o
+            // backend gera-o a partir do nome (ver CreateVendorController). Fica
+            // `nullable` — e não removido — para manter a retrocompatibilidade com
+            // versões antigas da app e com outros clientes que ainda o enviam.
+            'username' => 'nullable|string|max:50|unique:vendors,username',
             'name' => 'required|string|max:50',
             // 'date_birthday' => 'date|before_or_equal:today',
             // 'nif' => ['string', new NifRule],
@@ -74,12 +73,11 @@ class CreateVendorRequest extends FormRequest
                 'required',
                 'string',
                 'confirmed',
-                Password::min(8)
-                    ->letters()
-                    ->mixedCase()
-                    ->numbers()
-                    ->symbols()
-                    ->uncompromised(),
+                // Zero regras de composição (orientação NIST): só comprimento mínimo.
+                // O `uncompromised()` é a única defesa que sobra e é o que impede
+                // que 8 caracteres fracos passem — estas contas dão acesso a IBAN
+                // e a moradas de clientes.
+                Password::min(8)->uncompromised(),
             ],
             'operation_areas' => 'array',
             'operation_areas.*' => 'integer|exists:operation_areas,id',

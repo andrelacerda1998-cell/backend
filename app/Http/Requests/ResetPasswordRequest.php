@@ -16,12 +16,9 @@ class ResetPasswordRequest extends FormRequest
                 'required',
                 'string',
                 'confirmed',
-                // Password::min(12)
-                //     ->letters()
-                //     ->mixedCase()
-                //     ->numbers()
-                //     ->symbols()
-                //     ->uncompromised(),
+                // Mesma regra do registo: sem regras de composição, só comprimento
+                // mínimo + verificação contra listas de fugas de dados reais.
+                Password::min(8)->uncompromised(),
             ],
         ];
     }

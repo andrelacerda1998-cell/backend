@@ -7,14 +7,46 @@ use App\Http\Requests\Api\Vendor\CreateVendorRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
 use App\Models\User;
+use App\Models\Vendor;
 use App\Notifications\Auth\UserRegistered;
 use App\Support\Locale;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class CreateVendorController extends Controller
 {
+    /**
+     * Gera um `username` a partir do nome do técnico.
+     *
+     * A app do técnico deixou de pedir "nome de utilizador" no registo (não fazia
+     * sentido para quem se inscreve como profissional), mas a coluna continua a ser
+     * usada como nome de apresentação e é única. Aqui: slug do nome (minúsculas,
+     * sem acentos) e, se já existir, sufixo numérico até ser único. O `max:50` da
+     * validação é respeitado deixando espaço para o sufixo.
+     */
+    private function generateUsername(string $name): string
+    {
+        $base = Str::slug($name, '');
+
+        // Nomes só com símbolos/acentos podem colapsar para vazio — usa-se um prefixo genérico.
+        if ($base === '') {
+            $base = 'tecnico';
+        }
+
+        $base = Str::limit($base, 40, '');
+
+        $username = $base;
+        $suffix = 1;
+        while (Vendor::where('username', $username)->exists()) {
+            $suffix++;
+            $username = $base.$suffix;
+        }
+
+        return $username;
+    }
+
     public function __invoke(CreateVendorRequest $request)
     {
         $name = $request->input('name');
@@ -41,7 +73,9 @@ class CreateVendorController extends Controller
             ]);
 
             $vendor = $user->vendor()->create([
-                'username' => $request->input('username'),
+                'username' => $request->filled('username')
+                    ? $request->input('username')
+                    : $this->generateUsername($name),
                 'price_rate' => $request->input('price_rate')
             ]);
 
