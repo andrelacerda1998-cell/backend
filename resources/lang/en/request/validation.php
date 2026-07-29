@@ -28,7 +28,7 @@ return [
         'mixed_case' => 'The :attribute must contain both uppercase and lowercase letters.',
         'numbers' => 'The :attribute must contain at least one number.',
         'symbols' => 'The :attribute must contain at least one symbol.',
-        'uncompromised' => 'The :attribute has been compromised in a data breach. Please choose a different password.',
+        'uncompromised' => 'This password has appeared in known data breaches. Please choose another one.',
     ],
     'custom' => [
         'nif_rule' => 'The :attribute is not valid.',

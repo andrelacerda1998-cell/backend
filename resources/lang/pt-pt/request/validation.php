@@ -28,7 +28,7 @@ return [
         'mixed_case' => 'A senha deve conter letras maiúsculas e minúsculas.',
         'numbers' => 'A senha deve conter pelo menos um número.',
         'symbols' => 'A senha deve conter pelo menos um símbolo.',
-        'uncompromised' => 'A :attribute foi comprometida em uma violação de dados. Por favor, escolha uma senha diferente.',
+        'uncompromised' => 'Esta palavra-passe apareceu em fugas de dados conhecidas. Escolhe outra.',
     ],
     'custom' => [
         'nif_rule' => 'O NIF não é válido.',
