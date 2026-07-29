@@ -38,9 +38,9 @@ class Vendor extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable, Searchable, SoftDeletes;
 
-    protected $fillable = ['user_id', 'status', 'price_rate', 'username', 'invoice_workspace', 'auth_token', 'company_name', 'invoice_account_id', 'at_user', 'at_password', 'iban'];
+    protected $fillable = ['user_id', 'status', 'price_rate', 'username', 'invoice_workspace', 'auth_token', 'company_name', 'invoice_account_id', 'at_user', 'at_password', 'iban', 'notification_preferences'];
 
-    protected $appends = ['can_accept_service', 'price_rate', 'full_name'];
+    protected $appends = ['can_accept_service', 'price_rate', 'full_name', 'invoice_workspace_ready'];
 
     protected $with = ['user', 'servicesTypes', 'operationAreas', 'currentLocation'];
 
@@ -50,6 +50,7 @@ class Vendor extends Model implements Auditable
         'at_password' => 'encrypted',
         'at_valid' => 'boolean',
         'at_validated_at' => 'datetime',
+        'notification_preferences' => 'array',
     ];
 
     protected $hidden = [
@@ -62,6 +63,27 @@ class Vendor extends Model implements Auditable
     protected $auditExclude = [
         'at_password',
     ];
+
+    /** Tipos de notificação que o técnico pode ligar/desligar (ver NotificationSettingsController). */
+    public const NOTIFICATION_PREFERENCE_KEYS = ['new_requests', 'schedule_reminders', 'messages', 'payments', 'news'];
+
+    /**
+     * O técnico quer receber push deste tipo de notificação?
+     *
+     * Por omissão devolve SEMPRE true: coluna a null, chave inexistente ou valor
+     * desconhecido significam "recebe tudo". Nunca silenciamos por omissão —
+     * um pedido silenciado é um pedido perdido.
+     */
+    public function shouldReceive(string $preference): bool
+    {
+        $prefs = $this->notification_preferences;
+
+        if (! is_array($prefs) || ! array_key_exists($preference, $prefs)) {
+            return true;
+        }
+
+        return filter_var($prefs[$preference], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
+    }
 
     public function getNameAttribute(): string
     {
@@ -93,6 +115,19 @@ class Vendor extends Model implements Auditable
     }
 
     /**
+     * Whether the billing workspace has been created for this vendor.
+     *
+     * The workspace itself is created by the Piquet team from the backoffice
+     * (CompanySection -> create_invoice_workspace), so the vendor cannot act on
+     * it. We expose a boolean — never the workspace id — so the app can tell the
+     * vendor why they still cannot go online instead of leaving them stuck.
+     */
+    public function invoiceWorkspaceReady(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->invoice_workspace != null)->shouldCache();
+    }
+
+    /**
      * Translated reasons for each failing condition of canAcceptService().
      * Must stay consistent with the checks in canAcceptService().
      */
@@ -112,7 +147,9 @@ class Vendor extends Model implements Auditable
             $expiredNames = $this->documents()
                 ->where('status', 'approved')
                 ->whereNotNull('expiration_date')
-                ->where('expiration_date', '<=', now())
+                // Só está expirado a partir do dia SEGUINTE ao último dia de validade
+                // (espelho exato de allDocumentsVerified(), que aceita >= hoje).
+                ->whereDate('expiration_date', '<', now()->toDateString())
                 ->get()
                 ->map(fn ($document) => $document->type?->name)
                 ->filter()
@@ -222,6 +259,11 @@ class Vendor extends Model implements Auditable
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);
+    }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
     }
 
     public function currentLocation(): HasOne
@@ -359,6 +401,13 @@ class Vendor extends Model implements Auditable
         return $this->documents->where('type', 'criminal record')->sortBy('updated_at')->last();
     }
 
+    /**
+     * Regra de negócio: o documento é válido ATÉ AO ÚLTIMO DIA DE VALIDADE, INCLUSIVE.
+     * vendor_documents.expiration_date é uma coluna `date` (sem hora), pelo que o MySQL
+     * compara-a como 00:00:00 desse dia. Com `> now()` um documento que expira hoje
+     * ficava inválido logo à meia-noite e o técnico perdia o dia inteiro a que tem
+     * direito. Usamos whereDate(... '>=' hoje) para incluir o último dia.
+     */
     public function allDocumentsVerified(): Attribute
     {
         return Attribute::make(get: function () {
@@ -369,7 +418,7 @@ class Vendor extends Model implements Auditable
                     ->where('document_id', $document->id)
                     ->where('status', 'approved')
                     ->where(function ($query) {
-                        $query->where('expiration_date', '>', now())
+                        $query->whereDate('expiration_date', '>=', now()->toDateString())
                             ->orWhereNull('expiration_date');
                     })
                     ->exists();
@@ -393,7 +442,8 @@ class Vendor extends Model implements Auditable
                     ->where('document_id', $document->id)
                     ->whereIn('status', ['approved', 'pending'])
                     ->where(function ($query) {
-                        $query->where('expiration_date', '>', now())
+                        // Último dia de validade inclusive — ver allDocumentsVerified().
+                        $query->whereDate('expiration_date', '>=', now()->toDateString())
                             ->orWhereNull('expiration_date');
                     })
                     ->exists();
@@ -448,7 +498,8 @@ class Vendor extends Model implements Auditable
                     ->where('vendor_id', $this->id)
                     ->whereIn('status', ['approved', 'pending'])
                     ->where(function ($query) {
-                        $query->where('expiration_date', '>', now())
+                        // Último dia de validade inclusive — ver allDocumentsVerified().
+                        $query->whereDate('expiration_date', '>=', now()->toDateString())
                             ->orWhereNull('expiration_date');
                     })
                     ->exists();
