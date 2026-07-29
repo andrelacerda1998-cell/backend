@@ -6,14 +6,31 @@ use App\Mail\Vendor\PaymentSentMail;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\Vendor\PaymentSentNotification;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class AdminVendorPaymentsApiTest extends TestCase
 {
-    use RefreshDatabase;
+    // NÃO RefreshDatabase aqui: bavix/laravel-wallet só grava o saldo real na
+    // coluna `wallets.balance` quando a transação da BD chega mesmo ao nível 0
+    // (TransactionCommittingListener/TransactionCommittedListener, ver
+    // vendor/bavix/laravel-wallet/src/Internal/Listeners) -- o RefreshDatabase
+    // embrulha cada teste numa transação que nunca é commitada a sério, por
+    // isso deposit()/withdraw() nunca chegam a refletir-se na coluna e uma
+    // query SQL direta (o whereHas('user.wallet', ...) do controller, igual
+    // ao que o Filament já fazia) via nada. DatabaseTruncation corre em modo
+    // autocommit (limpa as tabelas por TRUNCATE entre testes em vez de
+    // rollback), o que deixa os listeners do bavix disparar como em produção.
+    use DatabaseTruncation;
+
+    // Só as tabelas que este teste realmente escreve -- por omissão o
+    // DatabaseTruncation limpa TODAS as tabelas, o que apagaria dados de
+    // referência semeados uma única vez no arranque da suite (ex.: genders,
+    // documents) e nunca mais repostos, partindo outros testes que corram
+    // depois desta classe.
+    protected array $tablesToTruncate = ['users', 'vendors', 'wallets', 'transactions', 'transfers', 'schedule_available'];
 
     protected function setUp(): void
     {
@@ -58,7 +75,9 @@ class AdminVendorPaymentsApiTest extends TestCase
             ->assertJsonCount(1, 'data.items')
             ->assertJsonPath('data.items.0.id', $withBalance->id)
             ->assertJsonPath('data.items.0.vendor_name', 'Carlos Mendes')
-            ->assertJsonPath('data.items.0.balance', 150.0)
+            // json_encode(150.0) sai "150" (sem parte decimal) -- comparar com o
+            // int 150, não 150.0, para bater certo com o assertJsonPath (===).
+            ->assertJsonPath('data.items.0.balance', 150)
             ->assertJsonPath('data.items.0.iban', 'PT50 0002 0123 1234 5678 9015 4');
     }
 
@@ -71,7 +90,7 @@ class AdminVendorPaymentsApiTest extends TestCase
         $this->withAuth()
             ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
             ->assertOk()
-            ->assertJsonPath('data.amount_paid', 150.0);
+            ->assertJsonPath('data.amount_paid', 150); // ver nota acima sobre json_encode(float)
 
         $this->assertEquals(0, (int) $vendor->user->wallet->fresh()->balance);
         Mail::assertSent(PaymentSentMail::class);
