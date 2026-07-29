@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
+use App\Http\Controllers\Api\Admin\VendorDocumentController;
 use App\Http\Controllers\Api\Admin\VoucherController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,4 +16,10 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
 
     // apiResource já só regista index/store/show/update/destroy (sem create/edit).
     Route::apiResource('vouchers', VoucherController::class);
+
+    // Revisão de documentos KYC dos vendors — equivalente às ações do Filament
+    // em VendorDocumentTextEntry (Verificar/Recusar).
+    Route::get('/vendor-documents', [VendorDocumentController::class, 'index']);
+    Route::put('/vendor-documents/{vendorDocument}/approve', [VendorDocumentController::class, 'approve']);
+    Route::put('/vendor-documents/{vendorDocument}/decline', [VendorDocumentController::class, 'decline']);
 });
