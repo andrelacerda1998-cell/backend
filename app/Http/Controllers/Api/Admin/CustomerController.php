@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
+use App\Models\Address;
+use App\Models\Service;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * Clientes — migrado do Filament (App\Filament\Resources\CustomerResource).
@@ -25,16 +30,26 @@ use Illuminate\Http\Request;
  */
 class CustomerController extends Controller
 {
+    /**
+     * Mesmos filtros do CustomerResource (roles/vendor/is_test) partilhados por
+     * index()/metrics()/byLocation()/bySource()/trend() -- só non-blocked
+     * (não-trashed) por omissão, tal como o separador "Todos" da Lista.
+     */
+    private function baseQuery(): Builder
+    {
+        return User::query()
+            ->whereDoesntHave('roles', fn ($q) => $q->whereIn('name', ['admin', 'super-admin', 'dev']))
+            ->whereDoesntHave('vendor')
+            ->where('is_test', false);
+    }
+
     public function index(Request $request): ApiSuccessResponse
     {
         $perPage = min((int) $request->integer('per_page', 20), 100);
         $search = trim((string) $request->string('search'));
         $blockedOnly = $request->boolean('blocked');
 
-        $query = User::query()
-            ->whereDoesntHave('roles', fn ($q) => $q->whereIn('name', ['admin', 'super-admin', 'dev']))
-            ->whereDoesntHave('vendor')
-            ->where('is_test', false);
+        $query = $this->baseQuery();
 
         if ($blockedOnly) {
             $query->onlyTrashed();
@@ -100,6 +115,153 @@ class CustomerController extends Controller
         $user->restore();
 
         return ApiSuccessResponse::make($this->present($user->fresh()));
+    }
+
+    /**
+     * Indicadores da aba "Visão geral" -- só o que dá para calcular a partir de
+     * dados reais. "Serviço concluído" = status CLOSED e sem testes, mesma
+     * definição usada por Vendor::rating() e pelos widgets de estatísticas do
+     * Filament (ServiceStatusStats). Sem reclamações (não existe o conceito no
+     * Laravel nem no Filament) -- withComplaints fica sempre 0.
+     */
+    public function metrics(): ApiSuccessResponse
+    {
+        $customerIds = $this->baseQuery()->pluck('id');
+        $total = $customerIds->count();
+        $newCustomers = $this->baseQuery()->where('created_at', '>=', now()->subDays(30))->count();
+
+        $services = Service::query()
+            ->whereIn('customer_id', $customerIds)
+            ->where('status', ServiceStatus::CLOSED)
+            ->where('is_test', false)
+            ->orderBy('created_at')
+            ->get(['customer_id', 'price_rate', 'rating_by_customer', 'created_at']);
+
+        $byCustomer = $services->groupBy('customer_id');
+        $oneTime = 0;
+        $recurring = 0;
+        $secondServiceDays = [];
+
+        foreach ($byCustomer as $customerServices) {
+            $count = $customerServices->count();
+            if ($count === 1) {
+                $oneTime++;
+            } elseif ($count >= 2) {
+                $recurring++;
+                $ordered = $customerServices->values();
+                $secondServiceDays[] = $ordered[0]->created_at->diffInDays($ordered[1]->created_at);
+            }
+        }
+
+        // price_rate está em cêntimos na coluna; o accessor priceRate() do
+        // model formata em euros (string) -- getRawOriginal() para somar em
+        // cêntimos sem passar pelo accessor.
+        $totalRevenueCents = $services->sum(fn (Service $s) => (int) $s->getRawOriginal('price_rate'));
+        $ratings = $services->pluck('rating_by_customer')->filter(fn ($r) => $r !== null)->map(fn ($r) => (float) $r);
+
+        $withService = $byCustomer->count();
+        $inactive = max(0, $total - $withService);
+        $avgRevenuePerCustomer = $total > 0 ? ($totalRevenueCents / 100) / $total : 0;
+        $repurchaseRate = $total > 0 ? ($recurring / $total) * 100 : 0;
+
+        return ApiSuccessResponse::make([
+            'registered' => $total,
+            'newCustomers' => $newCustomers,
+            'active' => $withService,
+            'recurring' => $recurring,
+            'oneTime' => $oneTime,
+            'inactive' => $inactive,
+            'repurchaseRate' => round($repurchaseRate, 1),
+            'avgServicesPerCustomer' => $total > 0 ? round($services->count() / $total, 2) : 0,
+            'avgRevenuePerCustomer' => round($avgRevenuePerCustomer, 2),
+            // Estimativa (não é medição direta): 2.5x a receita média já gerada
+            // por cliente -- mesma heurística que a versão fictícia usava,
+            // agora aplicada sobre receita real.
+            'estimatedLTV' => round($avgRevenuePerCustomer * 2.5, 2),
+            'avgTimeToSecondService' => count($secondServiceDays) > 0 ? round(array_sum($secondServiceDays) / count($secondServiceDays), 1) : 0,
+            'averageRating' => $ratings->count() > 0 ? round($ratings->avg(), 2) : 0,
+            'withComplaints' => 0,
+        ]);
+    }
+
+    public function byLocation(): ApiSuccessResponse
+    {
+        $customerIds = $this->baseQuery()->pluck('id');
+
+        $rows = Address::query()
+            ->whereIn('user_id', $customerIds)
+            ->where('main_address', true)
+            ->whereNotNull('city')
+            ->selectRaw('city, COUNT(*) as total')
+            ->groupBy('city')
+            ->orderByDesc('total')
+            ->get();
+
+        return ApiSuccessResponse::make(
+            $rows->map(fn ($r) => ['name' => $r->city, 'value' => (int) $r->total])->all()
+        );
+    }
+
+    /**
+     * Sem tracking de canal/origem de aquisição no Laravel (nenhuma coluna do
+     * género em User) -- devolve vazio de propósito, em vez de inventar uma
+     * distribuição por origem.
+     */
+    public function bySource(): ApiSuccessResponse
+    {
+        return ApiSuccessResponse::make([]);
+    }
+
+    /**
+     * Novos clientes vs clientes recorrentes por mês (últimos 6 meses). "Novo"
+     * = registo nesse mês; "recorrente" = serviço concluído nesse mês por um
+     * cliente cujo primeiro serviço concluído foi antes desse mês.
+     */
+    public function trend(): ApiSuccessResponse
+    {
+        $months = collect(range(5, 0))->map(fn ($i) => now()->subMonths($i)->startOfMonth());
+        $customerIds = $this->baseQuery()->pluck('id');
+
+        $services = Service::query()
+            ->whereIn('customer_id', $customerIds)
+            ->where('status', ServiceStatus::CLOSED)
+            ->where('is_test', false)
+            ->orderBy('created_at')
+            ->get(['customer_id', 'created_at']);
+
+        $firstServiceAt = $services->groupBy('customer_id')->map(fn ($g) => $g->first()->created_at);
+        $ptMonths = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        $data = $months->map(function (Carbon $monthStart) use ($services, $firstServiceAt, $ptMonths) {
+            $monthEnd = $monthStart->copy()->endOfMonth();
+
+            $novos = $this->baseQuery()
+                ->whereBetween('created_at', [$monthStart, $monthEnd])
+                ->count();
+
+            $recorrentes = $services->filter(function (Service $s) use ($monthStart, $monthEnd, $firstServiceAt) {
+                return $s->created_at->between($monthStart, $monthEnd)
+                    && $firstServiceAt[$s->customer_id]->lt($monthStart);
+            })->count();
+
+            return [
+                'name' => $ptMonths[$monthStart->month - 1],
+                'novos' => $novos,
+                'recorrentes' => $recorrentes,
+            ];
+        });
+
+        return ApiSuccessResponse::make($data->values()->all());
+    }
+
+    /**
+     * Retenção por coorte: não implementada (sem análise de coortes no
+     * Laravel) -- devolve vazio de propósito, em vez das barras fictícias
+     * antigas (42/35/28%).
+     */
+    public function retention(): ApiSuccessResponse
+    {
+        return ApiSuccessResponse::make([]);
     }
 
     private function present(User $user): array

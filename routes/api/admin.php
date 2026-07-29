@@ -36,4 +36,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/customers', [CustomerController::class, 'index']);
     Route::put('/customers/{id}/block', [CustomerController::class, 'block']);
     Route::put('/customers/{id}/restore', [CustomerController::class, 'restore']);
+
+    // Aba "Visão geral" -- só indicadores calculáveis com dados reais
+    // (bySource/retention devolvem vazio de propósito, ver CustomerController).
+    Route::get('/customers/metrics', [CustomerController::class, 'metrics']);
+    Route::get('/customers/by-location', [CustomerController::class, 'byLocation']);
+    Route::get('/customers/by-source', [CustomerController::class, 'bySource']);
+    Route::get('/customers/trend', [CustomerController::class, 'trend']);
+    Route::get('/customers/retention', [CustomerController::class, 'retention']);
 });
