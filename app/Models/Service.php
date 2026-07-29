@@ -73,6 +73,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'address' => 'array',
         'pending_schedule_data' => 'array',
         'is_test' => 'boolean',
+        'on_the_way_at' => 'datetime',
     ];
 
     protected $appends = ['price_rate'];
@@ -102,6 +103,11 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
     public function paymentOrder()
     {
         return $this->belongsTo(PaymentOrder::class);
+    }
+
+    public function extras(): HasMany
+    {
+        return $this->hasMany(ServiceExtra::class);
     }
 
     public function messages(): HasMany
@@ -242,13 +248,17 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         return [
             'id' => $service->id,
             'status' => $service->status,
+            'on_the_way_at' => $service->on_the_way_at?->toIso8601String(),
+            'is_immediate' => ! $service->schedule()->exists(),
+            'scheduled_at' => $service->schedule?->scheduled_day,
+            'created_at' => $service->created_at?->toIso8601String(),
             'distance' => $service->distance,
             'customer_notes' => $service->customer_notes,
             'vendor_notes' => $service->vendor_notes,
             'amount' => $service->amount_for_vendor,
-            'customer' => $service->customer->only('name', 'phone', 'email', 'avatar'),
+            'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),
             'vendor' => $service->vendor->user ? [
-                'user' => $service->vendor->user->only('name', 'phone', 'email', 'avatar'),
+                'user' => $service->vendor->user->only('name', 'phone_number', 'email', 'avatar'),
                 'price_rate' => $service->vendor->price_rate,
                 'location' => $service->vendor?->currentLocation?->only('latitude', 'longitude'),
             ] : null,
@@ -270,7 +280,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         ];
     }
 
-    private function formatVendorAddress(): ?array
+    public function formatVendorAddress(): ?array
     {
         if (! is_array($this->address)) {
             return null;
@@ -369,9 +379,9 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'customer_notes' => $service->customer_notes,
             'vendor_notes' => $service->vendor_notes,
             'amount' => $service->amount,
-            'customer' => $service->customer->only('name', 'phone', 'email', 'avatar'),
+            'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),
             'vendor' => $service?->vendor?->user ? [
-                'user' => $service->vendor->user->only('name', 'phone', 'email', 'avatar'),
+                'user' => $service->vendor->user->only('name', 'phone_number', 'email', 'avatar'),
                 'price_rate' => $service->vendor->price_rate,
                 'location' => $service->vendor?->currentLocation?->only('latitude', 'longitude'),
             ] : null,

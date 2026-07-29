@@ -15,6 +15,10 @@ class NotificationsController extends Controller
 
         $notifications = $user->notifications
             ->transform(function (DatabaseNotification $databaseNotification) use ($language) {
+                // Guardar o estado ANTES de marcar como lida: senão a app nunca
+                // consegue distinguir as notificações novas das já vistas.
+                $wasReadAt = $databaseNotification->read_at;
+
                 $databaseNotification->markAsRead();
 
                 return [
@@ -24,7 +28,7 @@ class NotificationsController extends Controller
                     // 'body' => __($databaseNotification->data['body']),
                     // 'title' => $databaseNotification->getTranslation('title', $language),
                     'date' => $databaseNotification->created_at,
-                    'read_at' => $databaseNotification->read_at
+                    'read_at' => $wasReadAt
                 ];
             })
             ->sortByDesc('date')
