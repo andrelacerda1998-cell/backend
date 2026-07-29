@@ -23,6 +23,9 @@ return [
         'must_be_selected' => 'At least one :attribute must be selected.',
         'only_one_must_be_selected' => 'Only one :attribute must be selected.',
     ],
+    'cities' => [
+        'min' => 'Choose at least :min municipalities where you want to work.',
+    ],
     'password' => [
         'letters' => 'The :attribute must contain at least one letter.',
         'mixed_case' => 'The :attribute must contain both uppercase and lowercase letters.',
