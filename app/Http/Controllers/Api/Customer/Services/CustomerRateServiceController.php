@@ -19,7 +19,10 @@ class CustomerRateServiceController extends Controller
         if ($service->rating_by_customer !== null) {
             return new ApiErrorResponse(null, 'You have already rated this service');
         }
-        $service->update(['rating_by_customer' => $request->get('rate')]);
+        $service->update([
+            'rating_by_customer' => $request->get('rate'),
+            'rating_comment_by_customer' => $request->get('comment'),
+        ]);
 
         return new ApiSuccessResponse(compact('service'));
     }

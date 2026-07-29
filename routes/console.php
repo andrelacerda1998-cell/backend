@@ -18,4 +18,9 @@ Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOver
 // expira os não confirmados). Read-only no Payshop (details()); não chama cancel() — ver item 15.
 Schedule::command('services:expire-pending-3ds')->everyFiveMinutes()->withoutOverlapping();
 
+// Avisa os técnicos a 30/15/7/3/1 dias da expiração de um documento aprovado — quando expira,
+// deixam de poder aceitar serviços. Uma vez por dia (de manhã); a idempotência é garantida pela
+// tabela vendor_document_expiry_notifications, por isso é seguro correr manualmente também.
+Schedule::command('documents:notify-expiring')->dailyAt('09:00')->withoutOverlapping();
+
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);

@@ -18,6 +18,13 @@ readonly class ServiceRequestedData
         public array $vendor,
         public array $customer,
         public ?array $address,
+        /**
+         * Morada completa (rua, número, código postal, cidade, ...). Campo NOVO:
+         * `address` mantém-se inalterado para não partir contratos existentes.
+         */
+        public ?array $address_details,
+        /** Observações escritas pelo cliente ao abrir o pedido. Campo NOVO. */
+        public ?string $customer_notes,
         public array $service_area,
         public array $service_type,
         public ?array $schedule,
@@ -45,6 +52,8 @@ readonly class ServiceRequestedData
             ],
             customer: $service->customer?->only(['id', 'name', 'address']),
             address: ['name' => $service->address?$service->address['city'].', '.ucfirst($service->address['state'])  : null],
+            address_details: $service->formatVendorAddress(),
+            customer_notes: $service->customer_notes,
             service_area: $service->serviceType->operationArea->only(['name']),
             service_type: $service->serviceType->only(['id', 'time', 'name']),
             schedule: $service->schedule?->only('scheduled_day', 'scheduled_time_start', 'scheduled_time_end'),

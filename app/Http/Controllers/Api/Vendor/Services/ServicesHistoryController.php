@@ -22,8 +22,37 @@ class ServicesHistoryController extends Controller
                 throw new WrongApp;
             }
 
-            $services = $user->vendor->services()
-                ->where('status', ServiceStatus::CLOSED);
+            // Filtro do histórico: all | completed | cancelled | lost
+            $filter = request('filter', 'completed');
+            $statusesByFilter = [
+                'completed' => [ServiceStatus::CLOSED],
+                'cancelled' => [ServiceStatus::CANCELED],
+                'lost' => [ServiceStatus::REFUSED],
+                'all' => [ServiceStatus::CLOSED, ServiceStatus::CANCELED, ServiceStatus::REFUSED],
+            ];
+            $statuses = $statusesByFilter[$filter] ?? $statusesByFilter['completed'];
+
+            $services = $user->vendor->services()->whereIn('status', $statuses);
+
+            // Totais para o cabeçalho (independentes da paginação)
+            $totals = [
+                'completed_count' => $user->vendor->services()->where('status', ServiceStatus::CLOSED)->count(),
+                'completed_amount' => (int) $user->vendor->services()->where('status', ServiceStatus::CLOSED)->sum('amount_for_vendor'),
+                'cancelled_count' => $user->vendor->services()->where('status', ServiceStatus::CANCELED)->count(),
+                'lost_count' => $user->vendor->services()->where('status', ServiceStatus::REFUSED)->count(),
+                'lost_amount' => (int) $user->vendor->services()->where('status', ServiceStatus::REFUSED)->sum('amount_for_vendor'),
+                // Recorte da semana corrente (segunda → agora): é o que a Home mostra no
+                // cartão de Auto Aceitação. Sem isto só havia o total de sempre, que não
+                // serve para dizer "esta semana perdeste X".
+                'lost_week_count' => $user->vendor->services()
+                    ->where('status', ServiceStatus::REFUSED)
+                    ->where('updated_at', '>=', now()->startOfWeek())
+                    ->count(),
+                'lost_week_amount' => (int) $user->vendor->services()
+                    ->where('status', ServiceStatus::REFUSED)
+                    ->where('updated_at', '>=', now()->startOfWeek())
+                    ->sum('amount_for_vendor'),
+            ];
 
             $servicesLength = $services->count();
             $limit = 10;
@@ -76,7 +105,7 @@ class ServicesHistoryController extends Controller
                     ];
                 });
 
-            return new ApiSuccessResponse(compact('services', 'have_more'));
+            return new ApiSuccessResponse(compact('services', 'have_more', 'totals'));
 
         } catch (\Throwable $e) {
             return new ApiErrorResponse($e);
