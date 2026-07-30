@@ -50,7 +50,14 @@ class AuditController extends Controller
 
         $query = Audit::query()
             ->whereHas('user.roles', fn ($q) => $q->whereIn('name', ['admin', 'super-admin']))
-            ->with(['user', 'auditable'])
+            // Sem with(['user','auditable']): o histórico de 'audits' cobre
+            // ~2 anos e alguns modelos já mudaram de sítio (ex: entraram no
+            // namespace GeneralSettings). Uma linha antiga com um
+            // auditable_type/user_type que já não existe como classe rebenta
+            // a query de eager load PARA O LOTE INTEIRO desse tipo (não só a
+            // linha em causa). Resolvendo por linha (lazy) + presentSafely,
+            // uma linha problemática fica isolada e não derruba o feed todo.
+            //
             // Desempate por 'id': dois audits do mesmo registo (criar +
             // atualizar) podem cair no mesmo segundo, e 'created_at' sozinho
             // não garante qual vem primeiro nesse caso.
@@ -60,7 +67,7 @@ class AuditController extends Controller
         $audits = $query->paginate($perPage);
 
         return ApiSuccessResponse::make([
-            'items' => collect($audits->items())->map($this->present(...))->all(),
+            'items' => collect($audits->items())->map($this->presentSafely(...))->all(),
             'meta' => [
                 'current_page' => $audits->currentPage(),
                 'last_page' => $audits->lastPage(),
@@ -68,6 +75,29 @@ class AuditController extends Controller
                 'total' => $audits->total(),
             ],
         ]);
+    }
+
+    /** Isola falhas de uma linha (classe antiga inexistente, dados corrompidos) do resto do feed. */
+    private function presentSafely(Audit $audit): array
+    {
+        try {
+            return $this->present($audit);
+        } catch (\Throwable $e) {
+            report($e);
+
+            $type = class_basename((string) $audit->auditable_type) ?: '?';
+            $eventLabel = self::EVENT_LABELS[$audit->event] ?? ucfirst((string) $audit->event);
+
+            return [
+                'id' => $audit->id,
+                'who' => 'Sistema',
+                'action' => trim("{$eventLabel} ".(self::ENTITY_LABELS[$type] ?? $type)),
+                'entity' => '#'.$audit->auditable_id,
+                'old_value' => null,
+                'new_value' => null,
+                'at' => $audit->created_at?->toIso8601String(),
+            ];
+        }
     }
 
     private function present(Audit $audit): array

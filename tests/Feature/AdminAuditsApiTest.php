@@ -6,6 +6,7 @@ use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\OperationArea;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -102,5 +103,35 @@ class AdminAuditsApiTest extends TestCase
             ->assertJsonPath('data.items.0.old_value', 'não')
             ->assertJsonPath('data.items.0.new_value', 'sim')
             ->assertJsonPath('data.items.1.action', 'Criou Documento');
+    }
+
+    /**
+     * A tabela 'audits' em produção tem ~2 anos de histórico; modelos como os
+     * de GeneralSettings já mudaram de namespace no passado. Uma linha antiga
+     * a apontar para uma classe que já não existe (auditable_type) não pode
+     * deitar todo o feed abaixo -- reproduz isso diretamente na BD (não dá
+     * para gerar pelo Eloquent, a classe tem mesmo de não existir).
+     */
+    public function test_it_stays_resilient_to_a_row_with_a_stale_auditable_class(): void
+    {
+        $admin = $this->makeAdmin('Rita', 'Nunes');
+
+        DB::table('audits')->insert([
+            'user_type' => User::class,
+            'user_id' => $admin->id,
+            'event' => 'created',
+            'auditable_type' => 'App\\Models\\GeneralSettings\\JaNaoExiste',
+            'auditable_id' => 999999,
+            'old_values' => null,
+            'new_values' => json_encode(['name' => 'Antigo']),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/audits')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.entity', '#999999');
     }
 }
