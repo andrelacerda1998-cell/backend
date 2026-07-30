@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AllowedZoneController;
+use App\Http\Controllers\Api\Admin\AuditController;
 use App\Http\Controllers\Api\Admin\CustomerController;
+use App\Http\Controllers\Api\Admin\DocumentController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
@@ -84,4 +86,15 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/allowed-zones', [AllowedZoneController::class, 'index']);
     Route::post('/allowed-zones', [AllowedZoneController::class, 'store']);
     Route::put('/allowed-zones/{allowedZone}', [AllowedZoneController::class, 'update']);
+
+    // Documentos — equivalente ao Filament DocumentResource. Lista + criar/
+    // editar, sem apagar (mesma decisão de Catálogo/Categorias/Zonas).
+    Route::get('/documents', [DocumentController::class, 'index']);
+    Route::post('/documents', [DocumentController::class, 'store']);
+    Route::put('/documents/{document}', [DocumentController::class, 'update']);
+
+    // Atividade — feed real de auditoria (tabela audits), só leitura, sem
+    // equivalente direto no Filament (lá é por registo). Filtrado a ações
+    // de staff (admin/super-admin) -- ver nota no controller.
+    Route::get('/audits', [AuditController::class, 'index']);
 });
