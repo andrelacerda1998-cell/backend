@@ -21,6 +21,16 @@ class AdminAuditsApiTest extends TestCase
     {
         parent::setUp();
         config(['scout.driver' => 'null']);
+
+        // owen-it/laravel-auditing só audita em consola (ex: seeders, testes
+        // PHPUnit) se 'audit.console' for true -- por omissão é false
+        // (Auditable::isAuditingEnabled(), vendor/owen-it/laravel-auditing/
+        // src/Auditable.php:554). Sem isto, os saves feitos abaixo não geram
+        // nenhuma linha em 'audits' e os testes ficam sempre a ver 0 registos.
+        // Não se muda o valor por omissão do pacote/app: em produção as ações
+        // reais (Filament, API admin) chegam sempre por HTTP, nunca por
+        // consola, por isso este ajuste só precisa de existir aqui nos testes.
+        config(['audit.console' => true]);
     }
 
     private function withAuth(): static

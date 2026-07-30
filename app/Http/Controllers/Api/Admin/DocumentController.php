@@ -26,7 +26,12 @@ class DocumentController extends Controller
         $query = Document::query()->orderBy('id');
 
         if ($search = $request->string('search')->trim()->value()) {
-            $query->where('name', 'like', "%{$search}%");
+            // 'name' é uma coluna JSON nativa (não um VARCHAR com JSON lá
+            // dentro, como em operation_areas/services_types) -- LIKE direto
+            // sobre uma coluna JSON no MySQL compara em binário e ignora a
+            // collation da ligação, ficando sensível a maiúsculas/minúsculas.
+            // Força minúsculas dos dois lados para um match previsível.
+            $query->whereRaw('LOWER(CAST(name AS CHAR)) LIKE ?', ['%'.mb_strtolower($search).'%']);
         }
 
         $documents = $query->paginate($perPage);
