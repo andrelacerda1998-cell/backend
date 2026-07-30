@@ -52,13 +52,19 @@ class AdminAuditsApiTest extends TestCase
     public function test_it_lists_only_activity_from_staff_users(): void
     {
         $admin = $this->makeAdmin('Rodrigo', 'Pacheco');
+        // Criado ANTES de vestir a identidade do admin: com a auditoria já
+        // ligada em consola, User também é Auditable -- se este customer
+        // fosse criado depois do actingAs($admin), o "Criou Utilizador"
+        // ficava (erradamente) atribuído ao admin só por ele ainda estar
+        // "autenticado" no teste, poluindo o feed que queremos testar.
+        $customer = User::factory()->create(['first_name' => 'Cliente', 'last_name' => 'Comum']);
+
         $this->actingAs($admin);
         $area = new OperationArea();
         $area->setTranslations('name', ['en' => 'Plumbing', 'pt-pt' => 'Canalização']);
         $area->save();
 
         // Ação de um utilizador comum (sem role) -- não deve aparecer no feed.
-        $customer = User::factory()->create(['first_name' => 'Cliente', 'last_name' => 'Comum']);
         $this->actingAs($customer);
         $area2 = new OperationArea();
         $area2->setTranslations('name', ['en' => 'Electrician', 'pt-pt' => 'Eletricista']);

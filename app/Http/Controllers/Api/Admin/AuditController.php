@@ -51,7 +51,11 @@ class AuditController extends Controller
         $query = Audit::query()
             ->whereHas('user.roles', fn ($q) => $q->whereIn('name', ['admin', 'super-admin']))
             ->with(['user', 'auditable'])
-            ->latest('created_at');
+            // Desempate por 'id': dois audits do mesmo registo (criar +
+            // atualizar) podem cair no mesmo segundo, e 'created_at' sozinho
+            // não garante qual vem primeiro nesse caso.
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         $audits = $query->paginate($perPage);
 
