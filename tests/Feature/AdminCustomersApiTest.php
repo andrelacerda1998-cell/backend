@@ -96,7 +96,10 @@ class AdminCustomersApiTest extends TestCase
     public function test_it_searches_customers_by_name_email_and_nif(): void
     {
         $target = User::factory()->create(['first_name' => 'Ana', 'last_name' => 'Silva', 'email' => 'ana@example.com']);
-        User::factory()->create(['first_name' => 'Bruno', 'last_name' => 'Costa']);
+        // Email fixo (não o aleatório do Faker): o safeEmail() gerado ao
+        // acaso já calhou conter "ana" nalguma palavra, fazendo este bater
+        // por engano no filtro de pesquisa (que também procura em email).
+        User::factory()->create(['first_name' => 'Bruno', 'last_name' => 'Costa', 'email' => 'bruno.costa@example.com']);
 
         $this->withAuth()
             ->getJson('/api/v1/admin/customers?search=ana')
