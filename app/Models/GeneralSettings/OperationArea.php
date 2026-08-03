@@ -4,6 +4,7 @@ namespace App\Models\GeneralSettings;
 
 use App\Models\Vendor;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,7 +17,7 @@ use Spatie\Translatable\HasTranslations;
 
 class OperationArea extends Model implements Auditable, HasMedia
 {
-    use \OwenIt\Auditing\Auditable, SoftDeletes, HasTranslations, InteractsWithMedia;
+    use \OwenIt\Auditing\Auditable, HasFactory, SoftDeletes, HasTranslations, InteractsWithMedia;
 
     protected $fillable = ['name', 'documents'];
 

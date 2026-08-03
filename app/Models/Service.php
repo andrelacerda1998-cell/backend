@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -30,7 +31,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 #[ObservedBy(ServiceObserver::class)]
 class Service extends Model implements Auditable, HasMedia, ProductLimitedInterface
 {
-    use HasWallet, InteractsWithMedia, \OwenIt\Auditing\Auditable, SoftDeletes;
+    use HasFactory, HasWallet, InteractsWithMedia, \OwenIt\Auditing\Auditable, SoftDeletes;
 
     protected $fillable = [
         'customer_id',

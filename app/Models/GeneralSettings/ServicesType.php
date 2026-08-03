@@ -5,6 +5,7 @@ namespace App\Models\GeneralSettings;
 use App\Casts\TranslatableArrayCast;
 use App\Models\Vendor;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -16,7 +17,7 @@ use Spatie\Translatable\HasTranslations;
 
 class ServicesType extends Model implements Auditable, HasMedia
 {
-    use HasTranslations, InteractsWithMedia, \OwenIt\Auditing\Auditable, SoftDeletes;
+    use HasFactory, HasTranslations, InteractsWithMedia, \OwenIt\Auditing\Auditable, SoftDeletes;
 
     protected array $translatable = ['name'];
 

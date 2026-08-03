@@ -97,6 +97,10 @@
             "@php artisan key:generate --ansi",
             "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
             "@php artisan migrate --graceful --ansi"
+        ],
+        "test:sqlite": [
+            "Composer\\Config::disableProcessTimeout",
+            "DB_CONNECTION=sqlite DB_DATABASE=:memory: BROADCAST_CONNECTION=log SCOUT_DRIVER=collection WALLET_CACHE_DRIVER=array WALLET_LOCK_DRIVER=array vendor/bin/phpunit"
         ]
     },
     "provide": {

@@ -22,6 +22,7 @@ use App\Observers\VendorObserver;
 use Bavix\Wallet\Models\Transaction;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -36,7 +37,7 @@ use OwenIt\Auditing\Contracts\Auditable;
 #[ObservedBy(VendorObserver::class)]
 class Vendor extends Model implements Auditable
 {
-    use \OwenIt\Auditing\Auditable, Searchable, SoftDeletes;
+    use \OwenIt\Auditing\Auditable, HasFactory, Searchable, SoftDeletes;
 
     protected $fillable = ['user_id', 'status', 'price_rate', 'username', 'invoice_workspace', 'auth_token', 'company_name', 'invoice_account_id', 'at_user', 'at_password', 'iban', 'notification_preferences'];
 
