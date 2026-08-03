@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Vendor\Services;
 
 use App\Enums\Services\ServiceStatus;
+use App\Events\Common\Services\ServiceExtraRequestedEvent;
+use App\Events\Common\Services\ServiceExtraWithdrawnEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
@@ -95,9 +97,15 @@ class ServiceExtrasController extends Controller
         return new ApiSuccessResponse(['extra' => $this->present($extra)]);
     }
 
-    /** Avisar o cliente de que há um pedido à espera de resposta. */
+    /**
+     * Avisar o cliente de que há um pedido à espera de resposta: em tempo real
+     * (a app abre o ecrã de decisão de imediato, se estiver aberta) e por push
+     * (cobre a app em background/fechada). Um canal não substitui o outro.
+     */
     private function notifyCustomer(Service $service, ServiceExtra $extra): void
     {
+        ServiceExtraRequestedEvent::dispatch($service->id, $this->present($extra));
+
         $customer = $service->customer;
 
         if (! $customer) {
@@ -123,6 +131,11 @@ class ServiceExtrasController extends Controller
         }
 
         $extra->update(['status' => 'withdrawn', 'resolved_at' => now()]);
+
+        // Sem isto, um pedido que o cliente ainda não respondeu fica "pendente" no
+        // ecrã dele até voltar a abrir a app — avisa em tempo real que já não há
+        // nada para decidir (se o cliente já estiver a ver o ecrã de aprovar/recusar).
+        ServiceExtraWithdrawnEvent::dispatch($service->id, $this->present($extra));
 
         return new ApiSuccessResponse(['extra' => $this->present($extra)]);
     }
