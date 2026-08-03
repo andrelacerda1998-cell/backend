@@ -17,8 +17,16 @@ class AdminSentNotificationsApiTest extends TestCase
 
     // 'wallets'/'schedule_available' entram porque um dos testes cria um
     // Vendor (para testar o filtro recipient_type=vendor), o que dispara a
-    // cadeia de observers habitual.
-    protected array $tablesToTruncate = ['notifications', 'users', 'vendors', 'wallets', 'schedule_available'];
+    // cadeia de observers habitual. 'payshop_payment_methods'/
+    // 'payshop_payments_orders' têm FK para 'users' -- sem as truncar, o
+    // TRUNCATE de 'users' reinicia o auto_increment e o próximo User#1
+    // herda uma linha órfã dessas tabelas (de ChargeServiceExtraTest/
+    // ServiceExtrasFlowTest, que também usam User#1); o forceDelete() do
+    // teste de resiliência rebentava com uma violação de FK por causa disto.
+    protected array $tablesToTruncate = [
+        'notifications', 'users', 'vendors', 'wallets', 'schedule_available',
+        'payshop_payment_methods', 'payshop_payments_orders',
+    ];
 
     protected function setUp(): void
     {
