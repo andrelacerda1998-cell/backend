@@ -10,7 +10,7 @@ use App\Models\Service;
 use App\Models\ServiceExtra;
 use App\Models\User;
 use App\Services\Common\Services\ChargeServiceExtra;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Tests\Support\FakeChargeServiceExtra;
@@ -24,11 +24,26 @@ use Tests\TestCase;
  */
 class ServiceExtrasFlowTest extends TestCase
 {
-    use RefreshDatabase;
+    // NÃO RefreshDatabase aqui: mesma razão documentada em
+    // AdminVendorsApiTest e ChargeServiceExtraTest -- a CI corre contra uma
+    // BD MySQL partilhada por toda a suite, e RefreshDatabase não limpa o
+    // que outras classes com DatabaseTruncation já commitaram antes desta.
+    use DatabaseTruncation;
+
+    protected array $tablesToTruncate = [
+        'users', 'wallets', 'vendors', 'schedule_available',
+        'services', 'services_types', 'operation_areas', 'service_extras',
+        'payshop_payments_methods', 'payshop_payments_orders',
+    ];
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ver AdminVendorsApiTest -- criar um Vendor dispara uma cadeia de
+        // observers que tenta indexar no Meilisearch.
+        config(['scout.driver' => 'null']);
+
         Gender::firstOrCreate(['name' => 'Masculino']);
         Notification::fake();
         $this->app->bind(ChargeServiceExtra::class, fn () => tap(new FakeChargeServiceExtra, fn ($c) => $c->outcome = 'success'));

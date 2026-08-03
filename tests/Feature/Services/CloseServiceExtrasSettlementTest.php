@@ -7,7 +7,7 @@ use App\Models\GeneralSettings\Gender;
 use App\Models\Service;
 use App\Models\ServiceExtra;
 use App\Services\Common\Services\CloseService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -20,11 +20,28 @@ use Tests\TestCase;
  */
 class CloseServiceExtrasSettlementTest extends TestCase
 {
-    use RefreshDatabase;
+    // NÃO RefreshDatabase aqui: mesma razão documentada em
+    // AdminVendorsApiTest e ChargeServiceExtraTest -- a CI corre contra uma
+    // BD MySQL partilhada por toda a suite, e RefreshDatabase não limpa o
+    // que outras classes com DatabaseTruncation já commitaram antes desta.
+    use DatabaseTruncation;
+
+    // 'transactions'/'transfers' entram porque CloseService credita a
+    // wallet do técnico (Bavix\Wallet) ao fechar o serviço.
+    protected array $tablesToTruncate = [
+        'users', 'wallets', 'vendors', 'schedule_available',
+        'services', 'services_types', 'operation_areas', 'service_extras',
+        'transactions', 'transfers',
+    ];
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ver AdminVendorsApiTest -- criar um Vendor dispara uma cadeia de
+        // observers que tenta indexar no Meilisearch.
+        config(['scout.driver' => 'null']);
+
         Gender::firstOrCreate(['name' => 'Masculino']);
         Notification::fake();
         Queue::fake(); // evita o job real de faturação (InvoiceXpress) disparado ao fechar o serviço

@@ -7,7 +7,7 @@ use App\Models\Service;
 use App\Models\ServiceExtra;
 use App\Models\User;
 use App\Models\Vendor;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Tests\Support\FakeChargeServiceExtra;
 use Tests\TestCase;
 
@@ -19,11 +19,36 @@ use Tests\TestCase;
  */
 class ChargeServiceExtraTest extends TestCase
 {
-    use RefreshDatabase;
+    // NÃO RefreshDatabase aqui: a CI corre TODA a suite contra a mesma BD
+    // MySQL partilhada, e várias outras classes (AdminVendorsApiTest,
+    // AdminServicesTypesApiTest, etc.) usam DatabaseTruncation em modo
+    // autocommit -- os dados que criam ficam mesmo gravados, fora de
+    // qualquer transação. RefreshDatabase só embrulha CADA teste numa
+    // transação revertida no fim; não limpa o que outra classe já tinha
+    // committado antes desta começar (ver comentário em
+    // AdminVendorsApiTest::class para o precedente exato deste problema).
+    use DatabaseTruncation;
+
+    // 'wallets' entra por causa do UserObserver (cria uma wallet por User
+    // novo); 'schedule_available' por causa do VendorObserver (cria 7 linhas
+    // por Vendor novo). 'services_types'/'operation_areas' porque o
+    // ServiceFactory aninha os dois. Payshop entra porque o
+    // FakeChargeServiceExtra cria PaymentOrder reais nessas tabelas.
+    protected array $tablesToTruncate = [
+        'users', 'wallets', 'vendors', 'schedule_available',
+        'services', 'services_types', 'operation_areas', 'service_extras',
+        'payshop_payments_methods', 'payshop_payments_orders',
+    ];
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ver AdminVendorsApiTest -- criar um Vendor dispara uma cadeia de
+        // observers (VendorObserver → ScheduleAvailable → ScheduleAvailableObserver)
+        // que tenta indexar no Meilisearch.
+        config(['scout.driver' => 'null']);
+
         Gender::firstOrCreate(['name' => 'Masculino']);
     }
 
