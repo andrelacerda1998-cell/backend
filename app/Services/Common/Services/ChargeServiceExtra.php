@@ -25,7 +25,9 @@ use RwInteractive\PayshopSdk\Models\PaymentOrder;
  *  - Serviços de teste ou extras de 0€ → `not_required`.
  *
  * Idempotência: o chamador tranca a linha do extra; aqui só se cobra quando ainda não há
- * payment_order_id nem estado terminal, e a coluna payment_order_id é UNIQUE.
+ * payment_order_id (nenhuma ordem viva/terminal no Payshop) nem estado terminal (paid/
+ * not_required), e a coluna payment_order_id é UNIQUE. Isto permite retry seguro só no
+ * único caso sem ordem criada ('requires_action' por falta de método de pagamento).
  */
 class ChargeServiceExtra
 {
@@ -37,9 +39,17 @@ class ChargeServiceExtra
      */
     public function charge(Service $service, ServiceExtra $extra): string
     {
-        // Idempotência: já cobrado / já com ordem / já num estado que não deve recobrar.
-        if ($extra->isCharged() || $extra->payment_order_id !== null
-            || in_array($extra->payment_status, ['pending_confirmation', 'requires_action'], true)) {
+        // Já cobrado / dispensado — nunca recobrar.
+        if ($extra->isCharged()) {
+            return $extra->payment_status;
+        }
+
+        // Já existe uma ordem viva no Payshop (3DS a aguardar o cliente, ou push MBWay a
+        // aguardar confirmação) — nunca criar uma segunda ordem para o mesmo extra; o
+        // cliente resolve pela ordem existente (ecrã de validação) ou o fecho do serviço
+        // tenta capturar o MBWay. Sem ordem (1ª tentativa, ou retry depois de
+        // 'no_stored_payment_method' — aí nunca chegou a criar-se ordem nenhuma), segue.
+        if ($extra->payment_order_id !== null) {
             return $extra->payment_status;
         }
 
@@ -72,8 +82,13 @@ class ChargeServiceExtra
             return $this->chargeCard($service, $extra, $customer, $card);
         } catch (CreditCardValidationRequired $e) {
             // O Payshop exige nova autenticação (3DS) para esta cobrança MIT — não simulamos:
-            // fica aprovado à espera de fluxo na app do cliente.
-            $extra->forceFill(['payment_status' => 'requires_action', 'payment_error' => '3ds_required'])->save();
+            // fica aprovado à espera de fluxo na app do cliente. Guarda o URL de validação
+            // (perdia-se antes) para a app poder reabrir o ecrã de confirmação mais tarde.
+            $extra->forceFill([
+                'payment_status' => 'requires_action',
+                'payment_error' => '3ds_required',
+                'payment_validation_url' => $e->getUrl(),
+            ])->save();
 
             return 'requires_action';
         } catch (\Throwable $e) {
@@ -124,13 +139,18 @@ class ChargeServiceExtra
 
     protected function createCardOrder($customer, Service $service, ServiceExtra $extra): PaymentOrder
     {
+        // 'extra' entra na querystring do URL de retorno assinado (o {service} da rota fica
+        // igual ao do pedido base — a ordem pertence ao MESMO service_id). SEM ISTO, o
+        // callback do 3DS cairia no controller do serviço base, que já está pago nesta
+        // altura (o extra só existe com o serviço a decorrer) e devolveria 400 "already
+        // paid" ao cliente em vez de confirmar a cobrança do extra.
         return $customer->createPaymentOrder(
             OperationType::DEFERRED,
             (int) $extra->amount,
             'Extra for service #'.$service->id,
             now()->addDays(15),
             [],
-            ['service' => $service->id]
+            ['service' => $service->id, 'extra' => $extra->id]
         );
     }
 

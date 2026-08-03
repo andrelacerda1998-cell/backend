@@ -31,6 +31,9 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
             Route::get('/extras', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'index']);
             Route::post('/extras/{extra}/approve', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'approve']);
             Route::post('/extras/{extra}/reject', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'reject']);
+            // Repetir a cobrança de um extra aprovado que ficou sem forma de cobrar (ex.: sem
+            // cartão gravado) — depois de o cliente adicionar um método de pagamento.
+            Route::post('/extras/{extra}/retry-charge', [App\Http\Controllers\Api\Customer\Services\ServiceExtrasController::class, 'retryCharge']);
         });
 
     });

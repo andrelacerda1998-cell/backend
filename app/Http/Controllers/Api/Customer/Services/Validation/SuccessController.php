@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\Customer\Services\traits\ProcessPendingScheduleAfte
 use App\Http\Controllers\Controller;
 use App\Models\Service;
 use App\Services\Common\Services\AcceptService;
+use App\Services\Common\Services\ResolveServiceExtraValidation;
+use Illuminate\Http\Request;
 use RwInteractive\PayshopSdk\Api\Payments\PaymentOrder;
 
 class SuccessController extends Controller
@@ -17,10 +19,20 @@ class SuccessController extends Controller
 
     public function __construct(
         private readonly AcceptService $acceptService,
+        private readonly ResolveServiceExtraValidation $resolveServiceExtraValidation,
     ) {}
 
-    public function __invoke(Service $service)
+    public function __invoke(Request $request, Service $service)
     {
+        // Callback do 3DS de um EXTRA (tempo/peças), não do serviço base — nunca cai na
+        // lógica abaixo, que assume que a ordem em causa é a do serviço base (que já está
+        // sempre paga nesta altura, porque só há extras com o serviço a decorrer).
+        if ($request->query('extra')) {
+            $path = $this->resolveServiceExtraValidation->success($service, (int) $request->query('extra'));
+
+            return redirect()->away('piquet.customer:://'.$path);
+        }
+
         if ($service->payment_status == PaymentStatus::PAID) {
             abort(400, 'Service already paid');
         }

@@ -7,10 +7,9 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Service;
 use App\Models\ServiceExtra;
-use App\Notifications\Customer\ServiceExtraChargeFailedNotification as CustomerChargeFailedNotification;
-use App\Notifications\Vendor\ServiceExtraChargeFailedNotification as VendorChargeFailedNotification;
 use App\Notifications\Vendor\ServiceExtraResolvedNotification;
 use App\Services\Common\Services\ChargeServiceExtra;
+use App\Services\Common\Services\NotifyServiceExtraChargeFailed;
 use Exception;
 use Illuminate\Http\Request;
 
@@ -26,6 +25,10 @@ use Illuminate\Http\Request;
  */
 class ServiceExtrasController extends Controller
 {
+    public function __construct(
+        private readonly NotifyServiceExtraChargeFailed $notifyChargeFailed,
+    ) {}
+
     /** Só o cliente dono do serviço pode ver/responder aos extras. */
     private function authorizeService(Service $service): bool
     {
@@ -42,6 +45,12 @@ class ServiceExtrasController extends Controller
             'amount' => (int) $e->amount,
             'status' => $e->status,
             'payment_status' => $e->payment_status,
+            // 'no_stored_payment_method' | '3ds_required' | mensagem curta de erro da captura —
+            // a app usa isto para decidir se mostra "adicionar cartão" ou "confirmar pagamento".
+            'payment_error' => $e->payment_error,
+            // Só populado quando payment_status === 'requires_action' por 3DS (não por falta
+            // de cartão — nesse caso não há ordem nenhuma, logo não há URL).
+            'payment_validation_url' => $e->payment_validation_url,
             'rejection_reason' => $e->rejection_reason,
             'created_at' => $e->created_at?->toIso8601String(),
             'resolved_at' => $e->resolved_at?->toIso8601String(),
@@ -123,7 +132,7 @@ class ServiceExtrasController extends Controller
             $chargeResult = app(ChargeServiceExtra::class)->charge($service, $extra);
 
             if ($chargeResult === 'failed') {
-                $this->notifyChargeFailed($service, $extra->refresh());
+                $this->notifyChargeFailed->handle($service, $extra->refresh());
             }
         }
 
@@ -132,19 +141,37 @@ class ServiceExtrasController extends Controller
         return new ApiSuccessResponse(['extra' => $this->present($extra)]);
     }
 
-    /** Cobrança falhou: avisar técnico (não vai receber o extra) e cliente. */
-    private function notifyChargeFailed(Service $service, ServiceExtra $extra): void
+    /**
+     * Repetir a cobrança de um extra aprovado que ficou sem forma de cobrar por falta de
+     * método de pagamento gravado (payment_error === 'no_stored_payment_method') — ex.: o
+     * cliente acabou de adicionar um cartão na app. ChargeServiceExtra só avança quando
+     * ainda não há payment_order_id; qualquer outro estado (3DS pendente, MBWay a aguardar,
+     * já cobrado) devolve o estado atual sem tentar nada — essa é a garantia de nunca criar
+     * uma segunda ordem para o mesmo extra.
+     */
+    public function retryCharge(Service $service, ServiceExtra $extra)
     {
-        try {
-            $vendorUser = $service->vendor?->user;
-            if ($vendorUser && ! $vendorUser->trashed() && $vendorUser->devices()->exists()) {
-                $vendorUser->notify(new VendorChargeFailedNotification($service, $extra));
-            }
-
-            $service->customer?->notify(new CustomerChargeFailedNotification($service, $extra));
-        } catch (\Throwable $e) {
-            report($e); // falha de push nunca quebra a resposta
+        if (! $this->authorizeService($service) || $extra->service_id !== $service->id) {
+            return new ApiErrorResponse(new Exception, 'Not found', 404);
         }
+
+        $eligible = \DB::transaction(function () use ($extra): bool {
+            $locked = ServiceExtra::whereKey($extra->getKey())->lockForUpdate()->first();
+
+            return (bool) ($locked && $locked->status === 'approved' && ! $locked->isCharged() && $locked->payment_order_id === null);
+        });
+
+        if (! $eligible) {
+            return new ApiErrorResponse(new Exception, 'Nothing to retry for this extra', 422);
+        }
+
+        $chargeResult = app(ChargeServiceExtra::class)->charge($service, $extra->refresh());
+
+        if ($chargeResult === 'failed') {
+            $this->notifyChargeFailed->handle($service, $extra->refresh());
+        }
+
+        return new ApiSuccessResponse(['extra' => $this->present($extra->refresh())]);
     }
 
     private function notifyVendor(Service $service, ServiceExtra $extra, bool $approved): void

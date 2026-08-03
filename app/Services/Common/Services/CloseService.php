@@ -243,15 +243,7 @@ class CloseService
 
     private function notifyExtraChargeFailed(\App\Models\ServiceExtra $extra): void
     {
-        try {
-            $vendorUser = $this->service->vendor?->user;
-            if ($vendorUser && ! $vendorUser->trashed() && $vendorUser->devices()->exists()) {
-                $vendorUser->notify(new \App\Notifications\Vendor\ServiceExtraChargeFailedNotification($this->service, $extra));
-            }
-            $this->service->customer?->notify(new \App\Notifications\Customer\ServiceExtraChargeFailedNotification($this->service, $extra));
-        } catch (\Throwable $e) {
-            report($e);
-        }
+        app(NotifyServiceExtraChargeFailed::class)->handle($this->service, $extra);
     }
 
     /** Meta auditável do movimento de carteira do extra (distinto do serviço base). */

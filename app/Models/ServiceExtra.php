@@ -17,7 +17,7 @@ class ServiceExtra extends Model
 
     protected $fillable = [
         'service_id', 'type', 'description', 'minutes', 'amount', 'status', 'rejection_reason', 'resolved_at',
-        'payment_status', 'payment_order_id', 'payment_error', 'charged_at', 'vendor_credited_at',
+        'payment_status', 'payment_order_id', 'payment_error', 'payment_validation_url', 'charged_at', 'vendor_credited_at',
     ];
 
     protected $casts = [
