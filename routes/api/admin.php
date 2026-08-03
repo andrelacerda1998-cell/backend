@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\DocumentController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
+use App\Http\Controllers\Api\Admin\SentNotificationController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
@@ -97,4 +98,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // equivalente direto no Filament (lá é por registo). Filtrado a ações
     // de staff (admin/super-admin) -- ver nota no controller.
     Route::get('/audits', [AuditController::class, 'index']);
+
+    // Sent Notifications — equivalente ao Filament SentNotificationResource.
+    // Só leitura: histórico do que já foi mesmo enviado (tabela `notifications`).
+    Route::get('/sent-notifications', [SentNotificationController::class, 'index']);
+    Route::get('/sent-notifications/types', [SentNotificationController::class, 'types']);
 });
