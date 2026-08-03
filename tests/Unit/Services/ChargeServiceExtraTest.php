@@ -32,12 +32,18 @@ class ChargeServiceExtraTest extends TestCase
     // 'wallets' entra por causa do UserObserver (cria uma wallet por User
     // novo); 'schedule_available' por causa do VendorObserver (cria 7 linhas
     // por Vendor novo). 'services_types'/'operation_areas' porque o
-    // ServiceFactory aninha os dois. Payshop entra porque o
-    // FakeChargeServiceExtra cria PaymentOrder reais nessas tabelas.
+    // ServiceFactory aninha os dois. 'payshop_payment_methods' tem de entrar
+    // OBRIGATORIAMENTE: sem truncar, um cartão criado num teste anterior
+    // (paymentMethods()->create(...)) fica na BD; quando o TRUNCATE de
+    // 'users' reinicia o auto_increment, o próximo customer#1 herda esse
+    // cartão órfão e passa a parecer "tem cartão guardado" quando não devia
+    // -- foi exatamente isto que rebentou "no_stored_payment_method" nos
+    // testes seguintes. 'payshop_payments_orders' pela mesma razão, porque o
+    // FakeChargeServiceExtra cria PaymentOrder reais nessa tabela.
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
         'services', 'services_types', 'operation_areas', 'service_extras',
-        'payshop_payments_methods', 'payshop_payments_orders',
+        'payshop_payment_methods', 'payshop_payments_orders',
     ];
 
     protected function setUp(): void

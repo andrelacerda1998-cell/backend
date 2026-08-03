@@ -30,10 +30,12 @@ class ServiceExtrasFlowTest extends TestCase
     // que outras classes com DatabaseTruncation já commitaram antes desta.
     use DatabaseTruncation;
 
+    // Ver ChargeServiceExtraTest para a razão exata de 'payshop_payment_methods'
+    // entrar aqui (cartão órfão herdado por um customer_id reciclado).
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
         'services', 'services_types', 'operation_areas', 'service_extras',
-        'payshop_payments_methods', 'payshop_payments_orders',
+        'payshop_payment_methods', 'payshop_payments_orders',
     ];
 
     protected function setUp(): void
@@ -46,6 +48,14 @@ class ServiceExtrasFlowTest extends TestCase
 
         Gender::firstOrCreate(['name' => 'Masculino']);
         Notification::fake();
+
+        // ServiceExtraRequestedEvent/ServiceExtraWithdrawnEvent implementam
+        // ShouldBroadcast -- sem isto, qualquer teste que não faça o próprio
+        // Event::fake() tenta um broadcast real via Pusher (não configurado
+        // em CI) e rebenta com "Failed to connect to 0.0.0.0:8080". Global
+        // aqui para não depender de cada teste se lembrar de o fazer.
+        Event::fake([ServiceExtraRequestedEvent::class, ServiceExtraWithdrawnEvent::class]);
+
         $this->app->bind(ChargeServiceExtra::class, fn () => tap(new FakeChargeServiceExtra, fn ($c) => $c->outcome = 'success'));
     }
 
