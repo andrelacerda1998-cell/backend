@@ -9,7 +9,7 @@ use App\Models\Address;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
@@ -17,7 +17,23 @@ use Tests\TestCase;
 
 class AdminCustomersApiTest extends TestCase
 {
-    use RefreshDatabase;
+    // Era RefreshDatabase até aqui -- só não tinha rebentado por sorte de
+    // posição alfabética (nenhuma classe DatabaseTruncation que sujasse
+    // 'users' corria depois desta E antes de outra que reparasse). Deixou de
+    // ser verdade quando AdminCustomerPaymentMethodsApiTest entrou na suite
+    // ("CustomerP" < "Customers" alfabeticamente): os clientes que essa
+    // classe cria na ÚLTIMA das suas provas ficam mesmo gravados (autocommit,
+    // fora de transação) e o RefreshDatabase desta classe não os limpa antes
+    // de começar -- só reverte o que ELA PRÓPRIA cria. Mesmo problema
+    // documentado em AdminVendorsApiTest, desta vez do lado de quem herda o
+    // lixo em vez de quem o produz.
+    use DatabaseTruncation;
+
+    // 'wallets' (UserObserver cria uma por User novo), 'vendors'/
+    // 'schedule_available' (um teste cria um Vendor para confirmar o filtro
+    // whereDoesntHave('vendor')), 'services' (makeService() insere direto na
+    // tabela) e 'addresses' (teste de by-location).
+    protected array $tablesToTruncate = ['users', 'wallets', 'vendors', 'schedule_available', 'services', 'addresses'];
 
     protected function setUp(): void
     {

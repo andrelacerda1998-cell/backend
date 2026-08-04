@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GeneralSettings\Gender;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use RwInteractive\PayshopSdk\Enums\PaymentMethods\PaymentMethodType;
 use Tests\TestCase;
 
 /**
@@ -52,7 +53,10 @@ class AdminCustomerPaymentMethodsApiTest extends TestCase
             'expire_year' => '28',
         ]);
         $mbway = $customer->paymentMethods()->create([
-            'type' => 'mbway',
+            // Valor da própria enum, não uma string adivinhada -- 'type' é
+            // um enum cast (RwInteractive\PayshopSdk\Enums\PaymentMethods\
+            // PaymentMethodType), e um valor inválido rebenta na hidratação.
+            'type' => PaymentMethodType::MBWAY->value,
             'phone_number' => '910000000',
         ]);
 
@@ -61,7 +65,7 @@ class AdminCustomerPaymentMethodsApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(2, 'data.items')
             ->assertJsonPath('data.items.0.id', $mbway->id) // mais recente primeiro
-            ->assertJsonPath('data.items.0.type', 'mbway')
+            ->assertJsonPath('data.items.0.type', PaymentMethodType::MBWAY->value)
             ->assertJsonPath('data.items.0.phone_number', '910000000')
             ->assertJsonPath('data.items.1.id', $card->id)
             ->assertJsonPath('data.items.1.brand', 'visa')
