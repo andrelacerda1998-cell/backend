@@ -52,6 +52,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/customers/trend', [CustomerController::class, 'trend']);
     Route::get('/customers/retention', [CustomerController::class, 'retention']);
 
+    // Métodos de pagamento guardados — equivalente ao Filament
+    // PaymentMethodsRelationManager. Só listar + apagar (sem restrição de
+    // super-admin, ver nota no controller).
+    Route::get('/customers/{id}/payment-methods', [CustomerController::class, 'paymentMethods']);
+    Route::delete('/customers/{id}/payment-methods/{methodId}', [CustomerController::class, 'deletePaymentMethod']);
+
     // Técnicos — equivalente ao Filament VendorResource. Suspender/Reativar
     // usam soft-delete real, mas SEM a restrição de super-admin do Filament
     // (ver nota extensa no VendorController) -- decisão explícita do

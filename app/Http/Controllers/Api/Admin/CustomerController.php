@@ -264,6 +264,69 @@ class CustomerController extends Controller
         return ApiSuccessResponse::make([]);
     }
 
+    /**
+     * Métodos de pagamento guardados — equivalente ao Filament
+     * PaymentMethodsRelationManager (dentro do CustomerResource). Só listar +
+     * apagar, sem criar/editar: cartões/MBWay são geridos pelo Payshop via
+     * app, nunca por formulário manual no backoffice (o próprio Filament só
+     * expõe DeleteAction aqui, o form de criar está comentado no código
+     * original).
+     *
+     * O Filament restringe o apagar a super-admin, mas a admin.api usa um
+     * token partilhado sem sessão/utilizador autenticado -- não há "quem" a
+     * verificar (mesma razão já documentada em VendorController para não
+     * replicar a restrição de super-admin no suspender/reativar).
+     */
+    public function paymentMethods(int $id): ApiSuccessResponse|ApiErrorResponse
+    {
+        $user = User::withTrashed()->find($id);
+
+        if (! $user) {
+            return new ApiErrorResponse(null, 'Cliente não encontrado.', 404);
+        }
+
+        $methods = $user->paymentMethods()->orderByDesc('created_at')->get();
+
+        return ApiSuccessResponse::make([
+            'items' => $methods->map($this->presentPaymentMethod(...))->all(),
+        ]);
+    }
+
+    public function deletePaymentMethod(int $id, int $methodId): ApiSuccessResponse|ApiErrorResponse
+    {
+        $user = User::withTrashed()->find($id);
+
+        if (! $user) {
+            return new ApiErrorResponse(null, 'Cliente não encontrado.', 404);
+        }
+
+        $method = $user->paymentMethods()->find($methodId);
+
+        if (! $method) {
+            return new ApiErrorResponse(null, 'Método de pagamento não encontrado.', 404);
+        }
+
+        $method->delete();
+
+        return ApiSuccessResponse::make(['deleted' => true]);
+    }
+
+    private function presentPaymentMethod($method): array
+    {
+        return [
+            'id' => $method->id,
+            'type' => $method->type,
+            'brand' => $method->brand,
+            'brand_description' => $method->brand_description,
+            'last4' => $method->last4,
+            'phone_number' => $method->phone_number,
+            'holder' => $method->holder,
+            'expire_month' => $method->expire_month,
+            'expire_year' => $method->expire_year,
+            'created_at' => $method->created_at?->toIso8601String(),
+        ];
+    }
+
     private function present(User $user): array
     {
         // NÃO usar user->name -- ver nota em SystemProfitController/
