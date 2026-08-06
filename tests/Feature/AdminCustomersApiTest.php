@@ -33,7 +33,18 @@ class AdminCustomersApiTest extends TestCase
     // 'schedule_available' (um teste cria um Vendor para confirmar o filtro
     // whereDoesntHave('vendor')), 'services' (makeService() insere direto na
     // tabela) e 'addresses' (teste de by-location).
-    protected array $tablesToTruncate = ['users', 'wallets', 'vendors', 'schedule_available', 'services', 'addresses'];
+    //
+    // 'model_has_roles' é OBRIGATÓRIO aqui, por mais que pareça não ter nada
+    // a ver com clientes: AdminAuditsApiTest::makeAdmin() cria um admin e
+    // faz assignRole('admin'), e a SUA própria $tablesToTruncate não inclui
+    // 'model_has_roles' -- essa linha fica mesmo gravada (autocommit) depois
+    // da última prova dela. Como esta classe também trunca 'users' antes de
+    // CADA prova (reinicia o auto_increment), o próximo User#1 criado aqui
+    // HERDA essa linha órfã do pivot e passa a "ter" o papel admin sem
+    // nunca lhe ter sido atribuído -- excluindo-o silenciosamente do
+    // whereDoesntHave('roles', [admin, super-admin]) do CustomerController.
+    // Foi isto que rebentou "Ana Silva" a desaparecer da lista de clientes.
+    protected array $tablesToTruncate = ['users', 'wallets', 'vendors', 'schedule_available', 'services', 'addresses', 'model_has_roles'];
 
     protected function setUp(): void
     {

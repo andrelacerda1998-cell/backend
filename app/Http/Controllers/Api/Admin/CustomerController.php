@@ -285,7 +285,10 @@ class CustomerController extends Controller
             return new ApiErrorResponse(null, 'Cliente não encontrado.', 404);
         }
 
-        $methods = $user->paymentMethods()->orderByDesc('created_at')->get();
+        // Desempate por 'id': dois métodos criados no mesmo segundo (comum em
+        // testes, mas também possível em produção) não têm ordem garantida só
+        // por 'created_at' -- mesmo padrão já usado em AuditController.
+        $methods = $user->paymentMethods()->orderByDesc('created_at')->orderByDesc('id')->get();
 
         return ApiSuccessResponse::make([
             'items' => $methods->map($this->presentPaymentMethod(...))->all(),
