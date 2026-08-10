@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\AllowedZoneController;
 use App\Http\Controllers\Api\Admin\AuditController;
+use App\Http\Controllers\Api\Admin\CoverageController;
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\DocumentController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
@@ -94,6 +95,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/allowed-zones', [AllowedZoneController::class, 'index']);
     Route::post('/allowed-zones', [AllowedZoneController::class, 'store']);
     Route::put('/allowed-zones/{allowedZone}', [AllowedZoneController::class, 'update']);
+
+    // Cobertura por técnico — junta zonas abertas (vendor_allowed_zones) e
+    // cidades candidatas (vendor_city_votes/survey_cities), sem equivalente
+    // direto no Filament (lá só existia cidade a cidade, ver notas no
+    // controller). Pedido explícito do utilizador, 2026-08-10.
+    Route::get('/coverage', [CoverageController::class, 'index']);
 
     // Documentos — equivalente ao Filament DocumentResource. Lista + criar/
     // editar, sem apagar (mesma decisão de Catálogo/Categorias/Zonas).
