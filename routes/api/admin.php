@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\SentNotificationController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
+use App\Http\Controllers\Api\Admin\SmsCodeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
@@ -109,4 +110,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // Só leitura: histórico do que já foi mesmo enviado (tabela `notifications`).
     Route::get('/sent-notifications', [SentNotificationController::class, 'index']);
     Route::get('/sent-notifications/types', [SentNotificationController::class, 'types']);
+
+    // Códigos SMS — equivalente ao Filament SmsCodeResource. Só leitura,
+    // usado pelo suporte para confirmar o código enviado a um número
+    // (sem a restrição de super-admin do Filament, ver nota no controller).
+    Route::get('/sms-codes', [SmsCodeController::class, 'index']);
 });
