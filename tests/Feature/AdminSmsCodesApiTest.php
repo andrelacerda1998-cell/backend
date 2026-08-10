@@ -7,6 +7,7 @@ use App\Models\Auth\PhoneNumberValidationCode;
 use App\Models\GeneralSettings\Gender;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -16,21 +17,21 @@ use Tests\TestCase;
  * 'phone_number_validation_codes' pela mesma razão (FK para 'users' --
  * mesma classe de problema já visto em AdminSentNotificationsApiTest/
  * AdminCustomerPaymentMethodsApiTest, uma linha órfã bloqueava operações
- * num id reciclado). 'payshop_payment_methods'/'payshop_payments_orders'
- * também têm FK para 'users' e um teste aqui faz forceDelete() a um User --
- * incluídas por precaução, mesma lição de AdminSentNotificationsApiTest.
+ * num id reciclado).
+ *
+ * Nota: ao contrário de 'notifications' (relação polimórfica, sem FK real),
+ * 'phone_number_validation_codes.user_id' tem FK RESTRICT para 'users' --
+ * não é possível forceDelete() um User com códigos associados (a query
+ * falha com erro de integridade referencial). Por isso o teste de
+ * resiliência aqui não simula um "utilizador apagado" (impossível dado o
+ * schema), mas sim um valor de 'type' que já não bate com a enum SmsType
+ * (dados legados/corrompidos) -- ver nota em SmsCodeController::presentSafely().
  */
 class AdminSmsCodesApiTest extends TestCase
 {
     use DatabaseTruncation;
 
-    protected array $tablesToTruncate = [
-        'phone_number_validation_codes',
-        'users',
-        'wallets',
-        'payshop_payment_methods',
-        'payshop_payments_orders',
-    ];
+    protected array $tablesToTruncate = ['phone_number_validation_codes', 'users', 'wallets'];
 
     protected function setUp(): void
     {
@@ -140,22 +141,26 @@ class AdminSmsCodesApiTest extends TestCase
             ->assertJsonPath('data.items.0.code', '555555');
     }
 
-    public function test_it_is_resilient_to_a_deleted_user(): void
+    public function test_it_is_resilient_to_a_row_with_an_unexpected_type_value(): void
     {
-        $user = User::factory()->create();
-        $code = PhoneNumberValidationCode::create([
-            'user_id' => $user->id,
+        // Insert via query builder (não via Eloquent) para contornar o cast
+        // de 'type' para a enum SmsType -- simula dados legados/corrompidos
+        // que já não batem com nenhum case da enum atual.
+        $id = DB::table('phone_number_validation_codes')->insertGetId([
             'phone_number' => '+351910000000',
-            'code' => '777777',
-            'type' => SmsType::VERIFICATION,
+            'code' => '888888',
+            'type' => 'ja-nao-existe',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
-        $user->forceDelete();
 
         $this->withAuth()
             ->getJson('/api/v1/admin/sms-codes')
             ->assertOk()
-            ->assertJsonPath('data.items.0.id', $code->id)
-            ->assertJsonPath('data.items.0.code', '777777')
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.id', $id)
+            ->assertJsonPath('data.items.0.code', '888888')
+            ->assertJsonPath('data.items.0.type', 'ja-nao-existe')
             ->assertJsonPath('data.items.0.user', null);
     }
 

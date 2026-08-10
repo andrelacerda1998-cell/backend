@@ -60,7 +60,15 @@ class SmsCodeController extends Controller
         ]);
     }
 
-    /** Isola falhas de uma linha (utilizador apagado, tipo com valor inesperado) do resto do feed. */
+    /**
+     * Isola falhas de uma linha (tipo com valor que já não bate com a enum
+     * SmsType -- dados legados/corrompidos) do resto do feed.
+     *
+     * Importante: no fallback usamos getRawOriginal('type') em vez de
+     * $code->type -- aceder ao atributo cast dispara SmsType::from() outra
+     * vez, e um valor inválido volta a rebentar (agora sem apanhar),
+     * derrubando o pedido inteiro em vez de isolar só esta linha.
+     */
     private function presentSafely(PhoneNumberValidationCode $code): array
     {
         try {
@@ -71,8 +79,8 @@ class SmsCodeController extends Controller
             return [
                 'id' => $code->id,
                 'phone_number' => $code->phone_number,
-                'code' => $code->code,
-                'type' => is_object($code->type) ? $code->type->value : (string) $code->type,
+                'code' => $code->getRawOriginal('code'),
+                'type' => $code->getRawOriginal('type'),
                 'user' => null,
                 'created_at' => $code->created_at?->toIso8601String(),
             ];
