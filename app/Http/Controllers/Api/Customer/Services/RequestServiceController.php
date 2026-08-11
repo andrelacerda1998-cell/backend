@@ -93,6 +93,10 @@ class RequestServiceController extends Controller
                         return null;
                     }
 
+                    $vendorRatings = $vendor->averageRating()
+                        ->where('operation_area_id', $serviceType->operation_area_id)
+                        ->first();
+
                     $distance = $this->calculateVendorDistance($vendor, $guestAddress);
                     $price = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
                     $original_price = $rateService->calculateForCustomerForOldPrice($hourlyRate, $timeService, $distance);
@@ -103,7 +107,11 @@ class RequestServiceController extends Controller
                         'rate' => $price,
                         'original_price' => $original_price,
                         'distance' => $distance,
-                        'rating' => $vendor->averageRating()->where('operation_area_id', $serviceType->operation_area_id)->first()->average_rating ?? 5,
+                        // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
+                        // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
+                        // cliente com nota maxima, indistinguivel de quem a merecera.
+                        'rating' => $vendorRatings?->average_rating,
+                        'ratings_count' => $vendorRatings?->total_ratings ?? 0,
                         'avatar' => $vendor->user->avatar,
                     ];
                 })->filter()->values()->take(3);
@@ -119,6 +127,10 @@ class RequestServiceController extends Controller
                         return null;
                     }
 
+                    $vendorRatings = $vendor->averageRating()
+                        ->where('operation_area_id', $serviceType->operation_area_id)
+                        ->first();
+
                     $distance = $this->calculateVendorDistanceInstantService($vendor, $guestAddress);
                     $price = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
 
@@ -127,7 +139,11 @@ class RequestServiceController extends Controller
                         'name' => $vendor->user->name,
                         'rate' => $price,
                         'distance' => $distance,
-                        'rating' => $vendor->averageRating()->where('operation_area_id', $serviceType->operation_area_id)->first()->average_rating ?? 5,
+                        // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
+                        // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
+                        // cliente com nota maxima, indistinguivel de quem a merecera.
+                        'rating' => $vendorRatings?->average_rating,
+                        'ratings_count' => $vendorRatings?->total_ratings ?? 0,
                         'avatar' => $vendor->user->avatar,
                     ];
                 })->filter()->values()->take(3);
@@ -152,6 +168,10 @@ class RequestServiceController extends Controller
             if ($vendor->currentLocation == null) {
                 return null;
             }
+            $vendorRatings = $vendor->averageRating()
+                ->where('operation_area_id', $serviceType->operation_area_id)
+                ->first();
+
             $distance = $this->calculateVendorDistanceInstantService($vendor, $userAddress);
 
             $price = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
@@ -163,7 +183,11 @@ class RequestServiceController extends Controller
                 'rate' => $price,
                 // 'hourly_rate' => $hourlyRate,
                 'distance' => $distance,
-                'rating' => $vendor->averageRating()->where('operation_area_id', $serviceType->operation_area_id)->first()->average_rating ?? 5,
+                // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
+                        // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
+                        // cliente com nota maxima, indistinguivel de quem a merecera.
+                        'rating' => $vendorRatings?->average_rating,
+                        'ratings_count' => $vendorRatings?->total_ratings ?? 0,
                 'avatar' => $vendorUser->avatar,
             ];
         })->values()->take(3);
