@@ -25,6 +25,8 @@ readonly class ServiceRequestedData
         public ?array $address_details,
         /** Observações escritas pelo cliente ao abrir o pedido. Campo NOVO. */
         public ?string $customer_notes,
+        /** URL assinados e temporarios (60 min) das fotos que o cliente juntou ao pedido. */
+        public array $customer_photos,
         public array $service_area,
         public array $service_type,
         public ?array $schedule,
@@ -58,6 +60,7 @@ readonly class ServiceRequestedData
                 : null],
             address_details: $service->formatVendorAddress(),
             customer_notes: $service->customer_notes,
+            customer_photos: $service->customerPhotosPayload(),
             service_area: $service->serviceType->operationArea->only(['name']),
             service_type: $service->serviceType->only(['id', 'time', 'name']),
             schedule: $service->schedule?->only('scheduled_day', 'scheduled_time_start', 'scheduled_time_end'),
