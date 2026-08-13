@@ -75,6 +75,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/vendors/by-location', [VendorController::class, 'byLocation']);
     Route::get('/vendors/top', [VendorController::class, 'top']);
     Route::get('/vendors/coverage', [VendorController::class, 'coverage']);
+    // Mapa ao vivo -- técnicos Online com localização recente (só leitura,
+    // informativo; não interfere no matching/fluxo de pedidos).
+    Route::get('/vendors/live-locations', [VendorController::class, 'liveLocations']);
 
     // Catálogo (tipos de serviço) + Categorias — equivalentes ao Filament
     // ServicesTypeResource/OperationAreaResource. Só Lista + criar/editar

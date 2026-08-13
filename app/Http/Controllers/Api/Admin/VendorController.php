@@ -191,6 +191,45 @@ class VendorController extends Controller
     }
 
     /**
+     * Mapa ao vivo -- só informativo, sem qualquer efeito no fluxo de
+     * pedidos/matching (esse continua inteiramente na app). Mostra só
+     * técnicos com status=Online E localização atualizada recentemente: a
+     * app-vendor só envia GPS (PUT /vendor/location/update, a cada ~7.5s)
+     * enquanto o técnico está "Online" ou com um serviço aceite (ver
+     * LocationContext.tsx / home/index.tsx da app-vendor) -- por isso
+     * "Online" sem localização recente é sinal de app em segundo plano/sem
+     * rede, não presença real, e fica de fora para não mostrar um pin preso
+     * num sítio antigo.
+     */
+    public function liveLocations(): ApiSuccessResponse
+    {
+        $vendors = $this->baseQuery()
+            ->where('status', StatusVendor::ONLINE)
+            ->whereHas('currentLocation', fn ($q) => $q->where('updated_at', '>=', now()->subMinutes(10)))
+            ->with(['user', 'currentLocation', 'servicesTypes'])
+            ->get();
+
+        return ApiSuccessResponse::make(
+            $vendors->map($this->presentLiveLocation(...))->all()
+        );
+    }
+
+    private function presentLiveLocation(Vendor $vendor): array
+    {
+        $user = $vendor->user;
+        $location = $vendor->currentLocation;
+
+        return [
+            'id' => $vendor->id,
+            'name' => $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: null) : null,
+            'latitude' => $location ? (float) $location->latitude : null,
+            'longitude' => $location ? (float) $location->longitude : null,
+            'updated_at' => $location?->updated_at?->toIso8601String(),
+            'categories' => $vendor->servicesTypes->pluck('name')->all(),
+        ];
+    }
+
+    /**
      * IDs dos vendors elegíveis (Vendor::canAcceptService) dentro do âmbito
      * normal (sem is_test). Mesma abordagem híbrida do VendorStats do
      * Filament: pré-filtrar em SQL as condições baratas para reduzir o
