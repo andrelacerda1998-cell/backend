@@ -200,10 +200,19 @@ class VendorController extends Controller
      * "Online" sem localização recente é sinal de app em segundo plano/sem
      * rede, não presença real, e fica de fora para não mostrar um pin preso
      * num sítio antigo.
+     *
+     * `include_test=1` inclui vendors de utilizadores marcados como teste
+     * (excluídos por omissão, como em toda a `baseQuery()`) -- só para dar
+     * ao staff uma forma de validar o mapa sem depender de um técnico real
+     * estar online; o valor por omissão continua a mostrar só dados reais.
      */
-    public function liveLocations(): ApiSuccessResponse
+    public function liveLocations(Request $request): ApiSuccessResponse
     {
-        $vendors = $this->baseQuery()
+        $includeTest = $request->boolean('include_test');
+
+        $query = $includeTest ? Vendor::query() : $this->baseQuery();
+
+        $vendors = $query
             ->where('status', StatusVendor::ONLINE)
             ->whereHas('currentLocation', fn ($q) => $q->where('updated_at', '>=', now()->subMinutes(10)))
             ->with(['user', 'currentLocation', 'servicesTypes'])
@@ -222,6 +231,7 @@ class VendorController extends Controller
         return [
             'id' => $vendor->id,
             'name' => $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: null) : null,
+            'is_test' => (bool) ($user->is_test ?? false),
             'latitude' => $location ? (float) $location->latitude : null,
             'longitude' => $location ? (float) $location->longitude : null,
             'updated_at' => $location?->updated_at?->toIso8601String(),
