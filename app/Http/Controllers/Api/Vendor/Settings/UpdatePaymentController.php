@@ -12,9 +12,17 @@ class UpdatePaymentController extends Controller
     {
         $iban = $request->get('iban');
         $rate = $request->get('price_rate');
-        $companyName = $request->get('company_name');
 
         $vendor = auth()->user()->vendor;
+
+        // O nome fiscal e exigido pelo InvoiceXpress (a conta e criada com o
+        // organization_name antes de a AT entrar em jogo). Quando a app nao o
+        // envia — no registo deixou de o pedir — preenchemo-lo: mantemos o que
+        // ja houver, senao usamos o nome do registo do tecnico (certo para
+        // recibos verdes). Quem fatura por empresa edita-o em Definicoes.
+        $companyName = $request->filled('company_name')
+            ? $request->get('company_name')
+            : ($vendor->company_name ?: trim((string) $vendor->user->name));
         $vendor->update([
             'iban'=> $iban,
             'price_rate' => $rate,

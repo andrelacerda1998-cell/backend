@@ -14,7 +14,11 @@ class UpdatePaymentRequest extends FormRequest
         return [
             'iban' => ['required', new ValidIban()],
             'price_rate' => 'required|nullable',
-            'company_name' => 'required|string|max:255',
+            // Deixa de ser obrigatorio: no registo, a app ja nao pede o nome
+            // fiscal (para recibos verdes e o nome do tecnico). Quando nao vem,
+            // o controller preenche-o com o nome do registo. O ecra de edicao no
+            // perfil continua a envia-lo para quem fatura por empresa.
+            'company_name' => 'nullable|string|max:255',
             // 'nif' => ['string', new NifRule],
         ];
     }
