@@ -57,7 +57,38 @@ class AdminVendorLiveLocationsApiTest extends TestCase
             ->assertJsonPath('data.0.id', $vendor->id)
             ->assertJsonPath('data.0.name', 'Carlos Mendes')
             ->assertJsonPath('data.0.latitude', 38.7223)
-            ->assertJsonPath('data.0.longitude', -9.1393);
+            ->assertJsonPath('data.0.longitude', -9.1393)
+            ->assertJsonPath('data.0.is_test', false);
+    }
+
+    public function test_exclui_conta_de_teste_por_omissao(): void
+    {
+        $vendor = $this->makeVendor(userAttrs: ['is_test' => true], vendorAttrs: ['status' => StatusVendor::ONLINE]);
+        $vendor->currentLocation()->create([
+            'latitude' => 38.7223,
+            'longitude' => -9.1393,
+            'device_id' => 'device-1',
+        ]);
+
+        $this->withAuth()->getJson('/api/v1/admin/vendors/live-locations')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_include_test_mostra_conta_de_teste(): void
+    {
+        $vendor = $this->makeVendor(userAttrs: ['is_test' => true], vendorAttrs: ['status' => StatusVendor::ONLINE]);
+        $vendor->currentLocation()->create([
+            'latitude' => 38.7223,
+            'longitude' => -9.1393,
+            'device_id' => 'device-1',
+        ]);
+
+        $this->withAuth()->getJson('/api/v1/admin/vendors/live-locations?include_test=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $vendor->id)
+            ->assertJsonPath('data.0.is_test', true);
     }
 
     public function test_nao_devolve_tecnico_offline(): void
