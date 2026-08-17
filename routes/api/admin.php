@@ -78,6 +78,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // Mapa ao vivo -- técnicos Online com localização recente (só leitura,
     // informativo; não interfere no matching/fluxo de pedidos).
     Route::get('/vendors/live-locations', [VendorController::class, 'liveLocations']);
+    // Cria um técnico de teste (is_test=true) já elegível para ficar Online
+    // de imediato -- ver nota extensa em VendorController::createTestAccount().
+    Route::post('/vendors/test-account', [VendorController::class, 'createTestAccount']);
 
     // Catálogo (tipos de serviço) + Categorias — equivalentes ao Filament
     // ServicesTypeResource/OperationAreaResource. Só Lista + criar/editar

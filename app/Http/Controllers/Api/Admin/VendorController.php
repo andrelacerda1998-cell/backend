@@ -9,11 +9,15 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\AllowedZone;
+use App\Models\GeneralSettings\Document;
 use App\Models\Service;
+use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Vendor\VendorDocuments;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 /**
  * Técnicos/Vendors — migrado do Filament (App\Filament\Resources\VendorResource).
@@ -112,6 +116,95 @@ class VendorController extends Controller
         $vendor->restore();
 
         return ApiSuccessResponse::make($this->present($vendor->fresh()));
+    }
+
+    /**
+     * Cria um técnico de teste (is_test=true) já pronto a ficar "Online" na
+     * app-vendor de imediato -- ver App\Http\Controllers\Api\Vendor\Status\
+     * StatusController: ficar Online exige email+telefone verificados,
+     * IBAN, invoice_workspace, at_valid+at_user com "/", e TODOS os
+     * documentos obrigatórios aprovados (Vendor::allDocumentsVerified()).
+     * Sem isto, uma conta "de teste" só serviria para aparecer numa lista,
+     * nunca para o pedido real do rpacheco (testar o mapa ao vivo a sério).
+     *
+     * Login é por email+password (a app-vendor NÃO usa SMS OTP -- isso é só
+     * para clientes, ver App\Http\Controllers\Api\Auth\PhoneLoginVerifyController).
+     * A password é gerada aqui e devolvida uma única vez; não fica
+     * recuperável depois (só hash na BD).
+     *
+     * `is_test` está fora do $fillable de propósito (fecha o bypass público
+     * -- ver VendorResource.php) -- por isso é atribuído diretamente, não
+     * via create()/fill().
+     *
+     * invoice_workspace/invoice_account_id/auth_token usam os mesmos
+     * valores fixos do sandbox InvoiceXpress que o comando artisan
+     * `create:vendor-user` já usa para contas de teste manuais.
+     */
+    public function createTestAccount(Request $request): ApiSuccessResponse|ApiErrorResponse
+    {
+        $firstName = trim((string) $request->string('first_name'));
+        $lastName = trim((string) $request->string('last_name'));
+        $phone = trim((string) $request->string('phone_number'));
+        $email = trim((string) $request->string('email'));
+
+        if ($firstName === '' || $lastName === '' || $phone === '') {
+            return new ApiErrorResponse(null, 'Nome e telefone são obrigatórios.', 422);
+        }
+
+        if (User::where('phone_number', $phone)->exists()) {
+            return new ApiErrorResponse(null, 'Já existe uma conta com este número de telefone.', 409);
+        }
+
+        if ($email !== '' && User::where('email', $email)->exists()) {
+            return new ApiErrorResponse(null, 'Já existe uma conta com este email.', 409);
+        }
+
+        $password = Str::password(12);
+
+        $vendor = DB::transaction(function () use ($firstName, $lastName, $phone, $email, $password) {
+            $user = new User([
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'email' => $email !== '' ? $email : 'teste.'.Str::random(8).'@piquet.pt',
+                'phone_number' => $phone,
+            ]);
+            $user->password = Hash::make($password);
+            $user->phone_number_verified_at = now();
+            $user->email_verified_at = now();
+            $user->is_test = true;
+            $user->save();
+
+            $vendor = $user->vendor()->create([
+                'username' => 'teste_'.Str::slug("$firstName $lastName").'_'.$user->id,
+                'iban' => 'PT50000201231234567890154',
+                'invoice_workspace' => 'rwinteractive',
+                'invoice_account_id' => 152518,
+                'auth_token' => 'a22c3d79790ba5a70ae41f59a9968b669ad12d06',
+                // at_valid vem default(true) da migration; só falta o "/" no at_user.
+                'at_user' => '999999999/1',
+            ]);
+
+            // Aprova já todos os documentos obrigatórios -- sem isto,
+            // allDocumentsVerified() fica false e o vendor nunca consegue
+            // ficar Online (ver StatusController).
+            foreach (Document::where('required', true)->get() as $doc) {
+                VendorDocuments::create([
+                    'vendor_id' => $vendor->id,
+                    'document_id' => $doc->id,
+                    'status' => 'approved',
+                ]);
+            }
+
+            return $vendor;
+        });
+
+        return ApiSuccessResponse::make([
+            'id' => $vendor->id,
+            'name' => "$firstName $lastName",
+            'email' => $vendor->user->email,
+            'password' => $password,
+            'phone_number' => $phone,
+        ]);
     }
 
     /**
