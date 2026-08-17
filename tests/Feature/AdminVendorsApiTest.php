@@ -104,6 +104,18 @@ class AdminVendorsApiTest extends TestCase
             ->assertJsonPath('data.items.0.id', $target->id);
     }
 
+    public function test_it_searches_vendors_by_email(): void
+    {
+        $target = $this->makeVendor(['first_name' => 'Ana', 'last_name' => 'Silva', 'email' => 'ana.silva@piquet.pt']);
+        $this->makeVendor(['first_name' => 'Bruno', 'last_name' => 'Costa', 'email' => 'bruno.costa@piquet.pt']);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors?search=ana.silva')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.id', $target->id);
+    }
+
     public function test_it_presents_price_rate_in_euros_and_status(): void
     {
         // Vendor::priceRate() tem um `set` que espera uma STRING EM EUROS e
