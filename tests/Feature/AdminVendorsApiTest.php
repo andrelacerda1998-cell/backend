@@ -6,10 +6,12 @@ use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
 use App\Models\GeneralSettings\AllowedZone;
+use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\OperationArea;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Models\Vendor\VendorDocuments;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +46,8 @@ class AdminVendorsApiTest extends TestCase
         'users', 'vendors', 'wallets', 'schedule_available',
         'services', 'operation_areas', 'operation_area_vendors',
         'allowed_zone', 'vendor_allowed_zones',
+        // Testes de createTestAccount() -- documentos obrigatórios.
+        'documents', 'vendor_documents',
     ];
 
     protected function setUp(): void
@@ -339,5 +343,78 @@ class AdminVendorsApiTest extends TestCase
         // json_encode(2.0) sai "2" (sem parte decimal) -- comparar com o int,
         // não o float, mesma nota já documentada em AdminVendorPaymentsApiTest.
         $this->assertSame(2, $data['Lisboa']['ratio']);
+    }
+
+    public function test_creates_a_test_account_ready_to_go_online(): void
+    {
+        Document::create(['name' => 'Cartão de Cidadão', 'required' => true]);
+        Document::create(['name' => 'Registo Criminal', 'required' => true]);
+
+        $res = $this->withAuth()->postJson('/api/v1/admin/vendors/test-account', [
+            'first_name' => 'Rui',
+            'last_name' => 'Teste',
+            'phone_number' => '+351910000001',
+            'email' => 'rui.teste@piquet.pt',
+        ])->assertOk();
+
+        $vendorId = $res->json('data.id');
+        $res->assertJsonPath('data.name', 'Rui Teste')
+            ->assertJsonPath('data.email', 'rui.teste@piquet.pt')
+            ->assertJsonPath('data.phone_number', '+351910000001')
+            ->assertJsonPath('data.password', fn ($v) => is_string($v) && strlen($v) >= 12);
+
+        $vendor = Vendor::with('user')->find($vendorId);
+        $this->assertTrue($vendor->user->is_test);
+        $this->assertNotNull($vendor->user->email_verified_at);
+        $this->assertNotNull($vendor->user->phone_number_verified_at);
+        $this->assertNotNull($vendor->invoice_workspace);
+        $this->assertStringContainsString('/', $vendor->at_user);
+        $this->assertTrue($vendor->at_valid);
+        // As duas condições que, juntas, deixam o vendor pronto para ficar
+        // Online de imediato (ver StatusController + Vendor::canAcceptService()).
+        $this->assertTrue($vendor->all_documents_verified);
+        $this->assertTrue($vendor->can_accept_service);
+        $this->assertSame(2, VendorDocuments::where('vendor_id', $vendorId)->where('status', 'approved')->count());
+    }
+
+    public function test_creates_a_test_account_without_email(): void
+    {
+        $res = $this->withAuth()->postJson('/api/v1/admin/vendors/test-account', [
+            'first_name' => 'Rui',
+            'last_name' => 'Teste',
+            'phone_number' => '+351910000002',
+        ])->assertOk();
+
+        $this->assertStringEndsWith('@piquet.pt', $res->json('data.email'));
+    }
+
+    public function test_rejects_test_account_with_duplicate_phone(): void
+    {
+        $this->makeVendor(['phone_number' => '+351910000003']);
+
+        $this->withAuth()->postJson('/api/v1/admin/vendors/test-account', [
+            'first_name' => 'Rui',
+            'last_name' => 'Teste',
+            'phone_number' => '+351910000003',
+        ])->assertStatus(409);
+    }
+
+    public function test_rejects_test_account_with_duplicate_email(): void
+    {
+        $this->makeVendor(['email' => 'existente@piquet.pt']);
+
+        $this->withAuth()->postJson('/api/v1/admin/vendors/test-account', [
+            'first_name' => 'Rui',
+            'last_name' => 'Teste',
+            'phone_number' => '+351910000004',
+            'email' => 'existente@piquet.pt',
+        ])->assertStatus(409);
+    }
+
+    public function test_rejects_test_account_missing_required_fields(): void
+    {
+        $this->withAuth()->postJson('/api/v1/admin/vendors/test-account', [
+            'first_name' => 'Rui',
+        ])->assertStatus(422);
     }
 }
