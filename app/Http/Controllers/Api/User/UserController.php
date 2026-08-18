@@ -8,6 +8,7 @@ use App\Http\Requests\Api\Customer\UpdateUserRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
+use App\Services\Vendor\ZoneDemand;
 use App\Models\Auth\Authentications;
 use Illuminate\Http\Response;
 use Tymon\JWTAuth\Exceptions\JWTException;
@@ -62,6 +63,13 @@ class UserController extends Controller
                     ?? $vendor->addresses->first()?->name
                     ?? null,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
+                // Procura recente na zona escolhida. Só faz sentido para quem
+                // ainda NÃO pode aceitar serviços: para esses é o argumento
+                // concreto para acabar o perfil ("há trabalho à tua espera").
+                // Para os aprovados seria ruído — esses já recebem os pedidos.
+                'zone_recent_requests' => $vendor->can_accept_service
+                    ? null
+                    : app(ZoneDemand::class)->recentRequestCount($vendor),
             ]);
         }
 

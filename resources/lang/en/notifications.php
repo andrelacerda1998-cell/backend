@@ -66,6 +66,18 @@ return [
         'description' => 'The Customer has sent you a new message about the service: ',
         'description_vendor' => 'The Vendor has sent you a new message about the service: ',
     ],
+    'incompleteProfile' => [
+        'greeting' => 'Hi :name,',
+        'action' => 'Complete my profile',
+        'default' => [
+            'title' => ':steps steps to go',
+            'description' => 'Complete your profile to start receiving requests in your area.',
+        ],
+        'with_requests' => [
+            'title' => 'There are requests waiting for you',
+            'description' => 'There were :requests requests in your area this week. You are :steps steps away from being able to accept them.',
+        ],
+    ],
     'newService' => [
         'title' => 'New service: ',
         'description' => 'You have 60 seconds',

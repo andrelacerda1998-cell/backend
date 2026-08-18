@@ -23,4 +23,9 @@ Schedule::command('services:expire-pending-3ds')->everyFiveMinutes()->withoutOve
 // tabela vendor_document_expiry_notifications, por isso é seguro correr manualmente também.
 Schedule::command('documents:notify-expiring')->dailyAt('09:00')->withoutOverlapping();
 
+// Re-engagement da 2.a fase do registo (D+1 e D+3). As 10h: cedo o suficiente
+// para o tecnico tratar disto durante o dia, tarde o suficiente para nao o
+// acordar. O comando e idempotente, por isso um re-run manual e seguro.
+Schedule::command('vendors:remind-incomplete-profile')->dailyAt('10:00')->withoutOverlapping();
+
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
