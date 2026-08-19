@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Serviços',
     'singular' => 'Serviço',
@@ -42,7 +43,7 @@ return [
     'status' => [
         'Pending' => 'Pendente',
         'Closed' => 'Fechado',
-        'Canceled' => 'Cancelado'
+        'Canceled' => 'Cancelado',
     ],
     'infolist' => [
         'details' => 'Detalhes',
@@ -74,6 +75,10 @@ return [
         'invoice_not_created' => 'Fatura não criada',
         'invoice_url' => 'URL da fatura',
         'customer_notes' => 'Notas do cliente',
+        'customer_request' => 'Pedido do cliente',
+        'quantity' => 'Unidades',
+        'customer_photos' => 'Fotografias do cliente',
+        'customer_notes_empty' => 'O cliente não deixou notas.',
         'vendor_notes' => 'Notas do profissional',
         'commission_with_vat' => 'Comissão C/IVA',
         'commission_without_vat' => 'Comissão S/IVA',

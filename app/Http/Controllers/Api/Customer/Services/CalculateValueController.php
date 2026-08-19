@@ -7,9 +7,11 @@ use App\Http\Requests\Api\Customer\Services\CalculateValueRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\ServicesType;
+use App\Models\Vendor;
 use App\Models\Voucher;
 use App\Trait\Services\CalculateServicePriceForCustomer;
 use Exception;
+use Illuminate\Http\Request;
 
 class CalculateValueController extends Controller
 {
@@ -31,7 +33,7 @@ class CalculateValueController extends Controller
                 $voucher = Voucher::find($request->get('voucher_id'));
             }
 
-            $transaction = $this->calculateTransaction($vendor, $serviceType, $isScheduled, $voucher, $isGuest, $address);
+            $transaction = $this->calculateTransaction($vendor, $serviceType, $isScheduled, $voucher, $isGuest, $address, (int) $request->get('quantity', 1));
 
             return new ApiSuccessResponse($transaction);
 
@@ -43,7 +45,7 @@ class CalculateValueController extends Controller
 
     }
 
-    public function guestCalculate(\Illuminate\Http\Request $request)
+    public function guestCalculate(Request $request)
     {
         try {
             $serviceTypeId = $request->get('service_type_id');
@@ -52,7 +54,7 @@ class CalculateValueController extends Controller
             $longitude = (float) $request->get('longitude');
 
             $serviceType = ServicesType::find($serviceTypeId);
-            $vendor = \App\Models\Vendor::find($vendorId);
+            $vendor = Vendor::find($vendorId);
 
             if (! $serviceType || ! $vendor) {
                 return new ApiSuccessResponse([
@@ -73,7 +75,7 @@ class CalculateValueController extends Controller
                 ]);
             }
 
-            $result = $this->calculateGuestPrice($vendor, $serviceType, $latitude, $longitude);
+            $result = $this->calculateGuestPrice($vendor, $serviceType, $latitude, $longitude, (int) $request->get('quantity', 1));
 
             return new ApiSuccessResponse($result);
         } catch (Exception $exception) {

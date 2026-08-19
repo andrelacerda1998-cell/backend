@@ -11,6 +11,7 @@ use App\Services\Common\Services\CloseService;
 use Exception;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\Section;
+use Filament\Infolists\Components\SpatieMediaLibraryImageEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
@@ -286,6 +287,40 @@ class ServicesResource extends Resource
                         ->default('-')
                         ->hidden(fn (Service $record): bool => ! $record->schedule),
                 ]),
+            /*
+             * O que o cliente enviou com o pedido: descrição do problema e
+             * fotografias.
+             *
+             * Secção própria, e logo a seguir aos detalhes, porque é informação
+             * de OPERAÇÃO: quem atende uma reclamação ou despacha um serviço
+             * precisa de ver o que foi pedido antes de tudo o resto. As notas
+             * estavam arrumadas dentro de "Avaliações" — que é sobre o que se
+             * achou do serviço depois de feito, e não sobre o que foi pedido
+             * antes. Estavam no sítio onde ninguém as ia procurar.
+             */
+            Section::make('CustomerRequest')
+                ->heading(__('backoffice/service.infolist.customer_request'))
+                ->schema([
+                    // Unidades: "2 × Reparação de torneira". Só aparece quando é
+                    // mais do que uma — escrever "1 unidade" em todos os outros
+                    // pedidos seria ruído em 95% dos casos.
+                    TextEntry::make('quantity')
+                        ->label(__('backoffice/service.infolist.quantity'))
+                        ->formatStateUsing(fn ($state, Service $record): string => $state.' × '.($record->serviceType?->name ?? ''))
+                        ->hidden(fn (Service $record): bool => (int) ($record->quantity ?? 1) <= 1),
+                    TextEntry::make('customer_notes')
+                        ->label(__('backoffice/service.infolist.customer_notes'))
+                        ->placeholder(__('backoffice/service.infolist.customer_notes_empty'))
+                        ->columnSpanFull(),
+                    SpatieMediaLibraryImageEntry::make('customer_photos')
+                        ->collection('customer')
+                        ->label(__('backoffice/service.infolist.customer_photos'))
+                        ->height(120)
+                        ->columnSpanFull()
+                        // Sem fotos a entrada some-se: uma grelha vazia num
+                        // pedido sem fotografias só faria pensar que falharam.
+                        ->hidden(fn (Service $record): bool => $record->getMedia('customer')->isEmpty()),
+                ]),
             Section::make('Addresses')
                 ->heading(__('backoffice/service.infolist.addresses'))
                 ->columns(2)
@@ -382,8 +417,10 @@ class ServicesResource extends Resource
                         ->label(__('backoffice/service.infolist.rating_by_customer')),
                     RatingEntry::make('rating_by_vendor')
                         ->label(__('backoffice/service.infolist.rating_by_vendor')),
-                    TextEntry::make('customer_notes')
-                        ->label(__('backoffice/service.infolist.customer_notes')),
+                    // customer_notes saiu daqui para a secção "Pedido do
+                    // cliente": é o que foi pedido antes, não o que se achou
+                    // depois. O vendor_notes fica, que é do técnico sobre a
+                    // execução.
                     TextEntry::make('vendor_notes')
                         ->label(__('backoffice/service.infolist.vendor_notes')),
                 ]),

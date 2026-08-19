@@ -80,6 +80,7 @@ class OpenServiceController extends Controller
 
             $service = $response['service'];
             $validationUrl = $response['validationUrl'];
+            $this->attachCustomerPhotos($request, $service);
 
             if ($validationUrl) {
                 $this->storePendingScheduleData($request, $service);
@@ -129,6 +130,7 @@ class OpenServiceController extends Controller
 
             $service = $response['service'];
             $validationUrl = $response['validationUrl'];
+            $this->attachCustomerPhotos($request, $service);
 
             if ($service->payment_status === PaymentStatus::PAID) {
                 // Fully covered by wallet credit or a test account — no MBWay push is pending,
@@ -213,7 +215,10 @@ class OpenServiceController extends Controller
 
         // $originalAmount = $this->calculateServicePrice($service->serviceType, $service->address, $vendor, $schedule);
 
-        $total = $this->calculateTransaction($vendor, $serviceType, $schedule, $voucher);
+        // A quantidade vem do serviço já construído (createService), e não do
+        // request: é o valor que fica gravado e o que o cliente vai pagar tem
+        // de ser calculado sobre exatamente esse.
+        $total = $this->calculateTransaction($vendor, $serviceType, $schedule, $voucher, false, null, (int) ($service->quantity ?? 1));
 
         $service->amount = $total['amount'];
         $service->amount_for_vendor = $total['amount_for_vendor'];
@@ -370,6 +375,7 @@ class OpenServiceController extends Controller
             'customer_id' => $customer->id,
             'vendor_id' => $request->get('vendor_id'),
             'services_type_id' => $request->get('service_type'),
+            'quantity' => max(1, (int) $request->get('quantity', 1)),
             'status' => ServiceStatus::PENDING,
             'is_test' => $customer->is_test ?? false,
             'address' => [
@@ -386,7 +392,46 @@ class OpenServiceController extends Controller
             ],
             'price_rate' => $vendor->getRawOriginal('price_rate'),
             'distance' => $vendor->calculateDistance($address),
+            // O campo estava a ser enviado pela app e lido em todo o lado
+            // (histórico, detalhe do técnico, backoffice) mas nunca era
+            // ESCRITO: nascia sempre nulo. Quem escrevia "campainha do 2.º
+            // direito" no checkout estava a falar para o vazio.
+            'customer_notes' => $request->get('customer_notes'),
         ]);
+    }
+
+    /**
+     * Passa as fotos do cliente da espera (utilizador) para o serviço criado.
+     *
+     * Reconfirma dono e coleção em vez de confiar nos ids recebidos: sem isso,
+     * bastava adivinhar um id para colar a foto de outra pessoa a um serviço.
+     * Falhar aqui não pode derrubar um pagamento já aceite — uma foto que não
+     * viaja é um contratempo, perder a cobrança é outra coisa —, por isso o
+     * erro é registado e o pedido segue.
+     */
+    private function attachCustomerPhotos($request, Service $service): void
+    {
+        $ids = array_filter((array) $request->get('photo_ids', []));
+        if (empty($ids)) {
+            return;
+        }
+
+        try {
+            $customer = $service->customer ?? auth('api')->user();
+            if (! $customer) {
+                return;
+            }
+
+            $customer->getMedia(CustomerServicePhotosController::PENDING_COLLECTION)
+                ->whereIn('id', $ids)
+                ->take(CustomerServicePhotosController::MAX_PHOTOS)
+                ->each(fn ($media) => $media->move($service, 'customer'));
+        } catch (Exception $exception) {
+            \Log::warning('Falha a anexar fotos do cliente ao serviço', [
+                'service_id' => $service->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function createScheduleIfRequested(OpenServiceRequest $request, Vendor $vendor, Service $service): void
