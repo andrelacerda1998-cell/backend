@@ -252,6 +252,20 @@ class Vendor extends Model implements Auditable
         return $this->belongsToMany(SurveyCity::class, 'vendor_city_votes')->withTimestamps();
     }
 
+    /** Dias de indisponibilidade pontual (folga, doença, férias). */
+    public function unavailableDays(): HasMany
+    {
+        return $this->hasMany(\App\Models\Vendor\VendorUnavailableDay::class);
+    }
+
+    /** Está indisponível neste dia concreto, apesar da disponibilidade semanal? */
+    public function isUnavailableOn(\Carbon\CarbonInterface|string $day): bool
+    {
+        $date = $day instanceof \Carbon\CarbonInterface ? $day->toDateString() : (string) $day;
+
+        return $this->unavailableDays()->whereDate('day', $date)->exists();
+    }
+
     public function allowedZones(): BelongsToMany
     {
         return $this->belongsToMany(AllowedZone::class, 'vendor_allowed_zones')->withTimestamps();

@@ -66,6 +66,10 @@ return [
         'description' => 'O cliente enviou-te uma nova mensagem sobre o serviço: ',
         'description_vendor' => 'O técnico enviou-te uma nova mensagem sobre o serviço: ',
     ],
+    'serviceStuck' => [
+        'title' => 'Serviço por concluir',
+        'description' => 'O serviço ":service" está em execução há :hours horas. Conclui-o para receberes o pagamento.',
+    ],
     'incompleteProfile' => [
         'greeting' => 'Olá :name,',
         'action' => 'Completar o meu perfil',

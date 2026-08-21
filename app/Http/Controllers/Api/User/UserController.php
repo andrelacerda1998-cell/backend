@@ -63,13 +63,11 @@ class UserController extends Controller
                     ?? $vendor->addresses->first()?->name
                     ?? null,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
-                // Procura recente na zona escolhida. Só faz sentido para quem
-                // ainda NÃO pode aceitar serviços: para esses é o argumento
-                // concreto para acabar o perfil ("há trabalho à tua espera").
-                // Para os aprovados seria ruído — esses já recebem os pedidos.
-                'zone_recent_requests' => $vendor->can_accept_service
-                    ? null
-                    : app(ZoneDemand::class)->recentRequestCount($vendor),
+                // Procura recente na zona escolhida. Serve dois momentos:
+                //  - perfil incompleto: o argumento para o acabar;
+                //  - aprovado mas com a semana a zero: dizer-lhe que há
+                //    mercado, em vez de o deixar com três zeros sem contexto.
+                'zone_recent_requests' => app(ZoneDemand::class)->recentRequestCount($vendor),
             ]);
         }
 

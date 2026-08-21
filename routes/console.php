@@ -28,4 +28,8 @@ Schedule::command('documents:notify-expiring')->dailyAt('09:00')->withoutOverlap
 // acordar. O comando e idempotente, por isso um re-run manual e seguro.
 Schedule::command('vendors:remind-incomplete-profile')->dailyAt('10:00')->withoutOverlapping();
 
+// Servicos esquecidos em execucao: de hora a hora, porque cada hora parado e
+// dinheiro que o tecnico ainda nao recebeu (e uma fatura que o cliente nao tem).
+Schedule::command('services:notify-stuck-in-progress')->hourly()->withoutOverlapping();
+
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);

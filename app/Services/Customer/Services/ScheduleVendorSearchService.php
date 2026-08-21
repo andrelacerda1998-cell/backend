@@ -119,9 +119,25 @@ class ScheduleVendorSearchService
             })
             ->get();
 
+        // Dias marcados como indisponíveis (folga, doença, férias). Sem isto o
+        // técnico só podia desligar o dia da semana INTEIRO e para sempre, ou
+        // recusar pedido a pedido — o que lhe estraga a taxa de aceitação por
+        // algo que não é recusa. Carregado de uma vez, fora do ciclo.
+        $unavailableDays = $vendor->unavailableDays()
+            ->whereDate('day', '>=', $today)
+            ->whereDate('day', '<=', $today->copy()->addDays($this->daysAhead))
+            ->pluck('day')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->all();
+
         for ($i = 0; $i < $this->daysAhead; $i++) {
             $date = $today->copy()->addDays($i);
             $dayOfWeek = $this->carbonDayToScheduleDay($date);
+
+            // Indisponibilidade pontual manda sobre a disponibilidade semanal.
+            if (in_array($date->toDateString(), $unavailableDays, true)) {
+                continue;
+            }
 
             // Find availability for this day of week
             $availability = $vendor->scheduleAvailable

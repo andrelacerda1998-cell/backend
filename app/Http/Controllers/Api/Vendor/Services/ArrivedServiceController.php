@@ -31,6 +31,8 @@ class ArrivedServiceController extends Controller
             }
 
             $service->status = ServiceStatus::ARRIVED;
+            // Início da execução: é a partir daqui que a app conta o tempo.
+            $service->arrived_at = now();
             $service->save();
 
             $this->notifyCustomer($service->formatDataForCustomer(), $service);

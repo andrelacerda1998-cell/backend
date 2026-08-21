@@ -98,6 +98,11 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::post('/accept', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'storeSchedule']);
         Route::get('/pending-schedules', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'pendingSchedules']);
 
+        // Indisponibilidade pontual (folga, doenca, ferias) — ver o controlador.
+        Route::get('/unavailable-days', [App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController::class, 'index']);
+        Route::post('/unavailable-days', [App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController::class, 'store']);
+        Route::delete('/unavailable-days/{day}', [App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController::class, 'destroy']);
+
         Route::get('/details/{schedule}', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'getScheduleData']);
         Route::post('/go-to-location/{service}', App\Http\Controllers\Api\Vendor\Schedule\GoToLocationController::class);
         Route::post('/{schedule}/cancel', App\Http\Controllers\Api\Vendor\Schedule\CancelScheduleController::class);

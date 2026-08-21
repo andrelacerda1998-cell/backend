@@ -66,6 +66,10 @@ return [
         'description' => 'The Customer has sent you a new message about the service: ',
         'description_vendor' => 'The Vendor has sent you a new message about the service: ',
     ],
+    'serviceStuck' => [
+        'title' => 'Service not finished',
+        'description' => 'The service ":service" has been in progress for :hours hours. Finish it to get paid.',
+    ],
     'incompleteProfile' => [
         'greeting' => 'Hi :name,',
         'action' => 'Complete my profile',
