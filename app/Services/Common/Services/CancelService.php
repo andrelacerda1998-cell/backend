@@ -7,6 +7,7 @@ use App\Jobs\Services\CreateCancellationInvoiceJob;
 use App\Jobs\Services\CreateVendorCancellationInvoiceJob;
 use App\Models\Service;
 use Bavix\Wallet\Internal\Exceptions\ExceptionInterface;
+use RwInteractive\PayshopSdk\Enums\Payment\Status;
 
 class CancelService
 {
@@ -78,22 +79,108 @@ class CancelService
     {
         $this->service->refresh();
 
-        // ARRIVED também é cancelável: nada foi capturado ainda (só cativo/autorização) e o
-        // ServiceObserver liberta/reembolsa automaticamente ao gravar CANCELED.
-        if (in_array($this->service->status, [ServiceStatus::ACCEPTED, ServiceStatus::ARRIVED], true)) {
-            \DB::beginTransaction();
-            try {
+        if (! in_array($this->service->status, [ServiceStatus::ACCEPTED, ServiceStatus::ARRIVED], true)) {
+            return;
+        }
+
+        // Regra: depois de o técnico estar a caminho (on_the_way_at) ou em execução
+        // (ARRIVED), cancelar COBRA 100% — captura-se o pagamento e reparte-se 50/50
+        // (CancellationPolicy). Aceite mas ainda parado continua a reembolsar (o
+        // ServiceObserver liberta o cativo ao gravar CANCELED), como sempre.
+        if (CancellationPolicy::isChargeable($this->service)) {
+            $this->cancelWithCharge();
+
+            return;
+        }
+
+        \DB::beginTransaction();
+        try {
+            $this->service->status = ServiceStatus::CANCELED;
+            $this->service->status_justification = 'internal/services.cancel.description';
+            $this->service->save();
+
+            \DB::commit();
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            report($e);
+            throw $e;
+        }
+    }
+
+    /**
+     * Cancelamento COBRADO (técnico a caminho / em execução).
+     *
+     * Captura os 100% e reparte 50% técnico / 50% plataforma. A ordem importa:
+     *  1) capturar — se a captura FALHAR não se cobra ninguém, cai-se no
+     *     cancelamento normal (reembolso/libertação pelo observer). Nunca se
+     *     deposita a técnico/plataforma dinheiro que não se conseguiu cobrar.
+     *  2) repartir e depositar.
+     *  3) marcar CANCELED com a flag que impede o observer de reembolsar o que
+     *     acabámos de capturar.
+     *
+     * NÃO VERIFICADO contra o Payshop (sem sandbox neste ambiente) — ver a nota
+     * no fim do trabalho. A decisão e a repartição, essas, estão testadas.
+     */
+    private function cancelWithCharge(): void
+    {
+        \DB::beginTransaction();
+        try {
+            if (! $this->capturePayment()) {
+                // Sem captura não há cobrança: encerra como cancelamento normal e
+                // deixa o observer libertar o cativo.
                 $this->service->status = ServiceStatus::CANCELED;
                 $this->service->status_justification = 'internal/services.cancel.description';
                 $this->service->save();
 
                 \DB::commit();
-            } catch (\Exception $e) {
-                \DB::rollBack();
-                report($e);
-                throw $e;
+
+                return;
             }
+
+            $amount = abs((int) $this->service->getRawOriginal('amount'));
+            $split = CancellationPolicy::split($amount);
+
+            $this->service->vendor->user->deposit($split['vendor'], $this->service->getMetaProduct());
+            system_wallet()->deposit($split['platform'], $this->service->getMetaProduct());
+
+            $this->service->skipCancellationRefund = true;
+            $this->service->status = ServiceStatus::CANCELED;
+            $this->service->status_justification = 'internal/services.cancel.charged';
+            $this->service->save();
+
+            \DB::commit();
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            report($e);
+            throw $e;
         }
+    }
+
+    /**
+     * Captura o pagamento cativo. Espelha CloseService::capturePayment() — mesma
+     * regra de idempotência (não voltar a confirmar uma order já SUCCESS).
+     */
+    private function capturePayment(): bool
+    {
+        $paymentOrder = $this->service->paymentOrder;
+
+        if (! $paymentOrder) {
+            return false;
+        }
+
+        if ($paymentOrder->status === Status::SUCCESS) {
+            return true;
+        }
+
+        try {
+            $paymentOrder->confirm();
+        } catch (\Exception $e) {
+            report($e);
+
+            return false;
+        }
+
+        return $paymentOrder->status === Status::SUCCESS;
     }
 
     /**

@@ -81,6 +81,13 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
 
     protected $appends = ['price_rate'];
 
+    /**
+     * Marca transitória (não é coluna): um cancelamento JÁ COBRADO não deve ser
+     * reembolsado pelo ServiceObserver. Propriedade real declarada de propósito —
+     * um atributo dinâmico via Eloquent seria gravado como coluna no save().
+     */
+    public bool $skipCancellationRefund = false;
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'customer_id')->whereDoesntHave('vendor');
