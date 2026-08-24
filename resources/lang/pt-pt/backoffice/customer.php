@@ -42,6 +42,7 @@ return [
         'eligibility' => [
             'title' => 'Elegibilidade para solicitar serviços',
             'can_request' => 'O cliente pode solicitar serviços.',
+            'unverified_phone' => 'O cliente não tem o número de telemóvel verificado.',
             'no_main_address' => 'O cliente não tem endereço principal.',
             'open_service' => 'O cliente tem um serviço em aberto: :services.',
         ],

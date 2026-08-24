@@ -42,6 +42,7 @@ return [
         'eligibility' => [
             'title' => 'Service request eligibility',
             'can_request' => 'The customer can request services.',
+            'unverified_phone' => 'The customer has not verified their phone number.',
             'no_main_address' => 'The customer has no main address.',
             'open_service' => 'The customer has an open service: :services.',
         ],

@@ -157,13 +157,25 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
         return ! is_null($this->phone_number_verified_at);
     }
 
+    /**
+     * Pode abrir um pedido de serviço.
+     *
+     * O telemóvel verificado é exigência e não sugestão: é por ele que o
+     * profissional contacta o cliente quando chega à porta e ninguém atende.
+     * Um número inventado significa uma deslocação perdida e uma discussão
+     * sobre quem a paga — e a política de cancelamento tardio, que cobra 10%
+     * ao cliente, assume que há forma de falar com ele.
+     *
+     * Em contas só-telemóvel (isPhoneOnly) é ainda a única credencial: um
+     * número por verificar é uma conta sem forma de voltar a entrar.
+     */
     public function canRequestService(): Attribute
     {
         return Attribute::make(get: function () {
             $hasMainAddress = $this->addresses()->where('main_address', true)->exists();
             $hasOpenService = $this->openServices()->exists();
 
-            return $hasMainAddress && ! $hasOpenService;
+            return $this->hasVerifiedPhoneNumber() && $hasMainAddress && ! $hasOpenService;
         })->shouldCache();
     }
 
@@ -174,6 +186,10 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
     public function cannotRequestServiceReasons(): Collection
     {
         $reasons = collect();
+
+        if (! $this->hasVerifiedPhoneNumber()) {
+            $reasons->push(__('backoffice/customer.infolist.eligibility.unverified_phone'));
+        }
 
         if (! $this->addresses()->where('main_address', true)->exists()) {
             $reasons->push(__('backoffice/customer.infolist.eligibility.no_main_address'));

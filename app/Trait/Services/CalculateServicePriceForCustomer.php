@@ -144,6 +144,14 @@ trait CalculateServicePriceForCustomer
     private function fetchCustomer()
     {
         $customer = auth('api')->user();
+
+        // Telemóvel por verificar tem mensagem própria: a genérica fala do
+        // cliente na terceira pessoa e não diz o que falta, o que deixa quem
+        // está a pagar num beco sem saída. Aqui há um passo concreto a dar.
+        if (! $customer->hasVerifiedPhoneNumber()) {
+            throw new CustomerCantRequestServices('exceptions.services.verify_phone_to_request');
+        }
+
         if (! $customer->can_request_service) {
             throw new CustomerCantRequestServices;
         }

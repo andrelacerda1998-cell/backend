@@ -7,6 +7,7 @@ return [
     ],
     'services' => [
         'service_not_found' => 'Serviço não encontrado.',
+        'verify_phone_to_request' => 'Verifica o teu número de telemóvel para pedires um serviço. É por aí que o profissional te contacta quando chega.',
         'customer_cannot_request_service' => 'O cliente não pode solicitar um serviço.',
         'customer_dont_have_balance' => 'O cliente não tem saldo suficiente.',
         'customer_dont_have_main_address' => 'O cliente não tem uma morada principal.',
