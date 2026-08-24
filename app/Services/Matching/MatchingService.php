@@ -400,13 +400,33 @@ class MatchingService
         return (bool) ($service->pending_schedule_data['scheduled'] ?? false);
     }
 
-    /** Dia pretendido, enquanto a agenda ainda não pode existir. */
-    public function scheduledDay(Service $service): ?\Carbon\CarbonInterface
+    /**
+     * Instante de início pretendido, enquanto a agenda ainda não pode existir.
+     *
+     * Prefere sempre a HORA e não só o dia: a verificação de disponibilidade
+     * compara o bloco com o horário de trabalho, e um serviço marcado para as
+     * 15h avaliado à meia-noite cai sempre fora — o que rejeitava toda a gente
+     * em silêncio.
+     */
+    public function scheduledStartAt(Service $service): ?\Carbon\CarbonInterface
     {
-        $day = $service->schedule?->scheduled_day
-            ?? ($service->pending_schedule_data['schedule']['scheduled_day'] ?? null);
+        $schedule = $service->schedule;
 
-        return $day ? \Carbon\Carbon::parse($day) : null;
+        if ($schedule) {
+            return \Carbon\Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start);
+        }
+
+        $pending = $service->pending_schedule_data['schedule'] ?? null;
+
+        if (! $pending) {
+            return null;
+        }
+
+        $start = $pending['scheduled_time_start'] ?? null;
+
+        return $start
+            ? \Carbon\Carbon::parse($start)
+            : (($pending['scheduled_day'] ?? null) ? \Carbon\Carbon::parse($pending['scheduled_day']) : null);
     }
 
     public function hasEnoughAcceptances(Service $service): bool
@@ -446,7 +466,7 @@ class MatchingService
             ),
             customer: $service->customer,
             immediate: $immediate,
-            scheduledFor: $this->scheduledDay($service),
+            scheduledFor: $this->scheduledStartAt($service),
             quantity: $service->quantity ?? 1,
         );
     }

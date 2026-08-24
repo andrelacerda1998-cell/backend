@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Schedule\ScheduleDay;
 use App\Enums\Services\AddressType;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
@@ -256,6 +257,73 @@ class Vendor extends Model implements Auditable
     public function unavailableDays(): HasMany
     {
         return $this->hasMany(\App\Models\Vendor\VendorUnavailableDay::class);
+    }
+
+    /**
+     * Tem este bloco livre na agenda?
+     *
+     * Três perguntas, por ordem de força:
+     *  1. marcou este dia como indisponível? (folga pontual manda sobre tudo)
+     *  2. trabalha a esta hora, neste dia da semana? (schedule_available)
+     *  3. já tem alguma coisa marcada que se sobreponha?
+     *
+     * Existe porque convidar alguém para uma hora que ele não tem livre é pior
+     * do que não o convidar: ou recusa — e aprende que os convites não são de
+     * fiar — ou aceita por distração e falta, o que custa ao cliente e à
+     * reputação da Piquet.
+     *
+     * A margem de segurança (schedule_safety_margin_minutes) só se aplica a
+     * marcações confirmadas: um agendamento ainda pendente não deve reservar
+     * tempo de deslocação que talvez nunca seja preciso.
+     */
+    public function hasFreeSlot(\Carbon\CarbonInterface $start, \Carbon\CarbonInterface $end): bool
+    {
+        if ($this->isUnavailableOn($start)) {
+            return false;
+        }
+
+        $dayName = match ($start->dayOfWeek) {
+            \Carbon\Carbon::MONDAY => ScheduleDay::MONDAY->value,
+            \Carbon\Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
+            \Carbon\Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
+            \Carbon\Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
+            \Carbon\Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
+            \Carbon\Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
+            default => ScheduleDay::SUNDAY->value,
+        };
+
+        $availability = $this->scheduleAvailable()
+            ->where('is_enabled', true)
+            ->whereHas('scheduleDay', fn ($q) => $q->where('day_name', $dayName))
+            ->first();
+
+        if (! $availability) {
+            return false;
+        }
+
+        // O bloco tem de caber inteiro dentro do horário de trabalho do dia.
+        $dayStart = $start->copy()->setTimeFromTimeString($availability->time_start);
+        $dayEnd = $start->copy()->setTimeFromTimeString($availability->time_end);
+
+        if ($start->lt($dayStart) || $end->gt($dayEnd)) {
+            return false;
+        }
+
+        $margin = (int) config('services.request.schedule_safety_margin_minutes', 60);
+
+        return ! $this->schedules()
+            ->whereDate('scheduled_day', $start->toDateString())
+            ->get()
+            ->contains(function ($schedule) use ($start, $end, $margin) {
+                $busyStart = \Carbon\Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start);
+                $busyEnd = \Carbon\Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_end);
+
+                if (! $schedule->is_pending) {
+                    $busyEnd = $busyEnd->copy()->addMinutes($margin);
+                }
+
+                return $start->lt($busyEnd) && $end->gt($busyStart);
+            });
     }
 
     /** Está indisponível neste dia concreto, apesar da disponibilidade semanal? */
