@@ -88,10 +88,13 @@ class SearchScheduleVendorsController extends Controller
                 'rate' => $price,
                 'original_price' => $original_price,
                 'distance' => $distance,
+                // null = ainda sem avaliações. Não se inventa 5: a app do
+                // cliente já trata o null e esconde a nota em vez de mostrar
+                // uma classificação perfeita que ninguém deu.
                 'rating' => $vendor->averageRating()
                     ->where('operation_area_id', $serviceType->operation_area_id)
                     ->first()
-                    ->average_rating ?? 5,
+                    ?->average_rating,
                 'avatar' => $vendorUser->avatar,
                 'is_online' => $vendor->status->value === 'Online',
                 'has_auto_accept' => $hasAutoAccept,

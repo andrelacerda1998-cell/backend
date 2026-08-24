@@ -76,7 +76,9 @@ cliente escolhe categoria → tipo → "agendar" + data/hora
 
 Ordem definida pelo negócio, por prioridade:
 
-1. **Melhor avaliação** — `vendor_ratings.average_rating` da área de operação
+1. **Melhor avaliação** — média de `services.rating_by_customer` nos serviços
+   fechados da área de operação. Lê-se a fonte e não o resumo em cache
+   (`vendor_ratings`), que é recalculado por observer e pode estar atrasado.
 2. **Preço mais barato** — orçamento calculado para aquele serviço concreto
 3. **Menor distância** — `Vendor::calculateDistance()` à morada do serviço
 

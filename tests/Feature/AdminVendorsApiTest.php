@@ -218,6 +218,7 @@ class AdminVendorsApiTest extends TestCase
         ?int $amount = null,
         ?int $amountForVendor = null,
         ?int $ratingByVendor = null,
+        ?int $ratingByCustomer = null,
         ?string $city = null,
         bool $isTest = false,
         ?Carbon $createdAt = null,
@@ -231,6 +232,7 @@ class AdminVendorsApiTest extends TestCase
             'amount' => $amount,
             'amount_for_vendor' => $amountForVendor,
             'rating_by_vendor' => $ratingByVendor,
+            'rating_by_customer' => $ratingByCustomer,
             'address' => $city ? json_encode(['city' => $city]) : null,
             'is_test' => $isTest,
             'created_at' => $timestamp,
@@ -294,7 +296,12 @@ class AdminVendorsApiTest extends TestCase
     {
         $vendor = $this->makeVendor(['first_name' => 'Ana', 'last_name' => 'Silva']);
         // amount=100,00€, amount_for_vendor=70,00€ -> comissão (receita gerada) 30,00€.
-        $this->makeService($vendor, amount: 10000, amountForVendor: 7000, ratingByVendor: 5);
+        //
+        // A avaliação do profissional é a nota que o CLIENTE lhe deu. O
+        // `ratingByVendor: 1` está aqui de propósito: é a nota que ele deu ao
+        // cliente, e não pode contaminar a dele. Este teste fixava antes o
+        // comportamento contrário.
+        $this->makeService($vendor, amount: 10000, amountForVendor: 7000, ratingByVendor: 1, ratingByCustomer: 5);
         // Não deve contar: serviço não-CLOSED e serviço de teste.
         $other = $this->makeVendor(['first_name' => 'Bruno', 'last_name' => 'Costa']);
         $this->makeService($other, status: ServiceStatus::PENDING, amount: 99999999, amountForVendor: 0);

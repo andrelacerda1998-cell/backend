@@ -333,32 +333,39 @@ class Vendor extends Model implements Auditable
         $this->searchable();
     }
 
+    /**
+     * Recalcula a avaliação deste profissional, por área de operação.
+     *
+     * Lê `rating_by_customer` — a nota que o CLIENTE deu ao PROFISSIONAL. Até
+     * aqui lia `rating_by_vendor`, que é o contrário: a nota que o profissional
+     * dá ao cliente. A tabela media a simpatia dele para com quem o contrata,
+     * e era isso que aparecia ao cliente na hora de escolher.
+     *
+     * Sem avaliações grava NULL. Antes gravava 5 estrelas com uma avaliação
+     * fictícia, o que mostrava ao cliente uma nota perfeita que ninguém deu —
+     * e punha quem nunca trabalhou à frente de quem tem historial.
+     *
+     * `total_ratings` conta avaliações, não serviços fechados. Contar serviços
+     * dizia "40 avaliações" a quem tinha 40 serviços e duas notas.
+     */
     public function updateRatting()
     {
         $this->operationAreas->each(function ($operationArea) {
             $servicesTypes = ServicesType::where('operation_area_id', $operationArea->id)->pluck('id');
 
-            $ratting = $this->services()->where('status', ServiceStatus::CLOSED)
-                ->whereIn('services_type_id', $servicesTypes)->avg('rating_by_vendor');
+            $rated = $this->services()
+                ->where('status', ServiceStatus::CLOSED)
+                ->whereIn('services_type_id', $servicesTypes)
+                ->whereNotNull('rating_by_customer');
 
-            if ($ratting === 0) {
-                $ratting = 5;
-            }
-
-            $ratting = round($ratting);
-
-            $totalRatings = $this->services()->where('status', ServiceStatus::CLOSED)
-                ->whereIn('services_type_id', $servicesTypes)->count();
-            if ($totalRatings === 0) {
-                $totalRatings = 1;
-                $ratting = 5;
-            }
+            $totalRatings = (clone $rated)->count();
+            $average = $totalRatings > 0 ? round((float) (clone $rated)->avg('rating_by_customer'), 2) : null;
 
             Ratings::updateOrCreate([
                 'vendor_id' => $this->id,
                 'operation_area_id' => $operationArea->id,
             ], [
-                'average_rating' => $ratting,
+                'average_rating' => $average,
                 'total_ratings' => $totalRatings,
             ]);
         });

@@ -138,10 +138,9 @@ class VendorRankingService
      * tipo de serviço pedido.
      *
      * Lê `rating_by_customer` diretamente dos serviços fechados, e não a tabela
-     * `vendor_ratings`: essa é preenchida por `Vendor::updateRatting()` a partir
-     * de `rating_by_vendor` — a nota que o PROFISSIONAL deu ao CLIENTE — e
-     * atribui 5 estrelas a quem nunca foi avaliado. Nenhuma das duas coisas
-     * serve para ordenar profissionais.
+     * `vendor_ratings`. Essa é um resumo em cache, recalculado pelo
+     * `VendorObserver`: serve para mostrar, mas pode estar atrasada em relação
+     * à última avaliação. Quem decide a ordem lê a fonte.
      *
      * @param  int[]  $vendorIds
      * @return array<int, array{avg: float, count: int}>
