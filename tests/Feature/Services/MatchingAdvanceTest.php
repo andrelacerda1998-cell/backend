@@ -55,6 +55,19 @@ class MatchingAdvanceTest extends TestCase
         ]);
     }
 
+    /**
+     * O VendorObserver liga a auto-aceitação por omissão em todos os blocos.
+     * Estes testes medem o percurso MANUAL — o profissional a responder — por
+     * isso desligam-na explicitamente em vez de dependerem do que o observer
+     * calhar a fazer.
+     */
+    private function withoutAutoAccept(Vendor $vendor): Vendor
+    {
+        $vendor->scheduleAvailable()->update(['auto_accept' => false]);
+
+        return $vendor->fresh();
+    }
+
     private function service(): Service
     {
         return Service::factory()->create([
@@ -69,7 +82,7 @@ class MatchingAdvanceTest extends TestCase
     {
         return ServiceCandidate::create([
             'service_id' => $service->id,
-            'vendor_id' => Vendor::factory()->create()->id,
+            'vendor_id' => $this->withoutAutoAccept(Vendor::factory()->create())->id,
             'rank' => $rank,
             'wave' => 1,
             'status' => $status,

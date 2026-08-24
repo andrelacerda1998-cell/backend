@@ -272,6 +272,27 @@ class MatchingService
                 return false;
             }
 
+            // A agenda é reverificada AQUI, e não só no convite: entre convidar e
+            // o cliente decidir, o profissional pode ter ficado com o bloco
+            // ocupado por outro pedido. Com a auto-aceitação ligada isto deixa de
+            // ser hipótese remota — ele diz que sim a tudo, e dois clientes podem
+            // pedir a mesma hora.
+            //
+            // Falhar aqui é o comportamento certo: o cliente escolhe outro dos
+            // disponíveis em vez de ficar com uma marcação dupla.
+            $startAt = $this->scheduledStartAt($service);
+
+            if ($startAt && $fresh->vendor) {
+                $minutes = (int) ($service->serviceType?->time ?: 60);
+
+                if (! $fresh->vendor->hasFreeSlot($startAt, $startAt->copy()->addMinutes($minutes))) {
+                    $fresh->update(['status' => CandidateStatus::LOST]);
+                    $this->notifyVendor($fresh, MatchingCandidateLostEvent::class);
+
+                    return false;
+                }
+            }
+
             $fresh->update(['status' => CandidateStatus::SELECTED]);
 
             $losers = $service->candidates()
@@ -348,6 +369,35 @@ class MatchingService
         ]);
 
         $this->notifyVendor($candidate->refresh(), MatchingInvitationEvent::class);
+        $this->autoAcceptIfEnabled($candidate);
+    }
+
+    /**
+     * Responde por ele quando tem a auto-aceitação ligada.
+     *
+     * Aceitar um convite não reserva a agenda nem garante o trabalho, por isso
+     * responder automaticamente é barato para o profissional: entra em mais
+     * seleções sem custo. E ele já só é convidado para blocos que tem livres
+     * (Vendor::hasFreeSlot).
+     *
+     * O que NÃO fica garantido é que continue livre até o cliente decidir —
+     * dois clientes podem pedir a mesma hora e ambos convidá-lo. É por isso que
+     * o `select()` volta a verificar a agenda antes de o atribuir.
+     */
+    private function autoAcceptIfEnabled(ServiceCandidate $candidate): void
+    {
+        $vendor = $candidate->vendor;
+        $service = $candidate->service;
+
+        if (! $vendor || ! $service) {
+            return;
+        }
+
+        if (! $vendor->autoAcceptsOn($this->scheduledStartAt($service))) {
+            return;
+        }
+
+        $this->accept($candidate);
     }
 
     private function notifyVendor(ServiceCandidate $candidate, string $event): void

@@ -296,7 +296,11 @@ class MatchingController extends Controller
             $service->status = ServiceStatus::PENDING;
             $service->save();
 
-            app(MaterializePendingSchedule::class)->handle($service->refresh());
+            // alreadyAccepted: neste fluxo o profissional aceitou ANTES do
+            // pagamento. Sem isto, a materialização voltava a perguntar-lhe e
+            // armava o cancelamento por falta de resposta — que acabava por
+            // cancelar e reembolsar um serviço pago e aceite.
+            app(MaterializePendingSchedule::class)->handle($service->refresh(), alreadyAccepted: true);
 
             return;
         }

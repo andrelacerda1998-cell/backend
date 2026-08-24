@@ -326,6 +326,36 @@ class Vendor extends Model implements Auditable
             });
     }
 
+    /**
+     * Aceita convites automaticamente?
+     *
+     * Quando há data, olha-se para o bloco desse dia da semana; sem data, basta
+     * ter a auto-aceitação ligada nalgum bloco. O backoffice altera as sete
+     * linhas ao mesmo tempo (ToggleVendorAutoAcceptAction), por isso na prática
+     * é um interruptor único — mas o modelo suporta granularidade por dia e não
+     * há razão para a deitar fora.
+     */
+    public function autoAcceptsOn(?\Carbon\CarbonInterface $date = null): bool
+    {
+        $query = $this->scheduleAvailable()->where('auto_accept', true)->where('is_enabled', true);
+
+        if (! $date) {
+            return $query->exists();
+        }
+
+        $dayName = match ($date->dayOfWeek) {
+            \Carbon\Carbon::MONDAY => ScheduleDay::MONDAY->value,
+            \Carbon\Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
+            \Carbon\Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
+            \Carbon\Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
+            \Carbon\Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
+            \Carbon\Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
+            default => ScheduleDay::SUNDAY->value,
+        };
+
+        return $query->whereHas('scheduleDay', fn ($q) => $q->where('day_name', $dayName))->exists();
+    }
+
     /** Está indisponível neste dia concreto, apesar da disponibilidade semanal? */
     public function isUnavailableOn(\Carbon\CarbonInterface|string $day): bool
     {
