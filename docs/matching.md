@@ -224,8 +224,9 @@ Nenhum destes números é inventado aqui; são pontos de calibração com dados 
 4. `MatchingService` — shortlist (imediato) e ondas (agendado)
 5. ~~Endpoints do cliente: shortlist, escolher, confirmar+pagar~~ — FEITO
    (`MatchingController`, `/customer/services/matching`)
-6. Endpoints do profissional: aceitar, recusar
-7. Eventos em tempo real: candidato aceitou, pedido fechado, perdeste
+6. ~~Endpoints do profissional: aceitar, recusar~~ — FEITO
+   (`MatchingInvitationsController`, `/vendor/services/matching`)
+7. ~~Eventos em tempo real~~ — FEITO (`App\Events\Matching\*`)
 8. App do cliente: ecrã de escolha com atualização ao vivo
 9. App do profissional: proposta com contador visível
 
@@ -247,3 +248,36 @@ implementações divergirem em silêncio, e divergirem aqui é cobrar mal a algu
 
 Mantém-se do fluxo antigo: o lock do cupão, a barreira da comissão negativa, o
 3DS, o MBWay, e a saída antecipada para contas de teste.
+
+## Endpoints do profissional
+
+| método | rota | o que faz |
+|---|---|---|
+| GET | `/vendor/services/matching` | convites com a janela ainda aberta |
+| POST | `/vendor/services/matching/{candidate}/accept` | "estou disponível" |
+| POST | `/vendor/services/matching/{candidate}/decline` | recusa |
+
+O payload mostra `amount_for_vendor` e nunca o que o cliente paga: o modelo é
+margem por cima, e o profissional recebe 100% do que definiu. Mostra também
+`expires_at`, porque uma janela invisível deixa-o pendurado sem saber se pode
+aceitar outra coisa.
+
+Uma aceitação tardia distingue "a janela fechou" de "outro foi mais rápido".
+São coisas diferentes, e um erro vago faz o profissional achar que a app está
+partida.
+
+## Eventos em tempo real
+
+| evento | canal | quando |
+|---|---|---|
+| `MatchingInvitationEvent` | `service.vendor.{userId}` | foi chamado; a janela dele começou |
+| `MatchingCandidateAcceptedEvent` | `service.customer.{userId}` | alguém aceitou — aparece ao vivo no ecrã do cliente |
+| `MatchingRequestClosedEvent` | `service.vendor.{userId}` | o pedido fechou; deixa de o ver |
+| `MatchingCandidateLostEvent` | `service.vendor.{userId}` | o cliente escolheu outro |
+
+O `MatchingCandidateAcceptedEvent` é o que torna a espera progressiva: o cliente
+não espera que a janela feche, vê cada profissional entrar à medida que aceita.
+Aos poucos segundos já tem uma opção, e decide se quer esperar por mais.
+
+Os três dirigidos ao profissional existem pelo mesmo motivo: **nunca silêncio**.
+Um "sim" que fica sem resposta é o que ensina alguém a deixar de responder.

@@ -9,6 +9,11 @@ use App\Models\ServiceCandidate;
 use App\Models\Vendor;
 use App\Services\Matching\MatchingService;
 use App\Settings\MatchingSettings;
+use App\Events\Matching\MatchingCandidateAcceptedEvent;
+use App\Events\Matching\MatchingCandidateLostEvent;
+use App\Events\Matching\MatchingInvitationEvent;
+use App\Events\Matching\MatchingRequestClosedEvent;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -38,6 +43,16 @@ class MatchingCandidateLifecycleTest extends TestCase
             'rating_bands' => [4.5, 4.0, 3.0],
             'new_vendor_min_ratings' => 5,
             'require_recent_activity_minutes' => 15,
+        ]);
+
+
+        // Todos implementam ShouldBroadcast: sem isto o teste tenta um broadcast
+        // real via Pusher e rebenta com "Failed to connect to 0.0.0.0:8080".
+        Event::fake([
+            MatchingInvitationEvent::class,
+            MatchingCandidateAcceptedEvent::class,
+            MatchingRequestClosedEvent::class,
+            MatchingCandidateLostEvent::class,
         ]);
 
         $this->matching = app(MatchingService::class);

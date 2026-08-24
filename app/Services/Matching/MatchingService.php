@@ -3,6 +3,10 @@
 namespace App\Services\Matching;
 
 use App\Enums\Services\CandidateStatus;
+use App\Events\Matching\MatchingCandidateAcceptedEvent;
+use App\Events\Matching\MatchingCandidateLostEvent;
+use App\Events\Matching\MatchingInvitationEvent;
+use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
@@ -84,7 +88,13 @@ class MatchingService
         // uma onda que talvez nunca chegue a existir.
         $batch = $this->ranking->shortlist($ranked, $this->settings->wave_size);
 
-        return $this->persist($service, $batch, CandidateStatus::NOTIFIED, $wave);
+        $candidates = $this->persist($service, $batch, CandidateStatus::NOTIFIED, $wave);
+
+        foreach ($candidates as $candidate) {
+            $this->notifyVendor($candidate->loadMissing('vendor'), MatchingInvitationEvent::class);
+        }
+
+        return $candidates;
     }
 
     /**
@@ -111,6 +121,8 @@ class MatchingService
                     'responded_at' => now(),
                 ]);
 
+                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+
                 return false;
             }
 
@@ -118,6 +130,16 @@ class MatchingService
                 'status' => CandidateStatus::ACCEPTED,
                 'responded_at' => now(),
             ]);
+
+            // O cliente vê o profissional aparecer no momento em que aceita, em
+            // vez de esperar que a janela feche. É o que torna a espera
+            // progressiva: aos poucos segundos já há uma opção para escolher.
+            $this->notifyCustomer($candidate, MatchingCandidateAcceptedEvent::class);
+
+            // Ao terceiro sim o pedido fecha para todos os outros, já.
+            if ($this->hasEnoughAcceptances($candidate->service)) {
+                $this->closeRemaining($candidate->service, $candidate->id);
+            }
 
             return true;
         });
@@ -159,10 +181,22 @@ class MatchingService
 
             $fresh->update(['status' => CandidateStatus::SELECTED]);
 
+            $losers = $service->candidates()
+                ->whereKeyNot($fresh->getKey())
+                ->live()
+                ->with('vendor')
+                ->get();
+
             $service->candidates()
                 ->whereKeyNot($fresh->getKey())
                 ->live()
                 ->update(['status' => CandidateStatus::LOST]);
+
+            // Em segundos e com motivo. Silêncio depois de um "sim" é o que
+            // ensina o profissional a deixar de responder.
+            foreach ($losers as $loser) {
+                $this->notifyVendor($loser, MatchingCandidateLostEvent::class);
+            }
 
             $service->fill([
                 'vendor_id' => $fresh->vendor_id,
@@ -186,9 +220,74 @@ class MatchingService
     public function fail(Service $service): void
     {
         DB::transaction(function () use ($service) {
+            $pending = $service->candidates()->live()->with('vendor')->get();
+
             $service->candidates()->live()->update(['status' => CandidateStatus::LOST]);
             $service->update(['status' => ServiceStatus::MATCHING_FAILED]);
+
+            foreach ($pending as $candidate) {
+                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+            }
         });
+    }
+
+    /** Fecha o pedido para quem ainda não respondeu e avisa-o. */
+    private function closeRemaining(Service $service, int $exceptId): void
+    {
+        $remaining = $service->candidates()
+            ->whereKeyNot($exceptId)
+            ->where('status', CandidateStatus::NOTIFIED)
+            ->with('vendor')
+            ->get();
+
+        foreach ($remaining as $candidate) {
+            $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+        }
+    }
+
+    /** Chama um profissional e põe a janela dele a correr. */
+    public function invite(ServiceCandidate $candidate, int $windowSeconds): void
+    {
+        $candidate->update([
+            'status' => CandidateStatus::NOTIFIED,
+            'notified_at' => now(),
+            'expires_at' => now()->addSeconds($windowSeconds),
+        ]);
+
+        $this->notifyVendor($candidate->refresh(), MatchingInvitationEvent::class);
+    }
+
+    private function notifyVendor(ServiceCandidate $candidate, string $event): void
+    {
+        $userId = $candidate->vendor?->user_id;
+
+        if (! $userId) {
+            return;
+        }
+
+        $event::dispatch($userId, [
+            'service_id' => $candidate->service_id,
+            'candidate_id' => $candidate->id,
+            'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
+            'expires_at' => $candidate->expires_at?->toIso8601String(),
+        ]);
+    }
+
+    private function notifyCustomer(ServiceCandidate $candidate, string $event): void
+    {
+        $customerId = $candidate->service?->customer_id;
+
+        if (! $customerId) {
+            return;
+        }
+
+        $event::dispatch($customerId, [
+            'service_id' => $candidate->service_id,
+            'candidate_id' => $candidate->id,
+            'vendor_id' => $candidate->vendor_id,
+            'amount' => $candidate->quoted_amount,
+            'rank' => $candidate->rank,
+        ]);
     }
 
     public function hasEnoughAcceptances(Service $service): bool

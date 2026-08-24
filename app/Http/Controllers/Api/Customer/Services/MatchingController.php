@@ -141,11 +141,7 @@ class MatchingController extends Controller
         if ($candidate->status === CandidateStatus::SHORTLISTED) {
             // Fluxo imediato: é agora que a pessoa é chamada — e é a única
             // chamada, porque o cliente já decidiu.
-            $candidate->update([
-                'status' => CandidateStatus::NOTIFIED,
-                'notified_at' => now(),
-                'expires_at' => now()->addSeconds($this->settings->vendor_response_seconds_immediate),
-            ]);
+            $this->matching->invite($candidate, $this->settings->vendor_response_seconds_immediate);
 
             return new ApiSuccessResponse($this->payload($service->refresh()) + [
                 'awaiting_vendor' => true,

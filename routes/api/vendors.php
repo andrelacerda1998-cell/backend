@@ -28,6 +28,15 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::get('/', App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServiceOpenController::class);
         Route::get('/pending', [App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServicePendingController::class, 'service']);
         Route::get('/pending/all', [App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServicePendingController::class, 'services']);
+        // Convites de seleção de profissional (ver docs/matching.md). Antes do
+        // grupo {service} porque a chave é o candidato, não o serviço — e
+        // porque `matching` colidiria com o parâmetro {service}.
+        Route::group(['prefix' => 'matching'], function () {
+            Route::get('/', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'index']);
+            Route::post('/{candidate}/accept', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'accept']);
+            Route::post('/{candidate}/decline', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'decline']);
+        });
+
         Route::get('/{service}', [App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServiceOpenController::class, 'service']);
         Route::group(['prefix' => '{service}'], function () {
             Route::get('/', App\Http\Controllers\Api\Vendor\Services\GetServiceDetailsController::class);
