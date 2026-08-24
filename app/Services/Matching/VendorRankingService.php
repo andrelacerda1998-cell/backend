@@ -183,6 +183,18 @@ class VendorRankingService
         } catch (\Throwable $e) {
             // Sem localização utilizável não há distância, logo não há preço.
             // Fica de fora em vez de entrar com um orçamento inventado.
+            //
+            // Acontece a sério: para agendados a distância usa a morada de
+            // agenda (HasVendorDistance::calculateVendorDistance) e um
+            // profissional sem moradas rebenta ali. Registamos, porque um
+            // profissional que desaparece dos rankings sem deixar rasto é
+            // indistinguível de um que nunca foi elegível.
+            \Log::warning('[matching] profissional excluído do ranking', [
+                'vendor_id' => $vendor->id,
+                'service_type_id' => $serviceType->id,
+                'reason' => $e->getMessage(),
+            ]);
+
             return null;
         }
 
