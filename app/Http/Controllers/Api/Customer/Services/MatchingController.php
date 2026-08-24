@@ -14,6 +14,7 @@ use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
 use App\Models\Voucher;
+use App\Services\Common\Services\MaterializePendingSchedule;
 use App\Services\Matching\MatchingService;
 use App\Settings\MatchingSettings;
 use App\Trait\Services\CalculateServicePriceForCustomer;
@@ -81,7 +82,22 @@ class MatchingController extends Controller
 
             // Fora do $fillable por ser dinheiro: atribui-se antes de gravar,
             // porque a coluna não tem valor por omissão.
+            // Fora do $fillable por ser dinheiro: atribui-se antes de gravar,
+            // porque a coluna não tem valor por omissão.
             $service->payment_status = PaymentStatus::PENDING;
+
+            // A agenda não pode nascer já: `schedule.vendor_id` é NOT NULL e
+            // ainda não há profissional. A intenção fica em
+            // `pending_schedule_data` — o mesmo sítio onde o fluxo antigo a
+            // guarda enquanto espera pelo 3DS/MBWay — e materializa-se depois
+            // do pagamento, quando já se sabe quem é.
+            if ($isScheduled) {
+                $service->pending_schedule_data = [
+                    'scheduled' => true,
+                    'schedule' => $request->input('schedule', []),
+                ];
+            }
+
             $service->save();
 
             $candidates = $isScheduled
@@ -263,15 +279,32 @@ class MatchingController extends Controller
     /**
      * Pago: o serviço deixa de estar em seleção e entra no fluxo normal.
      *
-     * `Accepted` e não `Pending`: a aceitação já aconteceu antes do pagamento,
+     * `Accepted` e não `Pending`: a aceitação já aconteceu ANTES do pagamento,
      * que é precisamente a inversão que este fluxo veio trazer.
+     *
+     * A agenda materializa-se aqui, pelo caminho que já existia
+     * (MaterializePendingSchedule): é agora que há profissional, e é esse
+     * serviço que cria a linha, notifica e arma o job de cancelamento. Duplicar
+     * essa lógica seria criar um segundo sítio para ela divergir.
      */
     private function activate(Service $service): void
     {
-        $service->status = $service->schedule
-            ? ServiceStatus::SCHEDULED
-            : ServiceStatus::ACCEPTED;
+        if ($service->pending_schedule_data) {
+            // Mesma sequência do fluxo antigo: a materialização exige PENDING
+            // e é ela que passa a SCHEDULED. Pôr SCHEDULED aqui fazia o
+            // `acceptSchedule` rejeitar — com o dinheiro já cobrado.
+            $service->status = ServiceStatus::PENDING;
+            $service->save();
 
+            app(MaterializePendingSchedule::class)->handle($service->refresh());
+
+            return;
+        }
+
+        // Imediato: o profissional já aceitou antes do pagamento, que é a
+        // inversão que este fluxo veio trazer. Não se passa pela
+        // materialização, que notificaria como se fosse um serviço novo.
+        $service->status = ServiceStatus::ACCEPTED;
         $service->save();
     }
 

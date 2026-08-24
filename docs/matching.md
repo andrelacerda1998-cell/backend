@@ -188,6 +188,49 @@ profissional" imediatamente, nunca silêncio. Silêncio é o que destrói a conf
 **Ao 3.º sim, o pedido fecha.** Quem ainda não respondeu deixa de ver o pedido e
 recebe "já preenchido" — não fica a responder a algo que já não existe.
 
+## O que faz o tempo passar
+
+`matching:advance`, agendado ao minuto (`routes/console.php`). Comando e não job
+com atraso, de propósito: um job perdido — fila reiniciada, worker morto —
+deixaria o pedido encalhado sem ninguém dar por isso. Um comando que corre de
+minuto a minuto recupera sozinho.
+
+Ao minuto, e não de cinco em cinco, porque a janela do fluxo imediato é de 60
+segundos: com um intervalo maior o cliente ficava minutos a olhar para um
+profissional que já não podia responder.
+
+Faz três coisas:
+
+1. **Fecha convites expirados.** O estado já era avaliado por leitura — um
+   convite fora da janela nunca podia ser aceite — mas as linhas ficavam em
+   `notified` para sempre, e não havia como distinguir "não respondeu" de
+   "ainda a pensar", nem nas consultas nem nas métricas.
+2. **Imediato: passa ao seguinte.** É o fallback que torna a shortlist honesta.
+   "Está livre" é uma previsão, não uma promessa, e sem isto uma previsão
+   errada custava ao cliente o pedido inteiro. O cliente é avisado por
+   `MatchingFallbackEvent` — sem isso o ecrã ficaria a dizer "a contactar o
+   João" enquanto já se contacta outro.
+3. **Agendado: alarga a onda** quando a anterior já teve tempo de responder, e
+   desiste quando as ondas se esgotam sem ninguém.
+
+Nunca avança enquanto alguém tem a janela aberta, e para assim que houver uma
+aceitação: a partir daí a decisão é do cliente, e chamar mais gente seria fazer
+alguém aceitar em vão.
+
+## Um pedido agendado em seleção não tem agenda
+
+`schedule.vendor_id` é NOT NULL, e durante a seleção ainda não há profissional.
+A intenção fica em `services.pending_schedule_data` — o mesmo mecanismo que o
+fluxo antigo já usa enquanto espera pelo 3DS/MBWay — e a linha de agenda
+materializa-se depois do pagamento, por `MaterializePendingSchedule`.
+
+Por isso `MatchingService::isScheduled()` existe: durante a seleção, olhar para
+`$service->schedule` diria sempre "imediato".
+
+A hora (`schedule.scheduled_time_start`) é obrigatória na validação e não
+opcional: sem ela a agenda não pode ser materializada, e o pedido morreria já
+com o dinheiro cobrado — o pior sítio possível para falhar.
+
 ## Definições configuráveis (`MatchingSettings`)
 
 Nenhum destes números é inventado aqui; são pontos de calibração com dados reais.

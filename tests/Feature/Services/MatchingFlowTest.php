@@ -65,6 +65,11 @@ class MatchingFlowTest extends TestCase
             MatchingCandidateAcceptedEvent::class,
             MatchingRequestClosedEvent::class,
             MatchingCandidateLostEvent::class,
+            // O checkout de um agendado materializa a agenda pelo caminho que
+            // já existia, e esse difunde os seus próprios eventos.
+            \App\Events\Customer\Schedule\AcceptScheduleEvent::class,
+            \App\Events\Vendor\Schedule\CreateScheduleEvent::class,
+            \App\Events\Vendor\Schedule\ServiceScheduledEvent::class,
         ]);
 
         $area = OperationArea::factory()->create();
@@ -137,7 +142,10 @@ class MatchingFlowTest extends TestCase
             ->postJson('/api/v1/customer/services/matching', [
                 'service_type' => $this->type->id,
                 'scheduled' => $scheduled,
-                'scheduled_day' => $scheduled ? now()->addDay()->toDateString() : null,
+                'schedule' => $scheduled ? [
+                    'scheduled_day' => now()->addDay()->toDateString(),
+                    'scheduled_time_start' => now()->addDay()->setTime(10, 0)->toDateTimeString(),
+                ] : null,
             ]);
     }
 

@@ -18,6 +18,14 @@ Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOver
 // expira os não confirmados). Read-only no Payshop (details()); não chama cancel() — ver item 15.
 Schedule::command('services:expire-pending-3ds')->everyFiveMinutes()->withoutOverlapping();
 
+// Seleção de profissional: fecha convites expirados, alarga as ondas e desiste
+// dos pedidos sem resposta (docs/matching.md). Ao minuto porque as janelas do
+// fluxo imediato são de 60 segundos — de cinco em cinco minutos, um cliente
+// à espera ficava cinco minutos a olhar para um profissional que já não podia
+// responder. `withoutOverlapping` porque duas execuções em paralelo poderiam
+// alargar a mesma onda duas vezes.
+Schedule::command('matching:advance')->everyMinute()->withoutOverlapping();
+
 // Avisa os técnicos a 30/15/7/3/1 dias da expiração de um documento aprovado — quando expira,
 // deixam de poder aceitar serviços. Uma vez por dia (de manhã); a idempotência é garantida pela
 // tabela vendor_document_expiry_notifications, por isso é seguro correr manualmente também.

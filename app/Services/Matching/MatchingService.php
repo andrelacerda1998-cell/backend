@@ -5,6 +5,7 @@ namespace App\Services\Matching;
 use App\Enums\Services\CandidateStatus;
 use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
+use App\Events\Matching\MatchingFallbackEvent;
 use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Enums\Services\ServiceStatus;
@@ -155,6 +156,98 @@ class MatchingService
             'status' => CandidateStatus::DECLINED,
             'responded_at' => now(),
         ]);
+
+        // Num pedido imediato só uma pessoa foi chamada: se ela recusa, o
+        // cliente ficaria à espera de alguém que já disse que não. Passa-se ao
+        // seguinte imediatamente, sem ele ter de refazer nada.
+        $service = $candidate->service;
+
+        if ($service && ! $this->isScheduled($service)) {
+            $this->advanceImmediate($service);
+        }
+    }
+
+    /**
+     * Fluxo imediato: chama o próximo da lista quando o anterior não respondeu
+     * ou recusou.
+     *
+     * É o fallback que torna a shortlist honesta. "Está livre" é uma previsão,
+     * não uma promessa — e sem isto uma previsão errada custava ao cliente o
+     * pedido inteiro.
+     *
+     * @return bool true se houve quem chamar; false se a lista se esgotou
+     */
+    public function advanceImmediate(Service $service): bool
+    {
+        return DB::transaction(function () use ($service) {
+            $service = Service::whereKey($service->getKey())->lockForUpdate()->first();
+
+            if (! $service || $service->status !== ServiceStatus::MATCHING) {
+                return false;
+            }
+
+            // Se alguém já aceitou, não há nada a avançar: o cliente escolhe.
+            if ($service->candidates()->accepted()->exists()) {
+                return true;
+            }
+
+            $next = $service->candidates()
+                ->where('status', CandidateStatus::SHORTLISTED)
+                ->orderBy('rank')
+                ->with('vendor')
+                ->first();
+
+            if (! $next) {
+                // Só desiste se não houver mesmo mais ninguém. Falhar enquanto
+                // alguém ainda tem a janela aberta seria deitar fora uma
+                // resposta que pode estar a caminho.
+                if (! $service->candidates()->live()->exists()) {
+                    $this->fail($service);
+                }
+
+                return false;
+            }
+
+            $this->invite($next, $this->settings->vendor_response_seconds_immediate);
+
+            // O cliente está no ecrã de espera: tem de saber que mudámos de
+            // pessoa, senão vê "a contactar o João" enquanto se contacta outro.
+            MatchingFallbackEvent::dispatch($service->customer_id, [
+                'service_id' => $service->id,
+                'candidate_id' => $next->id,
+                'vendor_id' => $next->vendor_id,
+                'vendor_name' => $next->vendor?->user?->name,
+                'expires_at' => $next->refresh()->expires_at?->toIso8601String(),
+            ]);
+
+            return true;
+        });
+    }
+
+    /**
+     * Fecha convites cuja janela passou.
+     *
+     * O estado já era avaliado por leitura — um convite expirado nunca podia
+     * ser aceite — mas as linhas ficavam em `notified` para sempre. Sem isto
+     * não há como distinguir "não respondeu" de "ainda a pensar", nem nas
+     * consultas nem nas métricas.
+     *
+     * @return int quantos foram fechados
+     */
+    public function expireStale(Service $service): int
+    {
+        $stale = $service->candidates()->stale()->get();
+
+        if ($stale->isEmpty()) {
+            return 0;
+        }
+
+        $service->candidates()->stale()->update([
+            'status' => CandidateStatus::EXPIRED,
+            'responded_at' => now(),
+        ]);
+
+        return $stale->count();
     }
 
     /**
@@ -290,6 +383,32 @@ class MatchingService
         ]);
     }
 
+    /**
+     * Um pedido em seleção agendado ainda NÃO tem linha de agenda.
+     *
+     * `schedule.vendor_id` é NOT NULL, e durante a seleção ainda não há
+     * profissional — a linha só pode nascer depois de o cliente escolher e
+     * pagar. Até lá a intenção vive em `pending_schedule_data`, que é o mesmo
+     * mecanismo que o fluxo antigo já usava enquanto esperava pelo 3DS/MBWay.
+     */
+    public function isScheduled(Service $service): bool
+    {
+        if ($service->schedule) {
+            return true;
+        }
+
+        return (bool) ($service->pending_schedule_data['scheduled'] ?? false);
+    }
+
+    /** Dia pretendido, enquanto a agenda ainda não pode existir. */
+    public function scheduledDay(Service $service): ?\Carbon\CarbonInterface
+    {
+        $day = $service->schedule?->scheduled_day
+            ?? ($service->pending_schedule_data['schedule']['scheduled_day'] ?? null);
+
+        return $day ? \Carbon\Carbon::parse($day) : null;
+    }
+
     public function hasEnoughAcceptances(Service $service): bool
     {
         return $service->candidates()->accepted()->count() >= $this->settings->shortlist_size;
@@ -327,9 +446,7 @@ class MatchingService
             ),
             customer: $service->customer,
             immediate: $immediate,
-            scheduledFor: $service->schedule?->scheduled_day
-                ? \Carbon\Carbon::parse($service->schedule->scheduled_day)
-                : null,
+            scheduledFor: $this->scheduledDay($service),
             quantity: $service->quantity ?? 1,
         );
     }
