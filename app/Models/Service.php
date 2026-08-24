@@ -105,6 +105,15 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         return $this->belongsTo(Vendor::class);
     }
 
+    /**
+     * Profissionais considerados para este serviço, incluindo os que perderam
+     * — ver docs/matching.md.
+     */
+    public function candidates(): HasMany
+    {
+        return $this->hasMany(ServiceCandidate::class);
+    }
+
     public function serviceType(): BelongsTo
     {
         return $this->belongsTo(ServicesType::class, 'services_type_id');
