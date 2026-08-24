@@ -221,9 +221,36 @@ trait CalculateServicePriceForCustomer
         }
 
         $prices = $this->calculatePrices($serviceType, $address, $vendor, $isScheduled, $quantity);
-        $originalAmount = $prices['customer_amount'];
-        $vendorAmount = $prices['vendor_amount'];
 
+        return $this->buildTransactionTotals(
+            $isGuest ? null : $customer,
+            $prices['customer_amount'],
+            $prices['vendor_amount'],
+            $prices['distance'],
+            $voucher,
+            $isGuest,
+        );
+    }
+
+    /**
+     * Aplica cupão e saldo sobre um preço-base já calculado.
+     *
+     * Separado do `calculateTransaction` para o checkout da seleção de
+     * profissional poder usar EXATAMENTE estas regras a partir do preço
+     * congelado no candidato, em vez de recalcular — recalcular no checkout
+     * daria outro número, porque a comissão horária muda com a hora do dia
+     * (ver docs/matching.md).
+     *
+     * @param  \App\Models\User|null  $customer  null para convidado (sem saldo nem histórico de cupões)
+     */
+    protected function buildTransactionTotals(
+        $customer,
+        int $originalAmount,
+        int $vendorAmount,
+        float|int $distance,
+        ?Voucher $voucher = null,
+        bool $isGuest = false,
+    ): array {
         $amount = $originalAmount;
         $discountAmount = 0;
 
@@ -238,6 +265,7 @@ trait CalculateServicePriceForCustomer
             $discountAmount = min($nominalDiscount, $maxDiscount);
             $amount = $originalAmount - $discountAmount;
         }
+
         if (! $isGuest) {
             $balance = $customer->balance_int;
 
@@ -263,7 +291,7 @@ trait CalculateServicePriceForCustomer
             'amount_formated' => number_format($amount / 100, 2, '.', ' '),
             'amount_for_vendor' => $vendorAmount,
             'amount_for_vendor_formated' => number_format($vendorAmount / 100, 2, '.', ' '),
-            'distance' => $prices['distance'],
+            'distance' => $distance,
             'original_amount' => $originalAmount,
             'original_amount_formated' => number_format($originalAmount / 100, 2, '.', ' '),
             'discount_amount' => $discountAmount,

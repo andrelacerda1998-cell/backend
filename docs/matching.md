@@ -222,11 +222,28 @@ Nenhum destes números é inventado aqui; são pontos de calibração com dados 
 2. `service_candidates` + modelo + estados novos
 3. `VendorRankingService` — elegibilidade, faixas, ordenação, vaga do novato
 4. `MatchingService` — shortlist (imediato) e ondas (agendado)
-5. Endpoints do cliente: shortlist, escolher, confirmar+pagar
+5. ~~Endpoints do cliente: shortlist, escolher, confirmar+pagar~~ — FEITO
+   (`MatchingController`, `/customer/services/matching`)
 6. Endpoints do profissional: aceitar, recusar
 7. Eventos em tempo real: candidato aceitou, pedido fechado, perdeste
 8. App do cliente: ecrã de escolha com atualização ao vivo
 9. App do profissional: proposta com contador visível
 
-Os pontos 1–4 não tocam em pagamentos. Do 5 em diante mexe-se em cobrança e
-cancelamento, e isso é sinalizado antes de avançar.
+## Endpoints do cliente
+
+| método | rota | o que faz |
+|---|---|---|
+| POST | `/customer/services/matching` | abre o pedido e põe candidatos em cima da mesa |
+| GET | `/customer/services/matching/{service}` | estado e quem há para escolher |
+| POST | `/customer/services/matching/{service}/select/{candidate}` | o cliente escolhe |
+| POST | `/customer/services/matching/{service}/checkout` | cobra o preço congelado |
+
+O checkout NÃO recalcula o preço: parte de `service_candidates.quoted_amount` e
+aplica cupão e saldo por cima, com as mesmas regras do fluxo antigo
+(`buildTransactionTotals`). A cobrança em si é a mesma
+(`ProcessesServicePayment`), extraída do `OpenServiceController` sem alterações
+— um segundo caminho de cobrança seria a forma mais rápida de as duas
+implementações divergirem em silêncio, e divergirem aqui é cobrar mal a alguém.
+
+Mantém-se do fluxo antigo: o lock do cupão, a barreira da comissão negativa, o
+3DS, o MBWay, e a saída antecipada para contas de teste.

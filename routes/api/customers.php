@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Customer\Services\CloseServiceController;
 use App\Http\Controllers\Api\Customer\Services\CustomerRateServiceController;
 use App\Http\Controllers\Api\Customer\Services\CustomerServicePhotosController;
 use App\Http\Controllers\Api\Customer\Services\GetServiceDetailsController;
+use App\Http\Controllers\Api\Customer\Services\MatchingController;
 use App\Http\Controllers\Api\Customer\Services\OpenServiceController;
 use App\Http\Controllers\Api\Customer\Services\OperationAreasController;
 use App\Http\Controllers\Api\Customer\Services\RequestServiceController;
@@ -50,6 +51,16 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
         // existe (ver CustomerServicePhotosController).
         Route::post('/photos', [CustomerServicePhotosController::class, 'store']);
         Route::delete('/photos/{media}', [CustomerServicePhotosController::class, 'destroy']);
+
+        // Seleção de profissional: candidatos primeiro, pagamento no fim
+        // (ver docs/matching.md). Fora do grupo {service} nos dois primeiros
+        // porque abrem o pedido, quando ainda não há serviço.
+        Route::group(['prefix' => 'matching'], function () {
+            Route::post('/', [MatchingController::class, 'start']);
+            Route::get('/{service}', [MatchingController::class, 'show'])->middleware('throttle:30,1');
+            Route::post('/{service}/select/{candidate}', [MatchingController::class, 'select']);
+            Route::post('/{service}/checkout', [MatchingController::class, 'checkout']);
+        });
 
         Route::post('/history', ServicesHistoryController::class);
         Route::group(['prefix' => '{service}'], function () {
