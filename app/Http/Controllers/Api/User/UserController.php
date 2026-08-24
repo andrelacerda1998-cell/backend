@@ -8,6 +8,7 @@ use App\Http\Requests\Api\Customer\UpdateUserRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
+use App\Services\Vendor\ZoneDemand;
 use App\Models\Auth\Authentications;
 use Illuminate\Http\Response;
 use Tymon\JWTAuth\Exceptions\JWTException;
@@ -62,6 +63,11 @@ class UserController extends Controller
                     ?? $vendor->addresses->first()?->name
                     ?? null,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
+                // Procura recente na zona escolhida. Serve dois momentos:
+                //  - perfil incompleto: o argumento para o acabar;
+                //  - aprovado mas com a semana a zero: dizer-lhe que há
+                //    mercado, em vez de o deixar com três zeros sem contexto.
+                'zone_recent_requests' => app(ZoneDemand::class)->recentRequestCount($vendor),
             ]);
         }
 

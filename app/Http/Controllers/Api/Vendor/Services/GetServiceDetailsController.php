@@ -19,28 +19,25 @@ class GetServiceDetailsController extends Controller
 
             $service = $service->load('customer', 'serviceType', 'vendor');
 
-            $data = [
-                'status' => $service->status,
-                'distance' => $service->distance,
-                'customer_notes' => $service->customer_notes,
-                'vendor_notes' => $service->vendor_notes,
-                'amount' => $service->amount,
-                'customer' => $service->customer->only('name', 'phone', 'email'),
-                'vendor' => [
-                    'user' => $service->vendor->user->only('name', 'phone', 'email'),
-                    'price_rate' => $service->vendor->price_rate,
+            // Usa o formatador comum em vez de montar um payload à parte: este
+            // ecrã precisa da MORADA e do AGENDAMENTO (dia/hora) para o técnico
+            // saber onde e quando é o serviço, e a versão anterior não os
+            // enviava — daí aparecerem vazios na app.
+            $data = $service->formatDataForVendor();
+
+            // Explícito, para não depender da convenção de `amount`: o que o
+            // técnico recebe é a sua parte, já sem a comissão da Piquet.
+            $data['amount_for_vendor'] = $service->amount_for_vendor;
+
+            // `scheduled_at` é só o DIA. A hora vive no agendamento e é o que o
+            // técnico precisa de ver para saber quando executar o serviço.
+            $data['schedule'] = $service->schedule ? [
+                'scheduled_day' => $service->schedule->scheduled_day,
+                'scheduled_time' => [
+                    'start' => $service->schedule->scheduled_time_start,
+                    'end' => $service->schedule->scheduled_time_end,
                 ],
-                'service_type' => [
-                    'id' => $service->serviceType->id,
-                    'name' => $service->serviceType->name,
-                    'time' => $service->serviceType->time,
-                    'operation_area' => $service->serviceType->operationArea->only('id', 'name'),
-                ],
-                'rating_by_vendor' => $service->rating_by_vendor,
-                'server_time' => now()->toIso8601String(),
-                'created_timestamp' => $service->created_at->timestamp,
-                'updated_timestamp' => $service->updated_at->timestamp,
-            ];
+            ] : null;
 
             return new ApiSuccessResponse([
                 'service' => $data,

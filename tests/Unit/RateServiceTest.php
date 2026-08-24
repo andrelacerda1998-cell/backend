@@ -72,11 +72,11 @@ class RateServiceTest extends TestCase
     public static function priceScenarios(): array
     {
         return [
-            'rate 0, distance-only, short'  => [0, 60, 9],
-            'rate 0, distance-only, long'   => [0, 60, 51],
-            'typical rate, mid distance'    => [1500, 60, 12],
-            'high rate, short distance'     => [3000, 30, 3],
-            'zero distance'                 => [1500, 60, 0],
+            'rate 0, distance-only, short' => [0, 60, 9],
+            'rate 0, distance-only, long' => [0, 60, 51],
+            'typical rate, mid distance' => [1500, 60, 12],
+            'high rate, short distance' => [3000, 30, 3],
+            'zero distance' => [1500, 60, 0],
         ];
     }
 
@@ -131,5 +131,107 @@ class RateServiceTest extends TestCase
     public static function discountPercentages(): array
     {
         return [[0], [10], [40], [90], [100]];
+    }
+
+    /**
+     * ------------------------------------------------------------------
+     * Unidades ("2 reparações de torneira"): mão de obra ×N, deslocação ×1.
+     * ------------------------------------------------------------------
+     *
+     * A regra vive em CalculateServicePriceForCustomer::effectiveMinutes(), que
+     * multiplica SÓ os minutos (tempo × unidades) e deixa a distância intacta.
+     * Como o RateService recebe esses minutos já multiplicados, os testes abaixo
+     * validam-no à porta do RateService: passar `time * quantity` tem de escalar
+     * a mão de obra sem tocar na deslocação.
+     */
+
+    /**
+     * O preço do cliente é AFIM no tempo: P(t) = mão_de_obra·t + deslocação.
+     * Logo, para N unidades (t = T·N), a parcela de deslocação aparece uma só
+     * vez. A prova sem depender das constantes: P(2T) = 2·P(T) − P(0), onde
+     * P(0) é a deslocação pura (tempo zero). Se a deslocação fosse cobrada duas
+     * vezes, esta igualdade partia-se.
+     *
+     * Sem arredondamento (round=false) para a igualdade ser exata.
+     */
+    #[DataProvider('quantityScenarios')]
+    public function test_quantity_scales_labour_but_not_travel(int $rate, int $time, int $distance): void
+    {
+        $one = fn (int $t) => $this->rateService->calculateForCustomerInstantService($rate, $t, $distance, false);
+
+        $priceOneUnit = $one($time);        // P(T)
+        $priceTwoUnits = $one($time * 2);   // P(2T)
+        $travelOnly = $one(0);              // P(0) = deslocação pura
+
+        // A 2.ª unidade custa exatamente a mão de obra de uma unidade — e nada
+        // de deslocação. É isto que "×N na mão de obra, ×1 na deslocação" quer dizer.
+        $this->assertEqualsWithDelta(
+            2 * $priceOneUnit - $travelOnly,
+            $priceTwoUnits,
+            0.0001,
+            'Duas unidades cobraram a deslocação a dobrar'
+        );
+
+        // A parcela de deslocação é a mesma esteja em 1 ou em 5 unidades.
+        $marginalSecond = $one($time * 2) - $one($time);
+        $marginalFifth = $one($time * 5) - $one($time * 4);
+        $this->assertEqualsWithDelta($marginalSecond, $marginalFifth, 0.0001, 'O custo marginal por unidade não é constante');
+    }
+
+    public static function quantityScenarios(): array
+    {
+        return [
+            'rate típica, distância média' => [1500, 90, 12],
+            'rate alta, curta' => [3000, 30, 3],
+            'distância zero' => [1500, 60, 0],
+            'distância longa' => [1200, 60, 51],
+        ];
+    }
+
+    /**
+     * O mesmo tem de valer para o AGENDADO e para o pagamento ao TÉCNICO: se só
+     * a mão de obra escala num deles e a deslocação escala noutro, o cliente e o
+     * técnico deixam de estar sincronizados e a comissão descola.
+     */
+    public function test_quantity_scaling_is_consistent_across_customer_and_vendor(): void
+    {
+        $rate = 1800;
+        $time = 60;
+        $distance = 20;
+
+        foreach ([2, 3, 5] as $q) {
+            $customerTravel = $this->rateService->calculateForCustomerForSchedule($rate, 0, $distance, false);
+            $customer1 = $this->rateService->calculateForCustomerForSchedule($rate, $time, $distance, false);
+            $customerN = $this->rateService->calculateForCustomerForSchedule($rate, $time * $q, $distance, false);
+            $this->assertEqualsWithDelta($q * $customer1 - ($q - 1) * $customerTravel, $customerN, 0.0001, "Cliente agendado x{$q} inconsistente");
+
+            $vendorTravel = $this->rateService->calculateForVendor($rate, 0, $distance, false);
+            $vendor1 = $this->rateService->calculateForVendor($rate, $time, $distance, false);
+            $vendorN = $this->rateService->calculateForVendor($rate, $time * $q, $distance, false);
+            $this->assertEqualsWithDelta($q * $vendor1 - ($q - 1) * $vendorTravel, $vendorN, 0.0001, "Técnico x{$q} inconsistente");
+        }
+    }
+
+    /**
+     * A comissão (cliente − técnico) nunca fica negativa quando as unidades
+     * sobem — é a mesma garantia do teste da distância única, agora sob N.
+     */
+    #[DataProvider('quantityCounts')]
+    public function test_commission_stays_non_negative_across_quantities(int $quantity): void
+    {
+        $rate = 1500;
+        $time = 60;
+        $distance = 12;
+        $minutes = $time * $quantity;
+
+        $customer = (int) round($this->rateService->calculateForCustomerInstantService($rate, $minutes, $distance));
+        $vendor = (int) round($this->rateService->calculateForVendor($rate, $minutes, $distance));
+
+        $this->assertGreaterThanOrEqual($vendor, $customer, "Comissão negativa com {$quantity} unidades");
+    }
+
+    public static function quantityCounts(): array
+    {
+        return [[1], [2], [3], [5], [10]];
     }
 }

@@ -38,6 +38,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'vendor_id',
         'status',
         'services_type_id',
+        'quantity',
         'address',
         'distance',
         'rating_by_customer',
@@ -75,9 +76,17 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'pending_schedule_data' => 'array',
         'is_test' => 'boolean',
         'on_the_way_at' => 'datetime',
+        'arrived_at' => 'datetime',
     ];
 
     protected $appends = ['price_rate'];
+
+    /**
+     * Marca transitória (não é coluna): um cancelamento JÁ COBRADO não deve ser
+     * reembolsado pelo ServiceObserver. Propriedade real declarada de propósito —
+     * um atributo dinâmico via Eloquent seria gravado como coluna no save().
+     */
+    public bool $skipCancellationRefund = false;
 
     public function customer(): BelongsTo
     {
@@ -94,6 +103,15 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /**
+     * Profissionais considerados para este serviço, incluindo os que perderam
+     * — ver docs/matching.md.
+     */
+    public function candidates(): HasMany
+    {
+        return $this->hasMany(ServiceCandidate::class);
     }
 
     public function serviceType(): BelongsTo
@@ -240,6 +258,29 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         return $amountWithoutVat - $amountForVendorWithoutVat;
     }
 
+    /**
+     * Fotos que o cliente juntou ao pedido, prontas a enviar para as apps.
+     *
+     * Um sítio só: o payload do técnico, o do cliente e o detalhe do serviço
+     * pediam todos o mesmo, e três cópias divergiriam à primeira alteração
+     * (bastava alguém mudar a validade do URL num sítio e não nos outros).
+     *
+     * URL temporário POR media — `getFirstTemporaryUrl()` na coleção devolveria
+     * sempre a primeira foto, e as apps mostrariam a mesma imagem N vezes.
+     * 60 minutos chega para o técnico ver o pedido, decidir e ir a caminho sem
+     * o link morrer pelo caminho.
+     */
+    public function customerPhotosPayload(): array
+    {
+        return $this->getMedia('customer')
+            ->map(fn ($media) => [
+                'id' => $media->id,
+                'url' => $media->getTemporaryUrl(now()->addMinutes(60)),
+            ])
+            ->values()
+            ->all();
+    }
+
     public function formatDataForVendor(): array
     {
         $service = $this;
@@ -250,13 +291,26 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'id' => $service->id,
             'status' => $service->status,
             'on_the_way_at' => $service->on_the_way_at?->toIso8601String(),
+            // Início da execução — a app conta a partir daqui.
+            'arrived_at' => $service->arrived_at?->toIso8601String(),
             'is_immediate' => ! $service->schedule()->exists(),
             'scheduled_at' => $service->schedule?->scheduled_day,
             'created_at' => $service->created_at?->toIso8601String(),
             'distance' => $service->distance,
+            // Unidades pedidas. Vai nos dois payloads: o técnico precisa de saber
+            // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
+            // precisa de ver o que comprou.
+            'quantity' => (int) ($service->quantity ?? 1),
             'customer_notes' => $service->customer_notes,
+            // O que o cliente fotografou ao pedir. É a diferença entre o técnico
+            // sair às cegas e sair a saber que peça levar.
+            'customer_photos' => $service->customerPhotosPayload(),
             'vendor_notes' => $service->vendor_notes,
+            // `amount` mantém-se por compatibilidade (versões antigas da app
+            // leem-no), mas o nome mente: é a parte do VENDOR. O campo
+            // explícito evita que o cliente confunda com o total do serviço.
             'amount' => $service->amount_for_vendor,
+            'amount_for_vendor' => $service->amount_for_vendor,
             'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),
             'vendor' => $service->vendor->user ? [
                 'user' => $service->vendor->user->only('name', 'phone_number', 'email', 'avatar'),
@@ -377,7 +431,14 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'id' => $service->id,
             'status' => $service->status,
             'distance' => $service->distance,
+            // Unidades pedidas. Vai nos dois payloads: o técnico precisa de saber
+            // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
+            // precisa de ver o que comprou.
+            'quantity' => (int) ($service->quantity ?? 1),
             'customer_notes' => $service->customer_notes,
+            // O que o cliente fotografou ao pedir. É a diferença entre o técnico
+            // sair às cegas e sair a saber que peça levar.
+            'customer_photos' => $service->customerPhotosPayload(),
             'vendor_notes' => $service->vendor_notes,
             'amount' => $service->amount,
             'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),

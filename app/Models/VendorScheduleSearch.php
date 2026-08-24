@@ -78,8 +78,14 @@ class VendorScheduleSearch extends Model
             'total_ratings' => $r->total_ratings,
         ])->toArray();
 
-        // Average rating for sorting (use first or default to 5)
-        $attributes['average_rating'] = $vendor->averageRating->first()?->average_rating ?? 5;
+        // Chave de ordenação. Quem ainda não tem avaliações vale 0 e não 5:
+        // com o 5 fictício, um profissional que nunca trabalhou aparecia à
+        // frente de toda a gente numa ordenação descendente.
+        //
+        // NOTA: isto muda a ordem da pesquisa — a oferta nova passa a aparecer
+        // no fim. É o problema de arranque a frio, e a resposta a ele é a vaga
+        // reservada do fluxo de seleção (docs/matching.md), não uma nota falsa.
+        $attributes['average_rating'] = $vendor->averageRating->first()?->average_rating ?? 0;
 
         // Schedule availability
         $availability = $this->buildScheduleAvailability($vendor);

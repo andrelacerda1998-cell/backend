@@ -417,7 +417,7 @@ class VendorController extends Controller
             ->whereIn('vendor_id', $vendorIds)
             ->where('status', ServiceStatus::CLOSED)
             ->where('is_test', false)
-            ->selectRaw('vendor_id, COUNT(*) as services_completed, SUM(amount_for_vendor) as amount_received, SUM(amount - amount_for_vendor) as amount_generated, AVG(rating_by_vendor) as avg_rating')
+            ->selectRaw('vendor_id, COUNT(*) as services_completed, SUM(amount_for_vendor) as amount_received, SUM(amount - amount_for_vendor) as amount_generated, AVG(rating_by_customer) as avg_rating')
             ->groupBy('vendor_id')
             ->orderByDesc('amount_generated')
             ->limit($limit)

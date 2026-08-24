@@ -16,6 +16,7 @@ use App\Services\Customer\Services\ScheduleVendorSearchService;
 use App\Services\Customer\Services\VendorSearchService;
 use App\Services\RateService;
 use App\Trait\Services\HasVendorDistance;
+use Illuminate\Http\Request;
 
 class RequestServiceController extends Controller
 {
@@ -23,6 +24,8 @@ class RequestServiceController extends Controller
 
     public function __invoke(RequestServiceRequest $request, VendorSearchService $searchService)
     {
+        // Unidades pedidas. Sem valor => 1, que é o comportamento de sempre.
+        $quantity = max(1, (int) $request->get('quantity', 1));
         try {
             $currentUser = auth()->user();
             $mainAddress = $currentUser->mainAddress();
@@ -48,8 +51,9 @@ class RequestServiceController extends Controller
         }
     }
 
-    public function guestSearch(\Illuminate\Http\Request $request, VendorSearchService $searchService, ScheduleVendorSearchService $scheduleSearchService)
+    public function guestSearch(Request $request, VendorSearchService $searchService, ScheduleVendorSearchService $scheduleSearchService)
     {
+        $quantity = max(1, (int) $request->get('quantity', 1));
         // Validação fora do try: a ValidationException tem de propagar para o handler
         // global (422), senão o catch abaixo mascara-a num 500 "Something went wrong".
         $request->validate([
@@ -83,7 +87,10 @@ class RequestServiceController extends Controller
                 $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress) {
                     $rateService = app(RateService::class);
                     $hourlyRate = $vendor->getRawOriginal('price_rate');
-                    $timeService = $serviceType->time;
+                    // Unidades: a lista de técnicos mostra o preço FINAL, por isso
+                    // tem de já contar com elas — senão o cliente compara valores de
+                    // uma unidade e no checkout aparece outro número.
+                    $timeService = $serviceType->time * $quantity;
 
                     $scheduleAddress = $vendor->addresses()
                         ->where('address_type', AddressType::SCHEDULE_ADDRESS)
@@ -121,7 +128,10 @@ class RequestServiceController extends Controller
                 $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress) {
                     $rateService = app(RateService::class);
                     $hourlyRate = $vendor->getRawOriginal('price_rate');
-                    $timeService = $serviceType->time;
+                    // Unidades: a lista de técnicos mostra o preço FINAL, por isso
+                    // tem de já contar com elas — senão o cliente compara valores de
+                    // uma unidade e no checkout aparece outro número.
+                    $timeService = $serviceType->time * $quantity;
 
                     if ($vendor->currentLocation == null) {
                         return null;
@@ -163,7 +173,7 @@ class RequestServiceController extends Controller
             $vendorUser = $vendor->user;
 
             $hourlyRate = $vendor->getRawOriginal('price_rate');
-            $timeService = $serviceType->time;
+            $timeService = $serviceType->time * $quantity;
 
             if ($vendor->currentLocation == null) {
                 return null;
@@ -184,10 +194,10 @@ class RequestServiceController extends Controller
                 // 'hourly_rate' => $hourlyRate,
                 'distance' => $distance,
                 // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
-                        // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
-                        // cliente com nota maxima, indistinguivel de quem a merecera.
-                        'rating' => $vendorRatings?->average_rating,
-                        'ratings_count' => $vendorRatings?->total_ratings ?? 0,
+                // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
+                // cliente com nota maxima, indistinguivel de quem a merecera.
+                'rating' => $vendorRatings?->average_rating,
+                'ratings_count' => $vendorRatings?->total_ratings ?? 0,
                 'avatar' => $vendorUser->avatar,
             ];
         })->values()->take(3);

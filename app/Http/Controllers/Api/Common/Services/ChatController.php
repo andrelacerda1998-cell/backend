@@ -56,12 +56,26 @@ class ChatController extends Controller
             abort(403);
         }
 
-        $messages = $service->messages->transform(function ($message) use ($service) {
+        $viewerId = auth('api')->user()->id;
+
+        // Abrir o chat marca como lidas as mensagens do OUTRO lado. A coluna
+        // is_read já existia na tabela mas nunca era escrita nem exposta: o
+        // técnico escrevia ao cliente e ficava sem saber se tinha sido lido —
+        // à porta fechada, com o cliente ausente, isso é aflitivo.
+        $service->messages()
+            ->where('user_id', '!=', $viewerId)
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        $messages = $service->messages()->get()->transform(function ($message) use ($service) {
 
             return [
                 'message' => $this->decryptData($message->message, $service->rsa),
                 'from' => $message->user_id,
                 'date' => $message->created_at,
+                // Só interessa nas MINHAS mensagens (o "lido" do destinatário);
+                // a app ignora-o nas recebidas.
+                'is_read' => (bool) $message->is_read,
             ];
         });
 

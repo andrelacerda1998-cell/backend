@@ -66,6 +66,22 @@ return [
         'description' => 'O cliente enviou-te uma nova mensagem sobre o serviço: ',
         'description_vendor' => 'O técnico enviou-te uma nova mensagem sobre o serviço: ',
     ],
+    'serviceStuck' => [
+        'title' => 'Serviço por concluir',
+        'description' => 'O serviço ":service" está em execução há :hours horas. Conclui-o para receberes o pagamento.',
+    ],
+    'incompleteProfile' => [
+        'greeting' => 'Olá :name,',
+        'action' => 'Completar o meu perfil',
+        'default' => [
+            'title' => 'Faltam :steps passos',
+            'description' => 'Completa o teu perfil para começares a receber pedidos na tua zona.',
+        ],
+        'with_requests' => [
+            'title' => 'Há pedidos à tua espera',
+            'description' => 'Esta semana houve :requests pedidos na tua zona. Faltam-te :steps passos para os poderes aceitar.',
+        ],
+    ],
     'newService' => [
         'title' => 'Novo serviço de ',
         'description' => 'Tens 60 segundos para aceitar',

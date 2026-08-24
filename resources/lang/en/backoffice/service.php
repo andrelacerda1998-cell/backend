@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Services',
     'singular' => 'Service',
@@ -42,7 +43,7 @@ return [
     'status' => [
         'Pending' => 'Pending',
         'Closed' => 'Closed',
-        'Canceled' => 'Canceled'
+        'Canceled' => 'Canceled',
     ],
     'infolist' => [
         'details' => 'Details',
@@ -74,6 +75,10 @@ return [
         'invoice_not_created' => 'Invoice not created yet',
         'invoice_url' => 'Invoice URL',
         'customer_notes' => 'Customer notes',
+        'customer_request' => 'Customer request',
+        'quantity' => 'Units',
+        'customer_photos' => 'Customer photos',
+        'customer_notes_empty' => 'The customer left no notes.',
         'vendor_notes' => 'Vendor notes',
         'commission_with_vat' => 'Commission With VAT',
         'commission_without_vat' => 'Commission Without VAT',

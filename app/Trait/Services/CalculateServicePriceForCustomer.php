@@ -3,7 +3,6 @@
 namespace App\Trait\Services;
 
 use App\DTO\Services\AddressCoordinatesDTO;
-use App\Enums\Services\AddressType;
 use App\Exceptions\Api\Customer\CustomerCantRequestServices;
 use App\Exceptions\Api\Customer\CustomerDontHaveMainAddress;
 use App\Exceptions\Api\Vendor\VendorCantAcceptServices;
@@ -18,16 +17,37 @@ trait CalculateServicePriceForCustomer
 {
     use GeoAddress, HasVendorDistance;
 
+    /**
+     * Minutos de trabalho que o pedido representa.
+     *
+     * ESTA é a alavanca das unidades. O preço é
+     *   (tarifa_hora × duração) + (preço_km × distância)
+     * e só a PRIMEIRA parcela é que escala: duas torneiras na mesma visita são
+     * o dobro do trabalho, mas uma só deslocação. Multiplicar o total daria
+     * duas deslocações a quem só teve uma — e um cliente atento nota.
+     *
+     * Como só se mexe nos minutos, o pagamento ao técnico (calculateForVendor,
+     * que parte do mesmo tempo) e a duração da marcação acompanham sozinhos.
+     *
+     * Se algum dia a regra passar a ser "o preço duplica e ponto", troca-se
+     * aqui por uma multiplicação do total — em nenhum outro sítio.
+     */
+    protected function effectiveMinutes(ServicesType $serviceType, int $quantity = 1): int
+    {
+        return (int) round($serviceType->time * max(1, $quantity));
+    }
+
     protected function calculateServicePrice(
         ServicesType $serviceType,
         AddressCoordinatesDTO|Address $address,
         Vendor $vendor,
-        bool $isScheduled = false
+        bool $isScheduled = false,
+        int $quantity = 1
     ): float {
         $rateService = app(RateService::class);
 
         $hourlyRate = $vendor->getRawOriginal('price_rate');
-        $timeService = $serviceType->time;
+        $timeService = $this->effectiveMinutes($serviceType, $quantity);
 
         if ($isScheduled) {
             $customerCoords = $address instanceof AddressCoordinatesDTO
@@ -61,12 +81,13 @@ trait CalculateServicePriceForCustomer
         ServicesType $serviceType,
         AddressCoordinatesDTO|Address $address,
         Vendor $vendor,
-        bool $isScheduled = false
+        bool $isScheduled = false,
+        int $quantity = 1
     ): array {
         $rateService = app(RateService::class);
 
         $hourlyRate = $vendor->getRawOriginal('price_rate');
-        $timeService = $serviceType->time;
+        $timeService = $this->effectiveMinutes($serviceType, $quantity);
 
         if ($isScheduled) {
             $customerCoords = $address instanceof AddressCoordinatesDTO
@@ -89,13 +110,13 @@ trait CalculateServicePriceForCustomer
         ];
     }
 
-    protected function calculateGuestPrice(Vendor $vendor, ServicesType $serviceType, float $latitude, float $longitude): array
+    protected function calculateGuestPrice(Vendor $vendor, ServicesType $serviceType, float $latitude, float $longitude, int $quantity = 1): array
     {
         $guestAddress = new AddressCoordinatesDTO($latitude, $longitude);
 
         $rateService = app(RateService::class);
         $hourlyRate = $vendor->getRawOriginal('price_rate');
-        $timeService = $serviceType->time;
+        $timeService = $this->effectiveMinutes($serviceType, $quantity);
         $distance = $this->calculateVendorDistanceInstantService($vendor, $guestAddress);
         $amount = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
 
@@ -187,8 +208,7 @@ trait CalculateServicePriceForCustomer
         $vendor,
         ServicesType $serviceType,
         bool $isScheduled = false,
-        ?Voucher $voucher = null
-    , bool $isGuest = false, ?array $address = null): array
+        ?Voucher $voucher = null, bool $isGuest = false, ?array $address = null, int $quantity = 1): array
     {
 
         if ($isGuest) {
@@ -200,10 +220,37 @@ trait CalculateServicePriceForCustomer
             $address = $this->fetchCustomerMainAddress($customer);
         }
 
-        $prices = $this->calculatePrices($serviceType, $address, $vendor, $isScheduled);
-        $originalAmount = $prices['customer_amount'];
-        $vendorAmount = $prices['vendor_amount'];
+        $prices = $this->calculatePrices($serviceType, $address, $vendor, $isScheduled, $quantity);
 
+        return $this->buildTransactionTotals(
+            $isGuest ? null : $customer,
+            $prices['customer_amount'],
+            $prices['vendor_amount'],
+            $prices['distance'],
+            $voucher,
+            $isGuest,
+        );
+    }
+
+    /**
+     * Aplica cupão e saldo sobre um preço-base já calculado.
+     *
+     * Separado do `calculateTransaction` para o checkout da seleção de
+     * profissional poder usar EXATAMENTE estas regras a partir do preço
+     * congelado no candidato, em vez de recalcular — recalcular no checkout
+     * daria outro número, porque a comissão horária muda com a hora do dia
+     * (ver docs/matching.md).
+     *
+     * @param  \App\Models\User|null  $customer  null para convidado (sem saldo nem histórico de cupões)
+     */
+    protected function buildTransactionTotals(
+        $customer,
+        int $originalAmount,
+        int $vendorAmount,
+        float|int $distance,
+        ?Voucher $voucher = null,
+        bool $isGuest = false,
+    ): array {
         $amount = $originalAmount;
         $discountAmount = 0;
 
@@ -218,6 +265,7 @@ trait CalculateServicePriceForCustomer
             $discountAmount = min($nominalDiscount, $maxDiscount);
             $amount = $originalAmount - $discountAmount;
         }
+
         if (! $isGuest) {
             $balance = $customer->balance_int;
 
@@ -243,7 +291,7 @@ trait CalculateServicePriceForCustomer
             'amount_formated' => number_format($amount / 100, 2, '.', ' '),
             'amount_for_vendor' => $vendorAmount,
             'amount_for_vendor_formated' => number_format($vendorAmount / 100, 2, '.', ' '),
-            'distance' => $prices['distance'],
+            'distance' => $distance,
             'original_amount' => $originalAmount,
             'original_amount_formated' => number_format($originalAmount / 100, 2, '.', ' '),
             'discount_amount' => $discountAmount,

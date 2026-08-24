@@ -18,6 +18,13 @@ class ServiceObserver
             return;
         }
 
+        // Cancelamento JÁ COBRADO (a caminho / em execução): o dinheiro foi
+        // capturado e repartido 50/50 no CancelService. Não reembolsar — era
+        // devolver ao cliente o que já se pagou ao técnico e à plataforma.
+        if ($service->skipCancellationRefund) {
+            return;
+        }
+
         // CANCELED and the terminal MBWay-failure statuses all release/refund the hold.
         // RefusedMbway/ExpiredMbway/CanceledMbway carry the reason on the status; the money handling is identical.
         if (! in_array($service->status, [

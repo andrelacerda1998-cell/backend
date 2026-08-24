@@ -5,6 +5,15 @@ namespace App\Enums\Services;
 enum ServiceStatus: string
 {
     case PENDING = 'Pending';
+    // À procura de profissional: o serviço existe, ainda sem vendor_id e sem
+    // pagamento. Fora do conjunto de "serviço aberto" — um pedido por atribuir
+    // não pode bloquear um profissional de aceitar outros (ver docs/matching.md).
+    case MATCHING = 'Matching';
+    // Um profissional aceitou e o cliente escolheu-o; falta o checkout. Também
+    // fora do "serviço aberto": ainda não há dinheiro nem compromisso firme.
+    case AWAITING_PAYMENT = 'AwaitingPayment';
+    // Ninguém aceitou, ou todos recusaram, ou o checkout caducou; terminal.
+    case MATCHING_FAILED = 'MatchingFailed';
     // Awaiting 3DS credit-card validation; intentionally outside the "open service" set so it does not block new requests
     case PENDING_3DS = 'Pending3DS';
     case CANCELED = 'Canceled';

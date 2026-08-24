@@ -116,7 +116,13 @@ class ScheduleController extends Controller
         $services = $vendor->services()
             ->whereIn('status', [ServiceStatus::SCHEDULED, ServiceStatus::ACCEPTED])
             ->whereHas('schedule', function ($query) {
-                $query->where('scheduled_day', '>=', Carbon::now()->startOfDay())
+                // A janela recua 7 dias para trás de propósito: um agendamento
+                // cuja hora passou e que não foi concluído tem de continuar a
+                // chegar à app. Antes começava em "hoje" e esses serviços
+                // simplesmente desapareciam do ecrã do técnico — nem "em
+                // atraso", nem "não compareceste" — e ele acumulava faltas sem
+                // nunca saber. A app mostra-os numa secção "Em atraso".
+                $query->where('scheduled_day', '>=', Carbon::now()->subDays(7)->startOfDay())
                     ->where('scheduled_day', '<=', Carbon::now()->addDays(15))
                     ->where('is_pending', '=', 0);
             })

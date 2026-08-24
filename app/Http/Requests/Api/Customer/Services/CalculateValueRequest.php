@@ -9,6 +9,9 @@ class CalculateValueRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // Mesmo teto do pedido: o preço mostrado tem de bater certo
+            // com o que é cobrado, portanto as regras andam a par.
+            'quantity' => 'integer|nullable|min:1|max:10',
             'vendor_id' => 'integer|required|exists:App\Models\Vendor,id',
             'service_type' => 'integer|required|exists:App\Models\GeneralSettings\ServicesType,id',
             'scheduled' => 'boolean',

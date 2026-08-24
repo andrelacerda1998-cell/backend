@@ -28,6 +28,15 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::get('/', App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServiceOpenController::class);
         Route::get('/pending', [App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServicePendingController::class, 'service']);
         Route::get('/pending/all', [App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServicePendingController::class, 'services']);
+        // Convites de seleção de profissional (ver docs/matching.md). Antes do
+        // grupo {service} porque a chave é o candidato, não o serviço — e
+        // porque `matching` colidiria com o parâmetro {service}.
+        Route::group(['prefix' => 'matching'], function () {
+            Route::get('/', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'index']);
+            Route::post('/{candidate}/accept', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'accept']);
+            Route::post('/{candidate}/decline', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'decline']);
+        });
+
         Route::get('/{service}', [App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServiceOpenController::class, 'service']);
         Route::group(['prefix' => '{service}'], function () {
             Route::get('/', App\Http\Controllers\Api\Vendor\Services\GetServiceDetailsController::class);
@@ -97,6 +106,11 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::get('/schedules', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'schedules']);
         Route::post('/accept', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'storeSchedule']);
         Route::get('/pending-schedules', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'pendingSchedules']);
+
+        // Indisponibilidade pontual (folga, doenca, ferias) — ver o controlador.
+        Route::get('/unavailable-days', [App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController::class, 'index']);
+        Route::post('/unavailable-days', [App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController::class, 'store']);
+        Route::delete('/unavailable-days/{day}', [App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController::class, 'destroy']);
 
         Route::get('/details/{schedule}', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'getScheduleData']);
         Route::post('/go-to-location/{service}', App\Http\Controllers\Api\Vendor\Schedule\GoToLocationController::class);
