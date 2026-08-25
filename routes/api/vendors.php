@@ -33,6 +33,8 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         // porque `matching` colidiria com o parâmetro {service}.
         Route::group(['prefix' => 'matching'], function () {
             Route::get('/', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'index']);
+            // Padrões de procura, calculados a partir de pedidos reais.
+            Route::get('/insights', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'insights'])->middleware('throttle:10,1');
             Route::post('/{candidate}/accept', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'accept']);
             Route::post('/{candidate}/decline', [App\Http\Controllers\Api\Vendor\Services\MatchingInvitationsController::class, 'decline']);
         });

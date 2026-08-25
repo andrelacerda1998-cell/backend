@@ -6,6 +6,7 @@ use App\Enums\Services\CandidateStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
+use App\Models\Service;
 use App\Models\ServiceCandidate;
 use App\Services\Matching\MatchingService;
 use Exception;
@@ -20,6 +21,12 @@ use Exception;
  */
 class MatchingInvitationsController extends Controller
 {
+    /** Abaixo desta amostra, qualquer pico é ruído. */
+    private const MIN_SAMPLE_FOR_INSIGHT = 30;
+
+    /** A janela tem de concentrar pelo menos isto para valer a pena dizê-lo. */
+    private const MIN_SHARE_FOR_INSIGHT = 0.35;
+
     public function __construct(private MatchingService $matching)
     {
     }
@@ -42,6 +49,67 @@ class MatchingInvitationsController extends Controller
         return new ApiSuccessResponse(
             $invitations->map(fn (ServiceCandidate $c) => $this->payload($c))->values()
         );
+    }
+
+    /**
+     * A que horas costumam entrar pedidos dos serviços dele.
+     *
+     * Calculado a partir dos pedidos REAIS das áreas em que ele trabalha, nos
+     * últimos 60 dias. Devolve null quando não há amostra que chegue — dizer
+     * "costumam aparecer entre as 9h e as 11h" com base em três pedidos é
+     * inventar um padrão, e um padrão inventado faz alguém organizar o dia à
+     * volta de nada.
+     */
+    public function insights(): ApiSuccessResponse
+    {
+        $vendor = auth()->user()->vendor;
+
+        $typeIds = $vendor?->servicesTypes()->pluck('services_types.id') ?? collect();
+
+        if ($typeIds->isEmpty()) {
+            return new ApiSuccessResponse(['busiest_hours' => null]);
+        }
+
+        $byHour = Service::query()
+            ->whereIn('services_type_id', $typeIds)
+            ->where('created_at', '>=', now()->subDays(60))
+            ->where('is_test', false)
+            ->selectRaw('HOUR(created_at) as h, COUNT(*) as total')
+            ->groupBy('h')
+            ->pluck('total', 'h');
+
+        $sample = $byHour->sum();
+
+        // Abaixo disto qualquer pico é ruído: um dia atípico chegaria para
+        // inventar uma "hora de ponta".
+        if ($sample < self::MIN_SAMPLE_FOR_INSIGHT) {
+            return new ApiSuccessResponse(['busiest_hours' => null]);
+        }
+
+        // Melhor janela de 3 horas seguidas: um pico numa hora isolada é menos
+        // acionável do que "ao final da manhã".
+        $best = null;
+
+        for ($start = 0; $start <= 21; $start++) {
+            $total = ($byHour[$start] ?? 0) + ($byHour[$start + 1] ?? 0) + ($byHour[$start + 2] ?? 0);
+
+            if (! $best || $total > $best['total']) {
+                $best = ['start' => $start, 'end' => $start + 3, 'total' => $total];
+            }
+        }
+
+        // Uma janela que não concentra nada não é informação.
+        if (! $best || $best['total'] < $sample * self::MIN_SHARE_FOR_INSIGHT) {
+            return new ApiSuccessResponse(['busiest_hours' => null]);
+        }
+
+        return new ApiSuccessResponse([
+            'busiest_hours' => [
+                'from' => $best['start'],
+                'to' => $best['end'],
+                'share' => (int) round($best['total'] / $sample * 100),
+            ],
+        ]);
     }
 
     public function accept(ServiceCandidate $candidate): ApiSuccessResponse|ApiErrorResponse
