@@ -46,7 +46,11 @@ class VendorObserver
             ScheduleAvailable::query()->create([
                 'vendor_id' => $vendor->id,
                 'day_id' => $dayId,
-                'auto_accept' => true,
+                // Desligada por omissão: a auto-aceitação responde por ele aos
+                // pedidos de serviço, e isso é uma escolha que tem de ser dele.
+                // Nascer ligada fazia toda a gente aceitar tudo sem nunca o ter
+                // decidido — e a etapa de resposta perdia sentido.
+                'auto_accept' => false,
                 'is_enabled' => ! in_array($dayName, $weekendDays),
             ]);
         }
