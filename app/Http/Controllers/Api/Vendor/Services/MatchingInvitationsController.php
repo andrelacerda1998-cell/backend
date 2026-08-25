@@ -124,6 +124,10 @@ class MatchingInvitationsController extends Controller
             'distance' => (float) $candidate->quoted_distance,
             // A janela é visível de propósito: sem saber quando fica livre, o
             // profissional fica pendurado e deixa de responder.
+            // Início e fim da janela: com os dois, a app pode mostrar quanto
+            // JÁ correu e não só quanto falta — a proporção diz mais num
+            // relance do que o número sozinho.
+            'notified_at' => $candidate->notified_at?->toIso8601String(),
             'expires_at' => $candidate->expires_at?->toIso8601String(),
             'service_type' => $service?->serviceType ? [
                 'id' => $service->serviceType->id,
