@@ -42,7 +42,7 @@ class VendorRankingService
         ?CarbonInterface $scheduledFor = null,
         int $quantity = 1,
     ): Collection {
-        $vendors = $this->eligibleVendors($serviceType, $customer, $immediate, $scheduledFor);
+        $vendors = $this->eligibleVendors($serviceType, $customer, $immediate, $scheduledFor, $quantity);
 
         if ($vendors->isEmpty()) {
             return collect();
@@ -103,6 +103,7 @@ class VendorRankingService
         User $customer,
         bool $immediate,
         ?CarbonInterface $scheduledFor,
+        int $quantity = 1,
     ): Collection {
         $isCustomerTest = (bool) ($customer->is_test ?? false);
 
@@ -127,10 +128,31 @@ class VendorRankingService
         }
 
         if ($scheduledFor) {
-            $vendors = $vendors->reject(fn (Vendor $v) => $v->isUnavailableOn($scheduledFor));
+            // Não basta o dia estar livre: o BLOCO tem de estar. Convidar
+            // alguém para uma hora que não tem disponível é pior do que não o
+            // convidar — ou recusa, e aprende que os convites não são de fiar,
+            // ou aceita por distração e falta.
+            $slotEnd = $scheduledFor->copy()->addMinutes($this->slotMinutes($serviceType, $quantity));
+
+            $vendors = $vendors->filter(fn (Vendor $v) => $v->hasFreeSlot($scheduledFor, $slotEnd));
         }
 
         return $vendors->values();
+    }
+
+    /**
+     * Duração do bloco a reservar, em minutos.
+     *
+     * A mesma que o pricing usa (`effectiveMinutes`), para o que se verifica na
+     * agenda ser exatamente o que se vai ocupar. Sem duração no catálogo
+     * assume-se uma hora — não bloquear nada seria pior, porque deixaria passar
+     * sobreposições reais.
+     */
+    private function slotMinutes(ServicesType $serviceType, int $quantity): int
+    {
+        $minutes = $serviceType->time ? $this->effectiveMinutes($serviceType, $quantity) : 0;
+
+        return $minutes > 0 ? $minutes : 60;
     }
 
     /**

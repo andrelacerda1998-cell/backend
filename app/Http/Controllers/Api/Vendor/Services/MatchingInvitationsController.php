@@ -81,6 +81,35 @@ class MatchingInvitationsController extends Controller
         return $candidate->vendor_id === auth()->user()->vendor?->id;
     }
 
+    /**
+     * Dia e hora pretendidos, venham da agenda já materializada ou da intenção
+     * guardada enquanto ela não pode existir.
+     */
+    private function scheduleFor(?\App\Models\Service $service): ?array
+    {
+        if (! $service) {
+            return null;
+        }
+
+        if ($service->schedule) {
+            return [
+                'scheduled_day' => $service->schedule->scheduled_day,
+                'scheduled_time_start' => $service->schedule->scheduled_time_start,
+            ];
+        }
+
+        $pending = $service->pending_schedule_data['schedule'] ?? null;
+
+        if (! ($service->pending_schedule_data['scheduled'] ?? false) || ! $pending) {
+            return null;
+        }
+
+        return [
+            'scheduled_day' => $pending['scheduled_day'] ?? null,
+            'scheduled_time_start' => $pending['scheduled_time_start'] ?? null,
+        ];
+    }
+
     private function payload(ServiceCandidate $candidate): array
     {
         $service = $candidate->service;
@@ -105,9 +134,13 @@ class MatchingInvitationsController extends Controller
                 'city' => $service->address['city'] ?? null,
                 'postal_code' => $service->address['postal_code'] ?? null,
             ] : null,
-            'schedule' => $service?->schedule ? [
-                'scheduled_day' => $service->schedule->scheduled_day,
-            ] : null,
+            // Durante a seleção NÃO existe linha de agenda: schedule.vendor_id é
+            // NOT NULL e ainda não há profissional atribuído. A intenção vive em
+            // pending_schedule_data até ao pagamento (ver docs/matching.md).
+            //
+            // Ler só $service->schedule fazia o convite de um agendamento chegar
+            // sem data nenhuma — e a data é o que decide se ele pode ou não.
+            'schedule' => $this->scheduleFor($service),
         ];
     }
 }

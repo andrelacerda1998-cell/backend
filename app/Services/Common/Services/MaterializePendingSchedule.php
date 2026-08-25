@@ -30,7 +30,15 @@ class MaterializePendingSchedule
 
     public function __construct(private readonly AcceptService $acceptService) {}
 
-    public function handle(Service $service): void
+    /**
+     * @param  bool  $alreadyAccepted  O profissional já aceitou ANTES do pagamento
+     *                                 (fluxo de seleção — ver docs/matching.md).
+     *                                 Nesse caso não se lhe pergunta outra vez
+     *                                 nem se arma o cancelamento por falta de
+     *                                 resposta: a resposta já existe, e o job
+     *                                 cancelaria um serviço pago e aceite.
+     */
+    public function handle(Service $service, bool $alreadyAccepted = false): void
     {
         if (! $service->pending_schedule_data) {
             $this->notifyVendor($service, $service->vendor);
@@ -89,7 +97,10 @@ class MaterializePendingSchedule
         $service->pending_schedule_data = null;
         $service->save();
 
-        if ($vendor->scheduleAvailable()->where('auto_accept', '=', true)->where('is_enabled', '=', true)->exists()) {
+        // Quem já aceitou entra como confirmado, sem passar pelo caminho de
+        // "novo serviço disponível" — que lhe perguntaria o que ele já
+        // respondeu.
+        if ($alreadyAccepted || $vendor->scheduleAvailable()->where('auto_accept', '=', true)->where('is_enabled', '=', true)->exists()) {
             $schedule->update(['is_pending' => false]);
             AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
             $this->acceptService->acceptSchedule($service);
@@ -113,7 +124,9 @@ class MaterializePendingSchedule
             }
         }
 
-        $this->dispatchCancelJob($service);
+        if (! $alreadyAccepted) {
+            $this->dispatchCancelJob($service);
+        }
     }
 
     public function dispatchCancelJob(Service $service): void

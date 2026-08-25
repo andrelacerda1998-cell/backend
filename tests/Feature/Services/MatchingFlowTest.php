@@ -70,7 +70,21 @@ class MatchingFlowTest extends TestCase
             \App\Events\Customer\Schedule\AcceptScheduleEvent::class,
             \App\Events\Vendor\Schedule\CreateScheduleEvent::class,
             \App\Events\Vendor\Schedule\ServiceScheduledEvent::class,
+            // Com a auto-aceitação DESLIGADA, o notifyVendor segue o ramo normal
+            // e difunde estes em vez do ServiceScheduledEvent.
+            \App\Events\Vendor\Services\CreateServiceEvent::class,
+            \App\Events\Common\Services\ServiceAcceptedEvent::class,
         ]);
+
+        // As notificações também saem por este caminho e não precisam de rede.
+        \Illuminate\Support\Facades\Notification::fake();
+
+        // O checkout aciona a materialização da agenda, que difunde vários
+        // eventos do fluxo antigo. Em vez de os enumerar um a um — lista que se
+        // desatualiza a cada alteração noutro sítio — desliga-se a difusão. Os
+        // eventos de matching continuam com Event::fake, que é o que estes
+        // testes verificam.
+        config(['broadcasting.default' => 'null']);
 
         $area = OperationArea::factory()->create();
         $this->type = ServicesType::factory()->create(['operation_area_id' => $area->id, 'time' => 60]);
@@ -81,6 +95,19 @@ class MatchingFlowTest extends TestCase
         foreach ([20, 22, 24] as $i => $rate) {
             $this->makeVendor("Profissional {$i}", $rate, $area, $this->type);
         }
+    }
+
+    /**
+     * O VendorObserver liga a auto-aceitação por omissão em todos os blocos.
+     * Estes testes medem o percurso MANUAL — o profissional a responder — por
+     * isso desligam-na explicitamente em vez de dependerem do que o observer
+     * calhar a fazer.
+     */
+    private function withoutAutoAccept(Vendor $vendor): Vendor
+    {
+        $vendor->scheduleAvailable()->update(['auto_accept' => false]);
+
+        return $vendor->fresh();
     }
 
     private function makeAddress(User $user, $type, bool $main = false): Address
@@ -133,7 +160,7 @@ class MatchingFlowTest extends TestCase
         $vendor->currentLocation()->save(new Location(['latitude' => 41.15, 'longitude' => -8.61]));
         $this->makeAddress($user, AddressType::SCHEDULE_ADDRESS);
 
-        return $vendor->fresh();
+        return $this->withoutAutoAccept($vendor);
     }
 
     private function start(bool $scheduled = false)
