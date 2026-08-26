@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class City extends Model
 {
-    protected $fillable = ['name', 'district', 'suggested'];
+    protected $fillable = ['name', 'district', 'suggested', 'active'];
 
     protected function casts(): array
     {
         return [
             'suggested' => 'boolean',
+            'active' => 'boolean',
         ];
     }
 

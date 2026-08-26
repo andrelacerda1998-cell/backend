@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\GeneralSettings\AllowedZone;
 use App\Models\GeneralSettings\City;
 use Illuminate\Database\Seeder;
 
@@ -100,6 +101,14 @@ class PortugueseCitiesSeeder extends Seeder
                     ['suggested' => isset($suggested[$name])],
                 );
             }
+        }
+
+        // Marca como ativas as cidades onde a Piquet ja opera (allowed_zone),
+        // por nome. Data-driven: acompanha a abertura de novas zonas.
+        $activeNames = AllowedZone::query()->pluck('city')->all();
+        City::query()->update(['active' => false]);
+        if ($activeNames) {
+            City::query()->whereIn('name', $activeNames)->update(['active' => true]);
         }
     }
 }

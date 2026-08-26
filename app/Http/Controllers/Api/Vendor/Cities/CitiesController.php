@@ -22,12 +22,13 @@ class CitiesController extends Controller
 
             $cities = City::query()
                 ->orderBy('name')
-                ->get(['id', 'name', 'district', 'suggested'])
+                ->get(['id', 'name', 'district', 'suggested', 'active'])
                 ->map(fn (City $c) => [
                     'id'        => $c->id,
                     'name'      => $c->name,
                     'district'  => $c->district,
                     'suggested' => $c->suggested,
+                    'active'    => $c->active,
                 ]);
 
             return new ApiSuccessResponse([
