@@ -23,7 +23,7 @@ class SaveCitiesRequest extends FormRequest
         return [
             'available_city_ids'   => 'required|array|min:'.self::MIN_AVAILABLE,
             'available_city_ids.*' => 'integer|distinct|exists:cities,id',
-            'preferred_city_ids'   => 'required|array|size:'.self::PREFERRED_COUNT,
+            'preferred_city_ids'   => 'nullable|array|max:'.self::PREFERRED_COUNT,
             'preferred_city_ids.*' => 'integer|distinct|exists:cities,id',
         ];
     }

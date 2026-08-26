@@ -107,11 +107,6 @@ class CitiesPotential extends Page implements HasForms, HasTable
                     ->badge()
                     ->color('warning')
                     ->sortable(),
-                TextColumn::make('preferred_count')
-                    ->label(__('backoffice/cities_potential.table.preferred'))
-                    ->badge()
-                    ->color('success')
-                    ->sortable(),
                 TextColumn::make('active_count')
                     ->label(__('backoffice/cities_potential.table.active'))
                     ->sortable(),

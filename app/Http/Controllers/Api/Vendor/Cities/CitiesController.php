@@ -53,7 +53,7 @@ class CitiesController extends Controller
             $vendor = auth()->user()->vendor;
 
             $available = $request->input('available_city_ids');
-            $preferred = $request->input('preferred_city_ids');
+            $preferred = $request->input('preferred_city_ids', []);
 
             DB::transaction(function () use ($vendor, $available, $preferred) {
                 $vendor->availableCities()->sync($available);

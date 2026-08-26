@@ -90,18 +90,23 @@ class VendorCitiesTest extends TestCase
             ->assertJsonValidationErrors('available_city_ids');
     }
 
-    public function test_preferred_must_have_exactly_three(): void
+    public function test_preferred_is_optional(): void
     {
+        // O "top 3" saiu do fluxo; guardar só as disponíveis é válido.
         $vendor = $this->vendor();
-        $ids = $this->cities(4);
+        $ids = $this->cities(3);
 
         $this->actingAs($vendor->user, 'api')
             ->postJson('/api/v1/vendor/cities', [
-                'available_city_ids' => [$ids[0], $ids[1], $ids[2], $ids[3]],
-                'preferred_city_ids' => [$ids[0], $ids[1]],
+                'available_city_ids' => [$ids[0], $ids[1], $ids[2]],
             ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('preferred_city_ids');
+            ->assertOk();
+
+        $this->assertEqualsCanonicalizing(
+            [$ids[0], $ids[1], $ids[2]],
+            $vendor->availableCities()->pluck('cities.id')->all(),
+        );
+        $this->assertCount(0, $vendor->preferredCities()->get());
     }
 
     public function test_preferred_must_be_subset_of_available(): void
