@@ -95,6 +95,11 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::post('/tickets', [App\Http\Controllers\Api\Vendor\SupportTicketController::class, 'store']);
     });
 
+    Route::group(['prefix' => 'cities'], function () {
+        Route::get('/', [App\Http\Controllers\Api\Vendor\Cities\CitiesController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\Api\Vendor\Cities\CitiesController::class, 'store']);
+    });
+
     Route::group(['prefix' => 'survey'], function () {
         Route::get('/cities', [App\Http\Controllers\Api\Vendor\Survey\SurveyCitiesController::class, 'index']);
         Route::post('/vote', [App\Http\Controllers\Api\Vendor\Survey\SurveyCitiesController::class, 'vote']);
