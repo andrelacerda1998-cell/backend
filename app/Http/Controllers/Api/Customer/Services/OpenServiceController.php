@@ -175,7 +175,11 @@ class OpenServiceController extends Controller
 
         $vendor = $this->findVendor($request->get('vendor_id'), $isScheduled);
 
-        $address = $this->fetchCustomerMainAddress($customer);
+        // Multi-morada: quando o pedido traz address_id, usa essa morada (se for
+        // do cliente); senão, a principal. O snapshot fica com a morada certa.
+        $address = $request->filled('address_id')
+            ? $this->fetchCustomerAddressById($customer, (int) $request->get('address_id'))
+            : $this->fetchCustomerMainAddress($customer);
 
         $service = $this->createService($customer, $vendor, $address, $request);
 

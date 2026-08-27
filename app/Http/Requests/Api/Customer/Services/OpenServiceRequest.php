@@ -33,6 +33,7 @@ class OpenServiceRequest extends FormRequest
             'photo_ids' => 'array|nullable|max:5',
             'photo_ids.*' => 'integer',
             'voucher_id' => 'integer|nullable|exists:App\Models\Voucher,id',
+            'address_id' => 'nullable|integer|exists:addresses,id',
             'address' => 'array|nullable',
             'address.name' => 'string|nullable',
             'address.latitude' => 'numeric|required_with:address',
