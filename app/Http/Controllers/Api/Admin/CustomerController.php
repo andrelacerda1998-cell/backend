@@ -64,7 +64,7 @@ class CustomerController extends Controller
             });
         }
 
-        $customers = $query->orderByDesc('created_at')->paginate($perPage);
+        $customers = $query->with('mainAddressRelation')->orderByDesc('created_at')->paginate($perPage);
 
         return ApiSuccessResponse::make([
             'items' => collect($customers->items())->map($this->present(...))->all(),
@@ -348,6 +348,13 @@ class CustomerController extends Controller
             'email_verified' => $user->email_verified_at !== null,
             'phone_verified' => $user->phone_number_verified_at !== null,
             'can_request_service' => (bool) $user->can_request_service,
+            // Cidade da morada principal do cliente (para a lista/base de dados
+            // do backoffice). Eager-loaded via mainAddressRelation na index()
+            // para não haver N+1; noutros usos (block/restore/single) resolve
+            // com uma query pontual, aceitável fora de listagens.
+            'city' => ($user->relationLoaded('mainAddressRelation')
+                ? $user->mainAddressRelation?->city
+                : $user->mainAddress()?->city) ?: null,
             'blocked_at' => $user->deleted_at?->toIso8601String(),
             'created_at' => $user->created_at?->toIso8601String(),
         ];
