@@ -87,6 +87,12 @@ return [
         'description' => 'You have 60 seconds',
         'description_schedule' => 'You have 20 minutes',
     ],
+    'matchingInvitation' => [
+        'title' => 'Request for ',
+        // Say the customer picks. Promising the job here is what makes someone
+        // feel cheated when they lose — and stop replying.
+        'description' => 'Tell us if you are available. The customer picks from whoever replies.',
+    ],
     'scheduledService' => [
         'title' => 'New service scheduled for :when',
         'description' => 'of :service_type',
