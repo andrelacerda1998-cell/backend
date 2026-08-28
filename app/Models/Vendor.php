@@ -369,6 +369,21 @@ class Vendor extends Model implements Auditable
         return $this->belongsToMany(AllowedZone::class, 'vendor_allowed_zones')->withTimestamps();
     }
 
+    /** Cidades onde o tecnico aceita prestar servico (todas). */
+    public function availableCities(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\GeneralSettings\City::class, 'vendor_available_cities')->withTimestamps();
+    }
+
+    /** Top 3 de cidades de maior interesse do tecnico (subconjunto das available). */
+    public function preferredCities(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\GeneralSettings\City::class, 'vendor_preferred_cities')
+            ->withPivot('position')
+            ->orderByPivot('position')
+            ->withTimestamps();
+    }
+
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);
