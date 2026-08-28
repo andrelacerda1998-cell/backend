@@ -40,7 +40,22 @@ class MaterializePendingSchedule
      */
     public function handle(Service $service, bool $alreadyAccepted = false): void
     {
+        // Deduzido e não só recebido: os caminhos assíncronos (confirmação 3DS
+        // pelo SuccessController, MbwayPaymentCheckJob, polling da app) chamam
+        // isto sem saberem de onde veio o serviço, e um caller que se esqueça do
+        // parâmetro voltava a perguntar ao profissional e armava o cancelamento
+        // sobre um serviço já pago e aceite. Perguntar aqui fecha essa porta a
+        // todos de uma vez.
+        $alreadyAccepted = $alreadyAccepted || self::vendorAlreadyAccepted($service);
+
         if (! $service->pending_schedule_data) {
+            // Fluxo de seleção imediato: ele aceitou antes de o cliente escolher.
+            // Notificá-lo aqui seria mandar-lhe "novo serviço, tens 60 segundos"
+            // para um serviço que já é dele, e armar um job que o cancelaria.
+            if ($alreadyAccepted) {
+                return;
+            }
+
             $this->notifyVendor($service, $service->vendor);
             $this->dispatchCancelJob($service);
 
@@ -127,6 +142,18 @@ class MaterializePendingSchedule
         if (! $alreadyAccepted) {
             $this->dispatchCancelJob($service);
         }
+    }
+
+    /**
+     * O serviço veio do fluxo de seleção e o profissional escolhido já tinha
+     * aceitado — ver docs/matching.md. É a marca que distingue os dois fluxos
+     * sem depender de quem chama se lembrar de a passar.
+     */
+    public static function vendorAlreadyAccepted(Service $service): bool
+    {
+        return $service->candidates()
+            ->where('status', \App\Enums\Services\CandidateStatus::SELECTED)
+            ->exists();
     }
 
     public function dispatchCancelJob(Service $service): void
