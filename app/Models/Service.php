@@ -457,6 +457,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
                 'id' => $service->serviceType->id,
                 'name' => $service->serviceType->getTranslation('name', $language),
                 'time' => $service->serviceType->time,
+                // O que está e não está incluído. O ecrã de acompanhamento já
+                // os desenhava, mas nunca chegavam aqui — ficava sempre vazio,
+                // e o cliente com um serviço a decorrer não tinha onde ver o
+                // que contratou.
+                'includes' => $service->serviceType->getTranslatedIncludes($language),
+                'excludes' => $service->serviceType->getTranslatedExcludes($language),
                 'operation_area' => [
                     'id' => $service->serviceType->operationArea->id,
                     'name' => $service->serviceType->operationArea->getTranslation('name', $language),
