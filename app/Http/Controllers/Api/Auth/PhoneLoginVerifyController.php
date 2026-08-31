@@ -29,11 +29,11 @@ class PhoneLoginVerifyController extends Controller
                     throw new WrongCredentials;
                 }
             } else {
-                $user = $service->findUserByPhone($phoneNumber);
-
-                if (! $user) {
-                    throw new WrongCredentials;
-                }
+                // Em MOCK_SMS o código é fixo (123456) e não passa por verifyCode,
+                // por isso a criação da conta tem de ser feita aqui também — senão
+                // o registo por telemóvel só funcionaria com SMS real e não se
+                // conseguia testar em desenvolvimento.
+                $user = $service->findOrCreateByPhone($phoneNumber);
             }
 
             if (! $user->isCustomer()) {
