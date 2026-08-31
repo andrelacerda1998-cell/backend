@@ -10,6 +10,11 @@ class StartMatchingRequest extends FormRequest
     {
         return [
             'service_type' => ['required', 'integer', 'exists:services_types,id'],
+
+            // Multi-morada: qual das casas do cliente é o destino. Sem isto o
+            // pedido caía sempre na morada principal, mandando o técnico para a
+            // casa errada de quem tem vários alojamentos.
+            'address_id' => ['nullable', 'integer', 'exists:addresses,id'],
             'quantity' => ['sometimes', 'integer', 'min:1'],
             'scheduled' => ['sometimes', 'boolean'],
 
