@@ -431,6 +431,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'id' => $service->id,
             'status' => $service->status,
             'distance' => $service->distance,
+            // Início da execução: é daqui que a app calcula quanto falta para
+            // o serviço terminar (ecrã em curso e Live Activity do ecrã
+            // bloqueado). Estava só no payload do técnico — do lado do cliente
+            // a contagem não tinha por onde começar.
+            'on_the_way_at' => $service->on_the_way_at?->toIso8601String(),
+            'arrived_at' => $service->arrived_at?->toIso8601String(),
             // Unidades pedidas. Vai nos dois payloads: o técnico precisa de saber
             // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
             // precisa de ver o que comprou.
