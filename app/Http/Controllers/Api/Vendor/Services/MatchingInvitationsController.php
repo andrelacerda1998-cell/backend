@@ -9,6 +9,7 @@ use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
 use App\Services\Matching\MatchingService;
+use App\Settings\MatchingSettings;
 use Exception;
 
 /**
@@ -27,9 +28,7 @@ class MatchingInvitationsController extends Controller
     /** A janela tem de concentrar pelo menos isto para valer a pena dizê-lo. */
     private const MIN_SHARE_FOR_INSIGHT = 0.35;
 
-    public function __construct(private MatchingService $matching)
-    {
-    }
+    public function __construct(private MatchingService $matching, private MatchingSettings $settings) {}
 
     /** Convites com a janela ainda aberta. */
     public function index(): ApiSuccessResponse
@@ -153,7 +152,7 @@ class MatchingInvitationsController extends Controller
      * Dia e hora pretendidos, venham da agenda já materializada ou da intenção
      * guardada enquanto ela não pode existir.
      */
-    private function scheduleFor(?\App\Models\Service $service): ?array
+    private function scheduleFor(?Service $service): ?array
     {
         if (! $service) {
             return null;
@@ -186,6 +185,11 @@ class MatchingInvitationsController extends Controller
             'candidate_id' => $candidate->id,
             'service_id' => $candidate->service_id,
             'status' => $candidate->status,
+            // Quantos aceites chegam ao cliente. Vai no payload porque a app
+            // dizia "só os 3 primeiros" com o 3 escrito no texto: bastava mudar
+            // matching.shortlist_size no backoffice para a app passar a mentir
+            // ao profissional, e ninguém se lembraria de trocar a tradução.
+            'shortlist_size' => $this->settings->shortlist_size,
             // O que ele recebe, congelado. Nunca o que o cliente paga: o modelo
             // é margem por cima, e o técnico recebe 100% do que definiu.
             'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
