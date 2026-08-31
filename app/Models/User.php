@@ -328,6 +328,16 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
         return $this->addresses()->where('main_address', true)->first();
     }
 
+    /**
+     * Morada principal como relação (eager-loadable), para listagens que
+     * precisam da cidade sem disparar uma query por cliente (N+1). O
+     * mainAddress() acima devolve o modelo já resolvido; este é a relação.
+     */
+    public function mainAddressRelation(): HasOne
+    {
+        return $this->hasOne(Address::class)->where('main_address', true);
+    }
+
     public function devices(): HasMany
     {
         return $this->hasMany(Device::class);

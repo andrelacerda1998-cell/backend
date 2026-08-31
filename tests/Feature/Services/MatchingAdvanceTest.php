@@ -6,7 +6,6 @@ use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
-use App\Events\Matching\MatchingFallbackEvent;
 use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Models\Service;
@@ -51,7 +50,6 @@ class MatchingAdvanceTest extends TestCase
             MatchingCandidateAcceptedEvent::class,
             MatchingRequestClosedEvent::class,
             MatchingCandidateLostEvent::class,
-            MatchingFallbackEvent::class,
         ]);
     }
 
@@ -108,38 +106,7 @@ class MatchingAdvanceTest extends TestCase
         $this->assertSame(CandidateStatus::NOTIFIED, $fresh->refresh()->status);
     }
 
-    public function test_immediate_falls_back_to_the_next_professional(): void
-    {
-        $service = $this->service();
-        $called = $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->subSecond());
-        $next = $this->candidate($service, 2, CandidateStatus::SHORTLISTED);
-
-        $this->artisan('matching:advance')->assertSuccessful();
-
-        // "Está livre" é uma previsão, não uma promessa. Sem o fallback, uma
-        // previsão errada custava ao cliente o pedido inteiro.
-        $this->assertSame(CandidateStatus::EXPIRED, $called->refresh()->status);
-        $this->assertSame(CandidateStatus::NOTIFIED, $next->refresh()->status);
-        $this->assertSame(ServiceStatus::MATCHING, $service->refresh()->status);
-    }
-
-    public function test_the_customer_is_told_we_changed_professional(): void
-    {
-        $service = $this->service();
-        $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->subSecond());
-        $next = $this->candidate($service, 2, CandidateStatus::SHORTLISTED);
-
-        $this->artisan('matching:advance')->assertSuccessful();
-
-        // Sem este aviso o ecrã fica a dizer "a contactar o João" enquanto já
-        // se contacta outro — e o cliente desiste a achar que ninguém responde.
-        Event::assertDispatched(
-            MatchingFallbackEvent::class,
-            fn ($e) => $e->payload['candidate_id'] === $next->id
-        );
-    }
-
-    public function test_immediate_gives_up_when_the_shortlist_runs_out(): void
+    public function test_immediate_gives_up_when_nobody_answers(): void
     {
         $service = $this->service();
         $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->subSecond());
@@ -150,42 +117,82 @@ class MatchingAdvanceTest extends TestCase
         $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
     }
 
-    public function test_declining_immediately_calls_the_next_one(): void
+    public function test_declining_does_not_close_the_request_for_the_others(): void
     {
         $service = $this->service();
         $refuser = $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->addMinute());
-        $next = $this->candidate($service, 2, CandidateStatus::SHORTLISTED);
+        $other = $this->candidate($service, 2, CandidateStatus::NOTIFIED, now()->addMinute());
 
         app(MatchingService::class)->decline($refuser);
 
-        // Não se espera pela janela: ele já disse que não.
-        $this->assertSame(CandidateStatus::NOTIFIED, $next->refresh()->status);
+        // Com vários convidados em paralelo, uma recusa retira só quem recusou.
+        $this->assertSame(CandidateStatus::DECLINED, $refuser->refresh()->status);
+        $this->assertSame(CandidateStatus::NOTIFIED, $other->refresh()->status);
+        $this->assertSame(ServiceStatus::MATCHING, $service->refresh()->status);
     }
 
-    public function test_does_not_advance_while_the_window_is_still_open(): void
+    public function test_does_not_widen_while_the_window_is_still_open(): void
     {
         $service = $this->service();
         $called = $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->addMinute());
-        $next = $this->candidate($service, 2, CandidateStatus::SHORTLISTED);
 
         $this->artisan('matching:advance')->assertSuccessful();
 
+        // Alargar antes de a onda ter tido tempo de responder seria chamar
+        // gente a mais para o mesmo trabalho.
         $this->assertSame(CandidateStatus::NOTIFIED, $called->refresh()->status);
-        $this->assertSame(CandidateStatus::SHORTLISTED, $next->refresh()->status, 'ninguém é chamado a mais');
+        $this->assertSame(ServiceStatus::MATCHING, $service->refresh()->status);
     }
 
     public function test_an_acceptance_stops_the_machine(): void
     {
         $service = $this->service();
-        $accepted = $this->candidate($service, 1, CandidateStatus::ACCEPTED);
-        $waiting = $this->candidate($service, 2, CandidateStatus::SHORTLISTED);
+        $this->candidate($service, 1, CandidateStatus::ACCEPTED);
+        $waiting = $this->candidate($service, 2, CandidateStatus::NOTIFIED, now()->addMinute());
 
         $this->artisan('matching:advance')->assertSuccessful();
 
         // A decisão passou a ser do cliente. Chamar mais gente agora seria
         // fazer alguém aceitar em vão.
-        $this->assertSame(CandidateStatus::SHORTLISTED, $waiting->refresh()->status);
+        $this->assertSame(CandidateStatus::NOTIFIED, $waiting->refresh()->status);
         $this->assertSame(ServiceStatus::MATCHING, $service->refresh()->status);
+    }
+
+    public function test_a_customer_who_never_chooses_releases_the_professionals(): void
+    {
+        $service = $this->service();
+        $accepted = $this->candidate($service, 1, CandidateStatus::ACCEPTED);
+        // Aceitou há mais tempo do que o cliente tem para decidir.
+        $accepted->update(['responded_at' => now()->subSeconds(200)]);
+
+        $this->artisan('matching:advance')->assertSuccessful();
+
+        // Sem este prazo, quem respondeu ficava preso a um pedido que nunca
+        // resolve — com a janela fechada e sem desfecho nenhum.
+        $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
+        $this->assertSame(CandidateStatus::LOST, $accepted->refresh()->status);
+        Event::assertDispatched(MatchingRequestClosedEvent::class);
+    }
+
+    public function test_a_checkout_that_is_never_paid_does_not_hang_forever(): void
+    {
+        $service = $this->service();
+        $chosen = $this->candidate($service, 1, CandidateStatus::SELECTED);
+
+        $service->update(['status' => ServiceStatus::AWAITING_PAYMENT, 'vendor_id' => $chosen->vendor_id]);
+        // Escolhido há mais tempo do que o prazo para pagar.
+        $service->timestamps = false;
+        $service->update(['updated_at' => now()->subSeconds(400)]);
+        $service->timestamps = true;
+
+        $this->artisan('matching:advance')->assertSuccessful();
+
+        // É o pior caso para quem respondeu: não ganhou, não perdeu, e ninguém
+        // lhe disse nada. O pedido fecha e ele é avisado.
+        $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
+        $this->assertNull($service->refresh()->vendor_id);
+        $this->assertSame(CandidateStatus::LOST, $chosen->refresh()->status);
+        Event::assertDispatched(MatchingRequestClosedEvent::class);
     }
 
     public function test_scheduled_gives_up_when_nobody_answers(): void

@@ -5,12 +5,12 @@ namespace App\Services\Matching;
 use App\Enums\Services\CandidateStatus;
 use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
-use App\Events\Matching\MatchingFallbackEvent;
 use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
+use App\Notifications\Vendor\MatchingInvitationNotification;
 use App\Settings\MatchingSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,15 +18,20 @@ use Illuminate\Support\Facades\DB;
 /**
  * Põe candidatos em cima da mesa para um serviço — ver docs/matching.md.
  *
- * Dois caminhos, pelo princípio de que ninguém deve aceitar em vão:
+ * UM caminho só, para os dois modos: notifica por ondas, dos melhores para
+ * baixo, e fecha ao terceiro sim. O cliente escolhe entre quem se disponibilizou.
  *
- *  - IMEDIATO: monta a shortlist sem notificar ninguém. O cliente escolhe, e só
- *    o escolhido é chamado. O custo de aceitar e não ganhar passa a ser zero, e
- *    não há janela de espera antes de o cliente ver opções.
+ * O imediato foi unificado com o agendado por decisão de produto (ver nota
+ * abaixo). Antes tinha um percurso próprio — shortlist sem notificar, cliente
+ * escolhia, e só o escolhido era chamado — para que ninguém aceitasse em vão.
+ * A troca é deliberada: o cliente passa a esperar alguns segundos e alguns
+ * profissionais aceitam sem ganhar, mas em contrapartida ele escolhe entre
+ * pessoas que CONFIRMARAM disponibilidade, e não entre uma previsão de quem
+ * estaria livre. Deixa também de haver dois percursos a manter.
  *
- *  - AGENDADO: notifica por ondas, dos melhores para baixo, e fecha ao terceiro
- *    sim. Em vez de a cidade toda aceitar para três ganharem, aceitam três ou
- *    quatro.
+ * O custo continua a ser real, e mitiga-se com o tamanho da onda e com a
+ * duração da janela: convidar três com janela curta é diferente de convidar
+ * vinte com janela longa. Ambos são definições, não constantes.
  *
  * Não cobra nem devolve dinheiro. O pagamento acontece depois de haver aceitação
  * — que é a fraqueza que este fluxo veio corrigir.
@@ -40,23 +45,7 @@ class MatchingService
     }
 
     /**
-     * Shortlist para pedido imediato: grava os candidatos SEM os notificar.
-     *
-     * @return Collection<int, ServiceCandidate>
-     */
-    public function buildShortlist(Service $service): Collection
-    {
-        $ranked = $this->rankFor($service, immediate: true);
-
-        if ($ranked->isEmpty()) {
-            return collect();
-        }
-
-        return $this->persist($service, $this->ranking->shortlist($ranked), CandidateStatus::SHORTLISTED, wave: 1);
-    }
-
-    /**
-     * Onda seguinte de um pedido agendado.
+     * Onda seguinte de convites, nos dois modos.
      *
      * Devolve só os candidatos criados agora — são esses que há que notificar.
      * Quem já foi notificado não é chamado outra vez.
@@ -76,8 +65,9 @@ class MatchingService
         }
 
         $alreadySeen = $service->candidates()->pluck('vendor_id')->all();
+        $immediate = ! $this->isScheduled($service);
 
-        $ranked = $this->rankFor($service, immediate: false)
+        $ranked = $this->rankFor($service, immediate: $immediate)
             ->reject(fn (RankedVendor $c) => in_array($c->vendor->id, $alreadySeen, true))
             ->values();
 
@@ -93,6 +83,10 @@ class MatchingService
 
         foreach ($candidates as $candidate) {
             $this->notifyVendor($candidate->loadMissing('vendor'), MatchingInvitationEvent::class);
+            // Quem tem auto-aceitação ligada responde já, como no convite
+            // individual. Sem isto, a unificação teria desligado a funcionalidade
+            // em silêncio para os pedidos imediatos.
+            $this->autoAcceptIfEnabled($candidate);
         }
 
         return $candidates;
@@ -108,6 +102,18 @@ class MatchingService
     public function accept(ServiceCandidate $candidate): bool
     {
         return DB::transaction(function () use ($candidate) {
+            // Lock no SERVIÇO antes do candidato: a contagem de aceitações é
+            // sobre o serviço todo, e sem serializar aqui dois profissionais a
+            // aceitarem ao mesmo tempo passavam ambos pela verificação do
+            // "terceiro sim" e o pedido fechava com quatro aceites.
+            // A ordem (serviço, depois candidato) é a mesma do select() e do
+            // advance — ordens invertidas dariam deadlock.
+            $service = Service::whereKey($candidate->service_id)->lockForUpdate()->first();
+
+            if (! $service || $service->status !== ServiceStatus::MATCHING) {
+                return false;
+            }
+
             $candidate = ServiceCandidate::whereKey($candidate->getKey())->lockForUpdate()->first();
 
             if (! $candidate || ! $candidate->status->isLive() || $candidate->hasExpired()) {
@@ -146,6 +152,14 @@ class MatchingService
         });
     }
 
+    /**
+     * Recusar retira este profissional da corrida e mais nada.
+     *
+     * Os outros convidados continuam a poder aceitar, e o cliente continua a
+     * escolher entre quem aceitou. Antes da unificação, uma recusa no imediato
+     * obrigava a chamar logo o seguinte, porque só uma pessoa tinha sido
+     * chamada; com vários convidados em paralelo isso deixa de ser preciso.
+     */
     public function decline(ServiceCandidate $candidate): void
     {
         if (! $candidate->status->isLive()) {
@@ -156,72 +170,6 @@ class MatchingService
             'status' => CandidateStatus::DECLINED,
             'responded_at' => now(),
         ]);
-
-        // Num pedido imediato só uma pessoa foi chamada: se ela recusa, o
-        // cliente ficaria à espera de alguém que já disse que não. Passa-se ao
-        // seguinte imediatamente, sem ele ter de refazer nada.
-        $service = $candidate->service;
-
-        if ($service && ! $this->isScheduled($service)) {
-            $this->advanceImmediate($service);
-        }
-    }
-
-    /**
-     * Fluxo imediato: chama o próximo da lista quando o anterior não respondeu
-     * ou recusou.
-     *
-     * É o fallback que torna a shortlist honesta. "Está livre" é uma previsão,
-     * não uma promessa — e sem isto uma previsão errada custava ao cliente o
-     * pedido inteiro.
-     *
-     * @return bool true se houve quem chamar; false se a lista se esgotou
-     */
-    public function advanceImmediate(Service $service): bool
-    {
-        return DB::transaction(function () use ($service) {
-            $service = Service::whereKey($service->getKey())->lockForUpdate()->first();
-
-            if (! $service || $service->status !== ServiceStatus::MATCHING) {
-                return false;
-            }
-
-            // Se alguém já aceitou, não há nada a avançar: o cliente escolhe.
-            if ($service->candidates()->accepted()->exists()) {
-                return true;
-            }
-
-            $next = $service->candidates()
-                ->where('status', CandidateStatus::SHORTLISTED)
-                ->orderBy('rank')
-                ->with('vendor')
-                ->first();
-
-            if (! $next) {
-                // Só desiste se não houver mesmo mais ninguém. Falhar enquanto
-                // alguém ainda tem a janela aberta seria deitar fora uma
-                // resposta que pode estar a caminho.
-                if (! $service->candidates()->live()->exists()) {
-                    $this->fail($service);
-                }
-
-                return false;
-            }
-
-            $this->invite($next, $this->settings->vendor_response_seconds_immediate);
-
-            // O cliente está no ecrã de espera: tem de saber que mudámos de
-            // pessoa, senão vê "a contactar o João" enquanto se contacta outro.
-            MatchingFallbackEvent::dispatch($service->customer_id, [
-                'service_id' => $service->id,
-                'candidate_id' => $next->id,
-                'vendor_id' => $next->vendor_id,
-                'vendor_name' => $next->vendor?->user?->name,
-                'expires_at' => $next->refresh()->expires_at?->toIso8601String(),
-            ]);
-
-            return true;
-        });
     }
 
     /**
@@ -242,9 +190,11 @@ class MatchingService
             return 0;
         }
 
+        // Sem `responded_at`: quem não respondeu não respondeu. Carimbar uma hora
+        // de resposta a quem deixou a janela passar estragava qualquer métrica de
+        // tempo de resposta — a média passava a incluir silêncios.
         $service->candidates()->stale()->update([
             'status' => CandidateStatus::EXPIRED,
-            'responded_at' => now(),
         ]);
 
         return $stale->count();
@@ -345,6 +295,49 @@ class MatchingService
         });
     }
 
+    /**
+     * O cliente escolheu e não pagou dentro do prazo.
+     *
+     * Sem isto o serviço ficava em AwaitingPayment para sempre: o escolhido
+     * marcado como SELECTED sem nunca receber trabalho nem desfecho, e os
+     * outros já dispensados. É o pior caso possível para quem respondeu — não
+     * ganhou, não perdeu, e ninguém lhe disse nada.
+     *
+     * O pedido termina como MatchingFailed e não Canceled: para o cliente o
+     * resultado é o mesmo que ninguém ter aparecido, e é o estado que a app já
+     * sabe apresentar como "tenta outra vez".
+     */
+    public function expireCheckout(Service $service): bool
+    {
+        return DB::transaction(function () use ($service) {
+            $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
+
+            // Pode ter pago entre a leitura e este ponto.
+            if (! $locked || $locked->status !== ServiceStatus::AWAITING_PAYMENT) {
+                return false;
+            }
+
+            $selected = $locked->candidates()
+                ->where('status', CandidateStatus::SELECTED)
+                ->with('vendor')
+                ->get();
+
+            $locked->candidates()
+                ->where('status', CandidateStatus::SELECTED)
+                ->update(['status' => CandidateStatus::LOST]);
+
+            $locked->vendor_id = null;
+            $locked->status = ServiceStatus::MATCHING_FAILED;
+            $locked->save();
+
+            foreach ($selected as $candidate) {
+                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+            }
+
+            return true;
+        });
+    }
+
     /** Fecha o pedido para quem ainda não respondeu e avisa-o. */
     private function closeRemaining(Service $service, int $exceptId): void
     {
@@ -414,6 +407,23 @@ class MatchingService
             'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
             'expires_at' => $candidate->expires_at?->toIso8601String(),
         ]);
+
+        // Só o convite leva push. Os outros eventos (perdeu, pedido fechou) são
+        // informação de desfecho e chegam quando ele abrir a app — tocar-lhe o
+        // telemóvel para dizer que não ganhou seria castigá-lo por ter aceitado.
+        //
+        // O websocket acima chega a quem tem a app aberta; este push é para
+        // quem a tem fechada, que é a maioria enquanto trabalha.
+        if ($event !== MatchingInvitationEvent::class) {
+            return;
+        }
+
+        try {
+            $candidate->vendor?->user?->notify(new MatchingInvitationNotification($candidate));
+        } catch (\Throwable $e) {
+            // Um push falhado não pode impedir os restantes convites da onda.
+            report($e);
+        }
     }
 
     private function notifyCustomer(ServiceCandidate $candidate, string $event): void
@@ -485,18 +495,21 @@ class MatchingService
     }
 
     /**
-     * Candidatos que o cliente pode escolher agora.
+     * Candidatos que o cliente pode escolher agora: os que disseram que sim.
      *
-     * No imediato são os da shortlist (ninguém foi notificado ainda); no
-     * agendado, os que já disseram que sim. Nos dois casos, se só houver dois,
-     * mostram-se dois.
+     * Só aceitações, nos dois modos. Mostrar quem ainda não respondeu seria
+     * oferecer uma previsão como se fosse uma confirmação — e o cliente
+     * escolheria alguém que ainda pode recusar.
+     *
+     * Se só houver dois, mostram-se dois: é regra de negócio, não se espera
+     * por um número redondo.
      *
      * @return Collection<int, ServiceCandidate>
      */
     public function selectableFor(Service $service): Collection
     {
         return $service->candidates()
-            ->whereIn('status', [CandidateStatus::SHORTLISTED, CandidateStatus::ACCEPTED])
+            ->where('status', CandidateStatus::ACCEPTED)
             ->orderBy('rank')
             ->get();
     }
@@ -527,15 +540,25 @@ class MatchingService
      */
     private function persist(Service $service, Collection $ranked, CandidateStatus $status, int $wave): Collection
     {
-        $window = $wave === 1 && $status === CandidateStatus::SHORTLISTED
-            ? null
-            : now()->addSeconds($this->settings->vendor_response_seconds_scheduled);
+        // Janela por modo: num pedido para agora o profissional tem de responder
+        // depressa, senão o cliente está a olhar para um ecrã de espera; num
+        // agendado há tempo e a pressa só serve para o fazer recusar.
+        $window = now()->addSeconds(
+            $this->isScheduled($service)
+                ? $this->settings->vendor_response_seconds_scheduled
+                : $this->settings->vendor_response_seconds_immediate
+        );
 
-        return $ranked->map(function (RankedVendor $c) use ($service, $status, $wave, $window) {
+        // O rank é contínuo ao longo das ondas. O ranking numera 1..N a cada
+        // chamada, por isso sem este deslocamento a segunda onda voltava a ter
+        // um rank 1 — e o cliente via dois "recomendados", ordenados ao acaso.
+        $rankOffset = (int) $service->candidates()->max('rank');
+
+        return $ranked->map(function (RankedVendor $c) use ($service, $status, $wave, $window, $rankOffset) {
             return ServiceCandidate::updateOrCreate(
                 ['service_id' => $service->id, 'vendor_id' => $c->vendor->id],
                 [
-                    'rank' => $c->rank,
+                    'rank' => $rankOffset + $c->rank,
                     'wave' => $wave,
                     'status' => $status,
                     'rating_band' => $c->ratingBand,
