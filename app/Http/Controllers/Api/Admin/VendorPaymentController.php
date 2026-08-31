@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Mail\Vendor\PaymentSentMail;
+use App\Models\Service;
 use App\Models\Vendor;
 use App\Notifications\Vendor\PaymentSentNotification;
 use Illuminate\Http\Request;
@@ -31,8 +33,31 @@ class VendorPaymentController extends Controller
             ->with(['user.wallet'])
             ->paginate($perPage);
 
+        /*
+         * Total faturado através da Piquet e comissão, por técnico.
+         *
+         * A carteira só guarda a PARTE DO TÉCNICO, por isso estes valores não se
+         * conseguem derivar do saldo -- e a comissão não é uma percentagem fixa
+         * (é `amount - amount_for_vendor`, definido serviço a serviço). Vêm daqui
+         * ou não vêm de lado nenhum.
+         *
+         * Uma query agregada para os vendors da página (sem N+1). As colunas são
+         * INTEGER em cêntimos; devolve-se em euros para casar com `balance`, que
+         * já vem em euros do balance_float.
+         */
+        $totais = Service::query()
+            ->whereIn('vendor_id', collect($vendors->items())->pluck('id'))
+            ->where('status', ServiceStatus::CLOSED)
+            ->where('is_test', false)
+            ->selectRaw('vendor_id, SUM(amount) as faturado, SUM(amount - amount_for_vendor) as comissao')
+            ->groupBy('vendor_id')
+            ->get()
+            ->keyBy('vendor_id');
+
         return ApiSuccessResponse::make([
-            'items' => collect($vendors->items())->map($this->present(...))->all(),
+            'items' => collect($vendors->items())
+                ->map(fn (Vendor $v) => $this->present($v, $totais->get($v->id)))
+                ->all(),
             'meta' => [
                 'current_page' => $vendors->currentPage(),
                 'last_page' => $vendors->lastPage(),
@@ -71,7 +96,11 @@ class VendorPaymentController extends Controller
         ]);
     }
 
-    private function present(Vendor $vendor): array
+    /**
+     * @param  object|null  $totais  Linha agregada (faturado, comissao) em cêntimos,
+     *                               ou null se o técnico ainda não fechou serviços.
+     */
+    private function present(Vendor $vendor, ?object $totais = null): array
     {
         // NÃO usar vendor->name / user->name -- ver nota em SystemProfitController
         // e VendorDocumentController sobre User::setNameAttribute() nunca gravar
@@ -86,6 +115,12 @@ class VendorPaymentController extends Controller
             // balance_float vem como string (contrato do bavix/laravel-wallet) --
             // sem o cast, o JSON manda "150.00" como string em vez de número.
             'balance' => (float) $user->wallet->balance_float,
+            // Totais COM IVA (como todo o dinheiro no sistema); o líquido é
+            // /(1+IVA), tal como os acessores *_without_vat do model Service.
+            // null (e não 0) quando o técnico ainda não fechou nenhum serviço --
+            // zero seria indistinguível de "faturou 0 €".
+            'total_invoiced' => $totais ? round(((int) $totais->faturado) / 100, 2) : null,
+            'commission' => $totais ? round(((int) $totais->comissao) / 100, 2) : null,
         ];
     }
 }
