@@ -27,6 +27,10 @@ class MbwayPaymentResolver
         ServiceStatus::ARCHIVED,
         ServiceStatus::CLOSED,
         ServiceStatus::CLOSED_PENDING_PAYMENT,
+        // Fluxo de seleção que expirou sem pagamento. Sem isto, um MBWay
+        // confirmado tarde ressuscitava um pedido já desistido, com os
+        // profissionais todos dispensados.
+        ServiceStatus::MATCHING_FAILED,
     ];
 
     public static function isTerminal(Service $service): bool
@@ -58,8 +62,17 @@ class MbwayPaymentResolver
     {
         $service->payment_status = PaymentStatus::PAID;
 
-        if ($service->status === ServiceStatus::PENDING_3DS) {
-            $service->status = ServiceStatus::PENDING;
+        if ($service->status === ServiceStatus::PENDING_3DS || $service->status === ServiceStatus::AWAITING_PAYMENT) {
+            // Fluxo de seleção com pagamento assíncrono (3DS/MBWay): o
+            // profissional aceitou ANTES do pagamento, por isso não há nada à
+            // espera de confirmação dele — vai direto a Accepted. Um agendado
+            // passa por Pending de propósito: é a materialização da agenda que
+            // o leva a Scheduled, e pôr Scheduled aqui fazia-a rejeitar.
+            $alreadyAccepted = MaterializePendingSchedule::vendorAlreadyAccepted($service);
+
+            $service->status = ($alreadyAccepted && ! $service->pending_schedule_data)
+                ? ServiceStatus::ACCEPTED
+                : ServiceStatus::PENDING;
         }
 
         $service->save();

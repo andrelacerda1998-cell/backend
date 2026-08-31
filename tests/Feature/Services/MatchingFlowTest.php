@@ -176,15 +176,15 @@ class MatchingFlowTest extends TestCase
             ]);
     }
 
-    public function test_immediate_shows_candidates_without_notifying_anyone(): void
+    public function test_opening_a_request_invites_the_first_wave(): void
     {
-        // O ganho do fluxo imediato: o cliente vê opções de imediato e ninguém
-        // aceita em vão, porque ninguém foi chamado ainda.
         $response = $this->start()->assertOk();
 
         $this->assertSame(ServiceStatus::MATCHING->value, $response->json('data.service.status'));
-        $this->assertCount(3, $response->json('data.candidates'));
-        $this->assertSame(0, ServiceCandidate::where('status', CandidateStatus::NOTIFIED)->count());
+        // Os convites saem já, nos dois modos. A lista para o cliente só se
+        // enche à medida que forem respondendo.
+        $this->assertGreaterThan(0, ServiceCandidate::where('status', CandidateStatus::NOTIFIED)->count());
+        $this->assertSame([], $response->json('data.candidates'));
     }
 
     public function test_opening_a_request_charges_nothing(): void
@@ -200,7 +200,16 @@ class MatchingFlowTest extends TestCase
 
     public function test_candidates_are_ordered_and_priced_individually(): void
     {
-        $candidates = $this->start()->assertOk()->json('data.candidates');
+        $service = Service::find($this->start()->assertOk()->json('data.service.id'));
+
+        // Todos respondem que sim: é aí que entram na lista do cliente.
+        ServiceCandidate::where('service_id', $service->id)
+            ->update(['status' => CandidateStatus::ACCEPTED, 'responded_at' => now()]);
+
+        $candidates = $this->actingAs($this->customer, 'api')
+            ->getJson("/api/v1/customer/services/matching/{$service->id}")
+            ->assertOk()
+            ->json('data.candidates');
 
         $this->assertSame([1, 2, 3], array_column($candidates, 'rank'));
 
@@ -209,24 +218,57 @@ class MatchingFlowTest extends TestCase
         $this->assertSame($amounts, collect($amounts)->sort()->values()->all(), 'sem avaliações, ordena por preço');
     }
 
-    public function test_choosing_in_the_immediate_flow_only_calls_the_chosen_one(): void
+    public function test_the_customer_can_only_choose_someone_who_accepted(): void
     {
         $data = $this->start()->assertOk()->json('data');
         $service = Service::find($data['service']['id']);
-        $chosen = $data['candidates'][0]['id'];
+
+        // Acabado de abrir: os convites saíram, mas ninguém respondeu ainda.
+        // Não há nada para escolher — mostrar quem ainda não respondeu seria
+        // vender uma previsão como se fosse uma confirmação.
+        $this->assertSame([], $data['candidates']);
+
+        $invited = ServiceCandidate::where('service_id', $service->id)
+            ->where('status', CandidateStatus::NOTIFIED)
+            ->first();
 
         $this->actingAs($this->customer, 'api')
-            ->postJson("/api/v1/customer/services/matching/{$service->id}/select/{$chosen}")
-            ->assertOk()
-            ->assertJsonPath('data.awaiting_vendor', true);
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/select/{$invited->id}")
+            ->assertStatus(409);
+    }
 
-        $this->assertSame(CandidateStatus::NOTIFIED, ServiceCandidate::find($chosen)->status);
-        $this->assertSame(
-            0,
-            ServiceCandidate::where('service_id', $service->id)
-                ->where('status', CandidateStatus::NOTIFIED)->count() - 1,
-            'só o escolhido foi chamado'
-        );
+    public function test_choosing_someone_who_accepted_goes_straight_to_payment(): void
+    {
+        $data = $this->start()->assertOk()->json('data');
+        $service = Service::find($data['service']['id']);
+
+        $candidate = ServiceCandidate::where('service_id', $service->id)
+            ->where('status', CandidateStatus::NOTIFIED)
+            ->first();
+        $candidate->update(['status' => CandidateStatus::ACCEPTED, 'responded_at' => now()]);
+
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/select/{$candidate->id}")
+            ->assertOk()
+            // Ele já aceitou antes de ser escolhido: não há nada à espera de
+            // confirmação dele, vai-se direto ao pagamento.
+            ->assertJsonPath('data.awaiting_vendor', false);
+
+        $this->assertSame(CandidateStatus::SELECTED, $candidate->refresh()->status);
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->refresh()->status);
+    }
+
+    public function test_a_second_request_returns_the_one_already_open(): void
+    {
+        $first = $this->start()->assertOk()->json('data.service.id');
+
+        // Duplo-toque ou retry de rede: não pode abrir um segundo pedido nem
+        // convidar uma segunda onda de profissionais para o mesmo trabalho.
+        $second = $this->start()->assertOk()->json('data.service.id');
+
+        $this->assertSame($first, $second);
+        $this->assertSame(1, Service::where('customer_id', $this->customer->id)
+            ->where('status', ServiceStatus::MATCHING)->count());
     }
 
     public function test_checkout_is_refused_before_a_vendor_accepts(): void
@@ -278,12 +320,14 @@ class MatchingFlowTest extends TestCase
         $service = Service::find($data['service']['id']);
         $intruder = User::factory()->create(['is_test' => true]);
 
+        $candidate = $service->candidates()->orderBy('rank')->first();
+
         $this->actingAs($intruder, 'api')
             ->getJson("/api/v1/customer/services/matching/{$service->id}")
             ->assertStatus(404);
 
         $this->actingAs($intruder, 'api')
-            ->postJson("/api/v1/customer/services/matching/{$service->id}/select/{$data['candidates'][0]['id']}")
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/select/{$candidate->id}")
             ->assertStatus(404);
     }
 

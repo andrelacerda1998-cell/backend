@@ -7,6 +7,7 @@ use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\MatchingCheckoutRequest;
+use App\Jobs\Services\MbwayPaymentCheckJob;
 use App\Http\Requests\Customer\StartMatchingRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
@@ -42,11 +43,11 @@ class MatchingController extends Controller
     }
 
     /**
-     * Abre o pedido e põe candidatos em cima da mesa.
+     * Abre o pedido e convida a primeira onda.
      *
-     * Imediato: shortlist montada sem notificar ninguém — o cliente vê opções
-     * sem esperar, e ninguém aceita em vão.
-     * Agendado: primeira onda notificada; as aceitações vão chegando.
+     * Igual nos dois modos: notifica os melhores, e as aceitações vão chegando
+     * ao ecrã do cliente à medida que aparecem. O que muda entre imediato e
+     * agendado é só a janela de resposta de cada convite.
      */
     public function start(StartMatchingRequest $request): ApiSuccessResponse|ApiErrorResponse
     {
@@ -59,6 +60,23 @@ class MatchingController extends Controller
                 : $this->fetchCustomerMainAddress($customer);
             $serviceType = ServicesType::findOrFail($request->integer('service_type'));
             $isScheduled = $request->boolean('scheduled');
+
+            // Um pedido em seleção de cada vez. Um duplo-toque ou um retry de
+            // rede da app abria dois pedidos e convidava duas ondas de
+            // profissionais para o mesmo trabalho — e o cliente ficava com dois
+            // ecrãs de espera. Devolve-se o que já está aberto em vez de um erro:
+            // do ponto de vista dele o toque funcionou.
+            $existing = Service::query()
+                ->where('customer_id', $customer->id)
+                ->whereIn('status', [ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT])
+                ->latest('id')
+                ->first();
+
+            if ($existing) {
+                DB::commit();
+
+                return new ApiSuccessResponse($this->payload($existing));
+            }
 
             $service = new Service([
                 'customer_id' => $customer->id,
@@ -102,9 +120,7 @@ class MatchingController extends Controller
 
             $service->save();
 
-            $candidates = $isScheduled
-                ? $this->matching->dispatchNextWave($service)
-                : $this->matching->buildShortlist($service);
+            $candidates = $this->matching->dispatchNextWave($service);
 
             // Ninguém elegível: falha já, para o cliente tentar outra vez em vez
             // de ficar num ecrã de espera que nunca resolve.
@@ -142,9 +158,10 @@ class MatchingController extends Controller
     /**
      * O cliente escolheu.
      *
-     * No agendado o candidato já aceitou, e o serviço passa a AwaitingPayment.
-     * No imediato ainda ninguém foi notificado: o escolhido é chamado agora, e
-     * só depois de ele aceitar é que há checkout.
+     * O candidato já aceitou — nos dois modos — por isso o serviço passa direto
+     * a AwaitingPayment e segue para o checkout. O `awaiting_vendor` continua na
+     * resposta, sempre falso, porque a app usa-o para decidir para onde vai a
+     * seguir; deixá-lo cair partia o ecrã sem aviso.
      */
     public function select(Service $service, ServiceCandidate $candidate): ApiSuccessResponse|ApiErrorResponse
     {
@@ -156,21 +173,13 @@ class MatchingController extends Controller
             return new ApiErrorResponse(new Exception, 'This request is no longer awaiting a choice', 409);
         }
 
-        if ($candidate->status === CandidateStatus::SHORTLISTED) {
-            // Fluxo imediato: é agora que a pessoa é chamada — e é a única
-            // chamada, porque o cliente já decidiu.
-            $this->matching->invite($candidate, $this->settings->vendor_response_seconds_immediate);
-
-            return new ApiSuccessResponse($this->payload($service->refresh()) + [
-                'awaiting_vendor' => true,
-            ]);
-        }
-
         if (! $this->matching->select($candidate)) {
             return new ApiErrorResponse(new Exception, 'This professional is no longer available', 409);
         }
 
-        return new ApiSuccessResponse($this->payload($service->refresh()));
+        return new ApiSuccessResponse($this->payload($service->refresh()) + [
+            'awaiting_vendor' => false,
+        ]);
     }
 
     /**
@@ -263,6 +272,18 @@ class MatchingController extends Controller
             }
 
             DB::commit();
+
+            // MBWay fica pendente do push no banco do cliente. Sem este job
+            // ninguém volta a perguntar ao Payshop se foi confirmado, e o
+            // serviço ficava pago do lado do cliente e por confirmar do nosso —
+            // com o profissional escolhido a nunca saber que ganhou.
+            // Despachado DEPOIS do commit, para o job não correr contra uma
+            // transação que ainda pode reverter.
+            if ($method === 'mbway' && $service->payment_status !== PaymentStatus::PAID) {
+                MbwayPaymentCheckJob::dispatch($service)->delay(
+                    now()->addSeconds(config('services.request.mbway_payment_check_timeout'))
+                );
+            }
 
             return new ApiSuccessResponse($this->payload($service->refresh()) + [
                 'payment_validationUrl' => $validationUrl,

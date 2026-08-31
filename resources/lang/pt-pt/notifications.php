@@ -87,6 +87,12 @@ return [
         'description' => 'Tens 60 segundos para aceitar',
         'description_schedule' => 'Tens 20 minutos para aceitar',
     ],
+    'matchingInvitation' => [
+        'title' => 'Pedido de ',
+        // Diz que o cliente escolhe. Prometer o trabalho aqui é o que faz o
+        // profissional sentir-se enganado quando perde — e deixar de responder.
+        'description' => 'Diz se tens disponibilidade. O cliente escolhe entre quem responder.',
+    ],
     'scheduledService' => [
         'title' => 'Novo serviço agendado para :when',
         'description' => 'de :service_type',

@@ -198,7 +198,7 @@ class MatchingCandidateLifecycleTest extends TestCase
     {
         $service = $this->service();
         $a = $this->candidate($service, 1, CandidateStatus::NOTIFIED);
-        $b = $this->candidate($service, 2, CandidateStatus::SHORTLISTED);
+        $b = $this->candidate($service, 2, CandidateStatus::ACCEPTED);
 
         $this->matching->fail($service);
 

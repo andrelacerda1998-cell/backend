@@ -4,13 +4,15 @@ namespace App\Enums\Services;
 
 /**
  * Percurso de um candidato — ver docs/matching.md.
- *
- * SHORTLISTED existe só no fluxo imediato: o profissional entra na lista que o
- * cliente vê sem ser incomodado. É o que garante que ninguém aceita em vão.
  */
 enum CandidateStatus: string
 {
-    /** Na lista mostrada ao cliente, ainda sem ser notificado (só no imediato). */
+    /**
+     * @deprecated Legado do fluxo imediato antigo, em que o profissional entrava
+     * na lista mostrada ao cliente sem ser incomodado. Desde a unificação dos
+     * dois modos em difusão, ninguém entra neste estado — mas há linhas antigas
+     * com ele, por isso o caso mantém-se para não rebentar a leitura delas.
+     */
     case SHORTLISTED = 'shortlisted';
 
     /** Recebeu o pedido e a janela de resposta está a correr. */
