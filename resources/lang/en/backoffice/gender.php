@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Genders',
     'singular' => 'Gender',
@@ -6,9 +7,9 @@ return [
     'table' => [
         'name' => 'Name',
         'created_at' => 'Created at',
-        'updated_at' => 'Updated at'
+        'updated_at' => 'Updated at',
     ],
     'form' => [
         'name' => 'Name',
-    ]
+    ],
 ];

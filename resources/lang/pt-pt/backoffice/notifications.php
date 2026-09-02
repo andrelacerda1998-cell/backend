@@ -1,4 +1,5 @@
 <?php
+
 return [
     'success' => 'Sucesso',
     'error' => 'Erro',

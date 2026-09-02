@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Documentos',
     'singular' => 'Documento',
@@ -18,5 +19,5 @@ return [
         'required' => 'Requerido',
         'created_at' => 'Data de criação',
         'updated_at' => 'Ultima modificação',
-    ]
+    ],
 ];

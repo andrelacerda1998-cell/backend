@@ -106,7 +106,7 @@ class SurveyCityResource extends Resource
     {
         return [
             'index' => Pages\ListSurveyCities::route('/'),
-            'edit'  => Pages\EditSurveyCity::route('/{record}/edit'),
+            'edit' => Pages\EditSurveyCity::route('/{record}/edit'),
         ];
     }
 }

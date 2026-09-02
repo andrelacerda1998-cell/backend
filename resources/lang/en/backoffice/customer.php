@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Customers',
     'singular' => 'Customer',
@@ -7,9 +8,9 @@ return [
         'reset_password_form' => [
             'options' => [
                 'email' => 'Enviar link de recuperação de password para email',
-                'password_input' => 'Definir nova password'
-            ]
-        ]
+                'password_input' => 'Definir nova password',
+            ],
+        ],
     ],
     'table' => [
         'avatar' => 'Avatar',
@@ -18,7 +19,7 @@ return [
         'email' => 'Email',
         'phone_number' => 'Phone number',
         'canRequestService' => 'Can request service?',
-        'all' => 'All'
+        'all' => 'All',
     ],
     'form' => [
         'personal_data' => 'Personal data',

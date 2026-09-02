@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Zonas Permitidas',
     'singular' => 'Zona Permitida',
@@ -17,5 +18,5 @@ return [
         'city' => 'Cidade',
         'customer_cities' => 'Cidades dos clientes',
         'other_cities' => 'Outras cidades',
-    ]
+    ],
 ];

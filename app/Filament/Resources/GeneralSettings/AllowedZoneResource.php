@@ -2,23 +2,14 @@
 
 namespace App\Filament\Resources\GeneralSettings;
 
-use App\Filament\Components\Address\GoogleAutocomplete;
 use App\Filament\Components\Address\GoogleCityAutocomplete;
 use App\Filament\Resources\GeneralSettings\AllowedZoneResource\Pages;
 use App\Filament\Resources\GeneralSettings\AllowedZoneResource\RelationManagers;
-use App\Models\Address;
 use App\Models\GeneralSettings\AllowedZone;
-use Filament\Forms;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
-use Filament\Tables\Columns\Column;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Illuminate\Support\Facades\Http;
-use Tapp\FilamentAuditing\RelationManagers\AuditsRelationManager;
 
 class AllowedZoneResource extends Resource
 {
@@ -33,6 +24,7 @@ class AllowedZoneResource extends Resource
     public static function canAccess(): bool
     {
         $user = auth()->user();
+
         return $user->hasRole('super-admin');
     }
 
@@ -94,7 +86,7 @@ class AllowedZoneResource extends Resource
     public static function getRelations(): array
     {
         return [
-            AllowedZoneResource\RelationManagers\VendorsRelationManager::class,
+            RelationManagers\VendorsRelationManager::class,
         ];
     }
 
@@ -102,7 +94,7 @@ class AllowedZoneResource extends Resource
     {
         return [
             'index' => Pages\ListAllowedZones::route('/'),
-            'edit'  => Pages\EditAllowedZone::route('/{record}/edit'),
+            'edit' => Pages\EditAllowedZone::route('/{record}/edit'),
         ];
     }
 

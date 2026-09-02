@@ -9,12 +9,11 @@ use Spatie\Translatable\HasTranslations;
 
 class Document extends Model implements Auditable
 {
-    use \OwenIt\Auditing\Auditable, HasTranslations, SoftDeletes;
+    use HasTranslations, \OwenIt\Auditing\Auditable, SoftDeletes;
 
     public array $translatable = ['name', 'description'];
 
     protected $fillable = [
         'name', 'description', 'required',
     ];
-
 }

@@ -8,6 +8,7 @@ use Filament\Forms;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
@@ -59,9 +60,36 @@ class ServicesTypeResource extends Resource
                     ->label(__('backoffice/service-type.form.image'))
                     ->image()
                     ->previewable()
+                    ->imageEditor()
+                    ->imageCropAspectRatio('1:1')
+                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                     ->maxSize(5120)
-                    ->helperText(__('backoffice/service-type.form.image_max_size'))
+                    // A app corta as imagens em quadrado; dizê-lo aqui evita
+                    // fotos que ficam bem no backoffice e mal no telemóvel.
+                    ->helperText(__('backoffice/service-type.form.image_hint'))
                     ->columnSpan(2),
+
+                // Ordem, visibilidade e destaque na Home. Antes a app decidia
+                // sozinha o que mostrar e por que ordem.
+                Toggle::make('is_active')
+                    ->label(__('backoffice/service-type.form.is_active'))
+                    ->default(true),
+                TextInput::make('sort_order')
+                    ->label(__('backoffice/service-type.form.sort_order'))
+                    ->numeric()
+                    ->default(0)
+                    ->minValue(0),
+                Toggle::make('is_popular')
+                    ->label(__('backoffice/service-type.form.is_popular'))
+                    ->helperText(__('backoffice/service-type.form.is_popular_hint'))
+                    ->live()
+                    ->default(false),
+                TextInput::make('popular_order')
+                    ->label(__('backoffice/service-type.form.popular_order'))
+                    ->numeric()
+                    ->default(0)
+                    ->minValue(0)
+                    ->visible(fn ($get) => (bool) $get('is_popular')),
                 Translate::make()
                     ->locales(['en', 'pt-pt'])
                     ->columnSpan(2)

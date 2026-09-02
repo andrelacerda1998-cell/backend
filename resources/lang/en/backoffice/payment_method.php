@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Payment methods',
     'singular' => 'Payment method',
@@ -7,9 +8,9 @@ return [
         'last4' => 'Last 4 digits',
         'exp' => 'Exp.',
         'holder' => 'Holder',
-        'created_at' => 'Created at'
+        'created_at' => 'Created at',
     ],
     'form' => [
 
-    ]
+    ],
 ];
