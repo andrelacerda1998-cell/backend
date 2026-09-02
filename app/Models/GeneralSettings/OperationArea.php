@@ -28,10 +28,11 @@ class OperationArea extends Model implements Auditable, HasMedia
         'is_active' => 'boolean',
     ];
 
-    /** Ordem definida no backoffice; alfabética como desempate. */
+    /** Ordem definida no backoffice; id como desempate estável (o `name` é
+     *  traduzível — ordenar por ele ordenava o JSON, não o texto). */
     public function scopeOrdered($query)
     {
-        return $query->orderBy('sort_order')->orderBy('name');
+        return $query->orderBy('sort_order')->orderBy('id');
     }
 
     public function scopeActive($query)

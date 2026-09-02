@@ -32,7 +32,7 @@ class ServicesType extends Model implements Auditable, HasMedia
 
     public function scopeOrdered($query)
     {
-        return $query->orderBy('sort_order')->orderBy('name');
+        return $query->orderBy('sort_order')->orderBy('id');
     }
 
     public function scopeActive($query)
@@ -43,7 +43,7 @@ class ServicesType extends Model implements Auditable, HasMedia
     /** Destaques da Home, pela ordem definida no backoffice. */
     public function scopePopular($query)
     {
-        return $query->where('is_popular', true)->orderBy('popular_order')->orderBy('name');
+        return $query->where('is_popular', true)->orderBy('popular_order')->orderBy('id');
     }
 
     public function vendors()
