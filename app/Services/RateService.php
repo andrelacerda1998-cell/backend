@@ -102,6 +102,25 @@ class RateService
             - $this->calculateForVendor($hourRate, $timeService, $distance, false, false);
     }
 
+    /**
+     * Quanto do preço do cliente é só a deslocação — para mostrar em separado
+     * do trabalho, e não só o km em bruto.
+     *
+     * Não reimplementa a fórmula: chama a MESMA função pública que calcula o
+     * preço todo, só que com tempo de serviço zero. Como a comissão e o IVA
+     * são fatores lineares aplicados à soma (tempo + distância), zerar o
+     * tempo isola exatamente a parcela da distância depois de comissão e IVA
+     * — e a parcela do trabalho (mesma chamada com distance=0) soma de volta
+     * ao preço total, sem arredondamentos a mais nem fórmula duplicada que
+     * possa um dia divergir da fórmula real.
+     */
+    public function calculateForCustomerTravelPortion($hourRate, $distance, bool $isScheduled, $round = true, $addVat = true): float
+    {
+        return $isScheduled
+            ? $this->calculateForCustomerForSchedule($hourRate, 0, $distance, $round, $addVat)
+            : $this->calculateForCustomerInstantService($hourRate, 0, $distance, $round, $addVat);
+    }
+
     private function calculateHourCommission(): float|int
     {
         $now = Carbon::now();

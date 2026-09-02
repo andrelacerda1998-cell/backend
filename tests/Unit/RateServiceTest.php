@@ -234,4 +234,53 @@ class RateServiceTest extends TestCase
     {
         return [[1], [2], [3], [5], [10]];
     }
+
+    /**
+     * ------------------------------------------------------------------
+     * Deslocação em separado (calculateForCustomerTravelPortion).
+     * ------------------------------------------------------------------
+     *
+     * Não é fórmula nova: é a mesma função pública do preço total, chamada
+     * com tempo zero (o mesmo truque que os testes de unidades acima já
+     * usam como "deslocação pura"). Estes testes fixam que a parcela devolvida
+     * bate certo com esse P(0) e que soma de volta ao preço total — nos dois
+     * modos, imediato e agendado.
+     */
+    #[DataProvider('travelPortionScenarios')]
+    public function test_travel_portion_matches_zero_time_price(int $rate, int $time, int $distance, bool $isScheduled): void
+    {
+        $travel = $this->rateService->calculateForCustomerTravelPortion($rate, $distance, $isScheduled, false);
+
+        $expected = $isScheduled
+            ? $this->rateService->calculateForCustomerForSchedule($rate, 0, $distance, false)
+            : $this->rateService->calculateForCustomerInstantService($rate, 0, $distance, false);
+
+        $this->assertEqualsWithDelta($expected, $travel, 0.0001);
+    }
+
+    public static function travelPortionScenarios(): array
+    {
+        return [
+            'imediato, rate típica' => [1500, 60, 12, false],
+            'imediato, distância zero' => [1500, 60, 0, false],
+            'imediato, distância longa' => [1200, 90, 51, false],
+            'agendado, rate típica' => [1500, 60, 12, true],
+            'agendado, distância zero' => [1500, 60, 0, true],
+        ];
+    }
+
+    /**
+     * A soma da parcela de deslocação com a parcela de mão de obra (mesma
+     * chamada, distância zero) tem de bater certo com o preço total — senão a
+     * UI mostra duas linhas que não somam ao total apresentado.
+     */
+    #[DataProvider('quantityScenarios')]
+    public function test_travel_portion_plus_labour_portion_equals_total(int $rate, int $time, int $distance): void
+    {
+        $total = $this->rateService->calculateForCustomerInstantService($rate, $time, $distance, false);
+        $travel = $this->rateService->calculateForCustomerTravelPortion($rate, $distance, false, false);
+        $labourOnly = $this->rateService->calculateForCustomerInstantService($rate, $time, 0, false);
+
+        $this->assertEqualsWithDelta($total, $travel + $labourOnly, 0.0001, 'Deslocação + mão de obra não soma ao total');
+    }
 }

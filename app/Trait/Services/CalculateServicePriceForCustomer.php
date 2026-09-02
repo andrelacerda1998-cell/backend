@@ -75,7 +75,7 @@ trait CalculateServicePriceForCustomer
      * Both `customer_amount` and `vendor_amount` are integer cents, VAT included.
      * `distance` is the single measurement used for both, so display/pricing stay in sync.
      *
-     * @return array{customer_amount: int, vendor_amount: int, distance: float|int}
+     * @return array{customer_amount: int, vendor_amount: int, travel_amount: int, distance: float|int}
      */
     protected function calculatePrices(
         ServicesType $serviceType,
@@ -102,10 +102,12 @@ trait CalculateServicePriceForCustomer
         }
 
         $vendorAmount = $rateService->calculateForVendor($hourlyRate, $timeService, $distance);
+        $travelAmount = $rateService->calculateForCustomerTravelPortion($hourlyRate, $distance, $isScheduled);
 
         return [
             'customer_amount' => (int) round($customerAmount),
             'vendor_amount' => (int) round($vendorAmount),
+            'travel_amount' => (int) round($travelAmount),
             'distance' => $distance,
         ];
     }
@@ -119,10 +121,14 @@ trait CalculateServicePriceForCustomer
         $timeService = $this->effectiveMinutes($serviceType, $quantity);
         $distance = $this->calculateVendorDistanceInstantService($vendor, $guestAddress);
         $amount = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
+        $travelAmount = (int) round($rateService->calculateForCustomerTravelPortion($hourlyRate, $distance, false));
 
         return [
             'amount' => $amount,
             'amount_formated' => number_format($amount / 100, 2, '.', ' '),
+            'travel_amount' => $travelAmount,
+            'travel_amount_formated' => number_format($travelAmount / 100, 2, '.', ' '),
+            'distance' => $distance,
             'original_amount' => $amount,
             'original_amount_formated' => number_format($amount / 100, 2, '.', ' '),
             'discount_amount' => 0,
@@ -251,6 +257,7 @@ trait CalculateServicePriceForCustomer
             $prices['distance'],
             $voucher,
             $isGuest,
+            $prices['travel_amount'],
         );
     }
 
@@ -264,6 +271,13 @@ trait CalculateServicePriceForCustomer
      * (ver docs/matching.md).
      *
      * @param  \App\Models\User|null  $customer  null para convidado (sem saldo nem histórico de cupões)
+     * @param  int|null  $travelAmount  parcela do `originalAmount` que é só deslocação, já com
+     *                                  comissão e IVA aplicados (ver RateService::calculateForCustomerTravelPortion).
+     *                                  Null quando não há para mostrar (ex.: checkout do matching, que parte de um
+     *                                  preço já congelado no candidato sem essa parcela guardada) — nesse caso as
+     *                                  chaves `travel_amount*` saem de fora da resposta, e não a zero, para o
+     *                                  cliente nunca ler "deslocação: 0,00€" quando a informação simplesmente não
+     *                                  existe.
      */
     protected function buildTransactionTotals(
         $customer,
@@ -272,6 +286,7 @@ trait CalculateServicePriceForCustomer
         float|int $distance,
         ?Voucher $voucher = null,
         bool $isGuest = false,
+        ?int $travelAmount = null,
     ): array {
         $amount = $originalAmount;
         $discountAmount = 0;
@@ -313,6 +328,10 @@ trait CalculateServicePriceForCustomer
             'amount_formated' => number_format($amount / 100, 2, '.', ' '),
             'amount_for_vendor' => $vendorAmount,
             'amount_for_vendor_formated' => number_format($vendorAmount / 100, 2, '.', ' '),
+            ...($travelAmount !== null ? [
+                'travel_amount' => $travelAmount,
+                'travel_amount_formated' => number_format($travelAmount / 100, 2, '.', ' '),
+            ] : []),
             'distance' => $distance,
             'original_amount' => $originalAmount,
             'original_amount_formated' => number_format($originalAmount / 100, 2, '.', ' '),

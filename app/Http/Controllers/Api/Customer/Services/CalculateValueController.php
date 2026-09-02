@@ -60,6 +60,8 @@ class CalculateValueController extends Controller
                 return new ApiSuccessResponse([
                     'amount' => 0,
                     'amount_formated' => '0.00',
+                    'travel_amount' => 0,
+                    'travel_amount_formated' => '0.00',
                     'original_amount' => 0,
                     'original_amount_formated' => '0.00',
                     'discount_amount' => 0,
