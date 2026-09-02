@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Admin\SmsCodeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
+use App\Http\Controllers\Api\Admin\PaymentOrderController;
 use App\Http\Controllers\Api\Admin\VendorPaymentController;
 use App\Http\Controllers\Api\Admin\VoucherController;
 use Illuminate\Support\Facades\Route;
@@ -38,6 +39,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // interno + email/notificação; a transferência bancária é manual).
     Route::get('/vendor-payments', [VendorPaymentController::class, 'index']);
     Route::put('/vendor-payments/{vendor}/pay', [VendorPaymentController::class, 'pay']);
+
+    // Reembolso / libertação de cativo dos pagamentos da app (Payshop).
+    // Passa pelo SDK para o estado local acompanhar; recusa se o serviço
+    // associado ainda estiver vivo (ver nota no controller).
+    Route::post('/payment-orders/{uuid}/refund', [PaymentOrderController::class, 'refund']);
+    Route::post('/payment-orders/{uuid}/cancel', [PaymentOrderController::class, 'cancel']);
 
     // Clientes — equivalente ao Filament CustomerResource. Bloquear/Reativar
     // usam soft-delete real (ver nota no controller); sem ForceDelete, reset
