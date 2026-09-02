@@ -180,9 +180,15 @@ class MatchingAdvanceTest extends TestCase
         $chosen = $this->candidate($service, 1, CandidateStatus::SELECTED);
 
         $service->update(['status' => ServiceStatus::AWAITING_PAYMENT, 'vendor_id' => $chosen->vendor_id]);
-        // Escolhido há mais tempo do que o prazo para pagar.
+
+        // Escolhido há mais tempo do que o prazo para pagar. Atribuição direta
+        // e não `update(['updated_at' => ...])`: `updated_at` não está no
+        // $fillable do Service (é gerido pelo Eloquent), por isso um update em
+        // massa descartava-o em silêncio e o serviço ficava sempre com a hora
+        // real — o comando nunca o via como abandonado.
         $service->timestamps = false;
-        $service->update(['updated_at' => now()->subSeconds(400)]);
+        $service->updated_at = now()->subSeconds(400);
+        $service->save();
         $service->timestamps = true;
 
         $this->artisan('matching:advance')->assertSuccessful();
