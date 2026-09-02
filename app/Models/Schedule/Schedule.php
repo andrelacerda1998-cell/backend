@@ -10,6 +10,7 @@ use App\Observers\ScheduleObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Date;
 
 /**
@@ -26,6 +27,8 @@ use Illuminate\Support\Facades\Date;
 #[ObservedBy(ScheduleObserver::class)]
 class Schedule extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'schedule';
 
     protected $fillable = [
