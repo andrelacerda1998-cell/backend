@@ -17,5 +17,6 @@ class DatabaseSeeder extends Seeder
         #$this->callOnce(UserSeeder::class);
         $this->callOnce(OperationAreasSeeder::class);
         $this->callOnce(ServicesTypesSeeder::class);
+        $this->callOnce(PortugueseCitiesSeeder::class);
     }
 }

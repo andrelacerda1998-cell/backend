@@ -25,6 +25,7 @@ return [
     ],
     'cities' => [
         'min' => 'Escolhe pelo menos :min concelhos onde queres trabalhar.',
+        'preferred_subset' => 'As 3 cidades prioritárias têm de estar entre as que escolheste.',
     ],
     'password' => [
         'letters' => 'A senha deve conter pelo menos uma letra.',

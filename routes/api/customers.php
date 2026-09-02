@@ -90,6 +90,15 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
         Route::get('/', GetCurrentAddressController::class);
     });
 
+    // Multi-morada: um proprietário de vários alojamentos gere as moradas de cada casa.
+    Route::group(['prefix' => 'addresses'], function () {
+        Route::get('/', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'store'])->middleware('throttle:geocode');
+        Route::put('/{address}', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'update'])->middleware('throttle:geocode');
+        Route::delete('/{address}', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'destroy']);
+        Route::put('/{address}/main', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'setMain']);
+    });
+
     Route::group(['prefix' => 'payment-methods'], function () {
         Route::post('credit-card', AddCreditCardController::class)->withoutMiddleware('auth:api')->middleware('throttle:credit-card');
         Route::post('credit-card/flush-guest', FlushGuestCreditCardController::class);

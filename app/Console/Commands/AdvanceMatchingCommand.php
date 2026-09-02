@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Services\Matching\MatchingService;
@@ -73,46 +72,27 @@ class AdvanceMatchingCommand extends Command
                 continue;
             }
 
-            // Alarga a onda quando a anterior já teve tempo de responder.
-            // Alargar antes disso seria chamar gente a mais para o mesmo
-            // trabalho — exatamente o que as ondas evitam. Os dois modos
-            // precisam de sinais diferentes para saber "já teve tempo":
-            if ($matching->isScheduled($service)) {
-                // No agendado a cadência das ondas é deliberadamente mais
-                // rápida do que a janela de resposta de cada convidado (ex.:
-                // uma nova onda a cada 45s, com cada convite válido por 30
-                // minutos) — por isso aqui o sinal é mesmo o intervalo entre
-                // ondas, não a expiração de ninguém.
-                $lastNotifiedAt = $service->candidates()->max('notified_at');
+            // Alarga a onda quando a anterior já teve tempo de responder, nos
+            // dois modos. Alargar antes disso seria chamar gente a mais para o
+            // mesmo trabalho — exatamente o que as ondas evitam.
+            //
+            // No imediato o intervalo é a própria janela de resposta: não faz
+            // sentido esperar mais do que o tempo que se deu a quem já foi
+            // convidado, com o cliente parado num ecrã de espera.
+            $interval = $matching->isScheduled($service)
+                ? $settings->wave_interval_seconds
+                : $settings->vendor_response_seconds_immediate;
 
-                // Comparação explícita e não `diffInSeconds`: no Carbon 3 a
-                // diferença vem COM SINAL, por isso uma data no passado dava
-                // um número negativo, sempre menor do que o intervalo — e a
-                // onda seguinte nunca saía.
-                if ($lastNotifiedAt && \Carbon\Carbon::parse($lastNotifiedAt)
-                    ->addSeconds($settings->wave_interval_seconds)
-                    ->isFuture()) {
-                    continue;
-                }
-            } else {
-                // No imediato a janela de resposta E o intervalo de
-                // alargamento são a mesma coisa, por isso a fonte da verdade
-                // tem de ser o `expires_at` de cada candidato — o mesmo que o
-                // expireStale() já usou acima — e não um cálculo paralelo a
-                // partir de `notified_at` + `vendor_response_seconds_immediate`
-                // lido agora. Se essa definição for alterada no backoffice
-                // enquanto o pedido está a decorrer, os dois cálculos
-                // divergem: um convite cuja janela já tinha fechado (e por
-                // isso já ficou EXPIRED acima) continuava a bloquear o
-                // alargamento porque o intervalo recalculado com o valor novo
-                // ainda não tinha passado.
-                $stillWaiting = $service->candidates()
-                    ->where('status', CandidateStatus::NOTIFIED)
-                    ->exists();
+            $lastNotifiedAt = $service->candidates()->max('notified_at');
 
-                if ($stillWaiting) {
-                    continue;
-                }
+            // Comparação explícita e não `diffInSeconds`: no Carbon 3 a
+            // diferença vem COM SINAL, por isso uma data no passado dava um
+            // número negativo, sempre menor do que o intervalo — e a onda
+            // seguinte nunca saía.
+            if ($lastNotifiedAt && \Carbon\Carbon::parse($lastNotifiedAt)
+                ->addSeconds($interval)
+                ->isFuture()) {
+                continue;
             }
 
             if ($matching->dispatchNextWave($service)->isNotEmpty()) {

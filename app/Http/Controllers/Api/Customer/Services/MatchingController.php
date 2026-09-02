@@ -55,7 +55,9 @@ class MatchingController extends Controller
 
         try {
             $customer = $this->fetchCustomer();
-            $address = $this->fetchCustomerMainAddress($customer);
+            $address = $request->filled('address_id')
+                ? $this->fetchCustomerAddressById($customer, $request->integer('address_id'))
+                : $this->fetchCustomerMainAddress($customer);
             $serviceType = ServicesType::findOrFail($request->integer('service_type'));
             $isScheduled = $request->boolean('scheduled');
 

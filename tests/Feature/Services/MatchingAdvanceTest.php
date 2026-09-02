@@ -109,7 +109,15 @@ class MatchingAdvanceTest extends TestCase
     public function test_immediate_gives_up_when_nobody_answers(): void
     {
         $service = $this->service();
-        $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->subSecond());
+        $candidate = $this->candidate($service, 1, CandidateStatus::NOTIFIED, now()->subSecond());
+
+        // O convite tem de ser tão antigo quanto a janela que já fechou. O helper
+        // carimba `notified_at` a agora, e o comando só alarga/desiste depois de
+        // `notified_at + intervalo da onda` — com um convite acabado de fazer,
+        // ficava à espera e o pedido nunca desistia. Produção nunca cria esse
+        // estado (invite() põe expires_at = notified_at + janela), por isso era o
+        // cenário do teste que não existia, não o comando que estava errado.
+        $candidate->update(['notified_at' => now()->subSeconds(120)]);
 
         $this->artisan('matching:advance')->assertSuccessful();
 
@@ -180,15 +188,13 @@ class MatchingAdvanceTest extends TestCase
         $chosen = $this->candidate($service, 1, CandidateStatus::SELECTED);
 
         $service->update(['status' => ServiceStatus::AWAITING_PAYMENT, 'vendor_id' => $chosen->vendor_id]);
-
-        // Escolhido há mais tempo do que o prazo para pagar. Atribuição direta
-        // e não `update(['updated_at' => ...])`: `updated_at` não está no
-        // $fillable do Service (é gerido pelo Eloquent), por isso um update em
-        // massa descartava-o em silêncio e o serviço ficava sempre com a hora
-        // real — o comando nunca o via como abandonado.
+        // Escolhido há mais tempo do que o prazo para pagar.
+        // forceFill e não update(): `updated_at` não está no $fillable do Service,
+        // por isso a atribuição em massa era descartada em silêncio — o serviço
+        // continuava com a hora de agora, o varrimento não o apanhava e o teste
+        // falhava por não ter envelhecido nada.
         $service->timestamps = false;
-        $service->updated_at = now()->subSeconds(400);
-        $service->save();
+        $service->forceFill(['updated_at' => now()->subSeconds(400)])->save();
         $service->timestamps = true;
 
         $this->artisan('matching:advance')->assertSuccessful();

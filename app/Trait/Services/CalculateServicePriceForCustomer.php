@@ -196,6 +196,20 @@ trait CalculateServicePriceForCustomer
     }
 
     /**
+     * Morada escolhida pelo cliente (multi-morada). Tem de ser dele; se não
+     * existir/não for dele, cai na principal para nunca criar um serviço sem
+     * morada.
+     *
+     * @throws CustomerDontHaveMainAddress
+     */
+    private function fetchCustomerAddressById($customer, int $addressId): Address
+    {
+        $address = $customer->addresses()->whereKey($addressId)->first();
+
+        return $address ?? $this->fetchCustomerMainAddress($customer);
+    }
+
+    /**
      * @throws CustomerCantRequestServices
      */
     private function getCustomer()

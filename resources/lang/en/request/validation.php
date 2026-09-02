@@ -25,6 +25,7 @@ return [
     ],
     'cities' => [
         'min' => 'Choose at least :min municipalities where you want to work.',
+        'preferred_subset' => 'The 3 priority cities must be among the ones you selected.',
     ],
     'password' => [
         'letters' => 'The :attribute must contain at least one letter.',
