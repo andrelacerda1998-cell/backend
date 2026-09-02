@@ -96,6 +96,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/services-types', [ServicesTypeController::class, 'index']);
     Route::post('/services-types', [ServicesTypeController::class, 'store']);
     Route::put('/services-types/{servicesType}', [ServicesTypeController::class, 'update']);
+    // SoftDelete -- ver nota no controller: o histórico de serviços continua a
+    // resolver o nome do tipo depois de removido do catálogo.
+    Route::delete('/services-types/{servicesType}', [ServicesTypeController::class, 'destroy']);
 
     Route::get('/operation-areas', [OperationAreaController::class, 'index']);
     Route::post('/operation-areas', [OperationAreaController::class, 'store']);

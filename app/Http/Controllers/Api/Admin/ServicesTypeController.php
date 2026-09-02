@@ -101,6 +101,20 @@ class ServicesTypeController extends Controller
         return ApiSuccessResponse::make($this->present($servicesType->fresh(['operationArea'])));
     }
 
+    /**
+     * DELETE /v1/admin/services-types/{servicesType} — remove do catálogo.
+     *
+     * SoftDelete: a linha fica na base de dados, por isso os serviços já
+     * realizados que apontam para este tipo continuam a resolver o nome e o
+     * histórico não se parte. O que desaparece é a oferta na app e no catálogo.
+     */
+    public function destroy(ServicesType $servicesType): ApiSuccessResponse
+    {
+        $servicesType->delete();
+
+        return ApiSuccessResponse::make(['id' => $servicesType->id, 'deleted' => true]);
+    }
+
     /** Grava o mesmo valor nas duas línguas geridas pelo Filament (en, pt-pt). */
     private function applyName(ServicesType $type, string $value): void
     {
