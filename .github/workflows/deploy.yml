@@ -229,7 +229,25 @@ jobs:
             # de "data dictionary" entre major versions do MySQL. Corrigido nesse dia fixando a
             # tag exata (mysql:9.2.0-piquet-restore) no docker-compose.yaml do servidor -- mas o
             # pipeline nunca deve depender disso: só toca no serviço da app.
-            docker compose pull laravel-prod
+            # Retry ao pull: o ghcr.io (Fastly) tem dado TLS handshake timeout
+            # intermitente a puxar os layers da imagem -- 3 deploys falhados assim em
+            # 2026-09-02 (rede do host a chegar ao ghcr estava boa segundos depois).
+            # Tentar ate 5x com espera crescente antes de desistir, para o deploy
+            # sobreviver a soluços de rede pontuais em vez de abortar a meio.
+            pull_ok=false
+            for attempt in 1 2 3 4 5; do
+              if docker compose pull laravel-prod; then
+                pull_ok=true
+                break
+              fi
+              wait=$((attempt * 10))
+              echo "pull falhou (tentativa ${attempt}/5); nova tentativa em ${wait}s..." >&2
+              sleep "$wait"
+            done
+            if [ "$pull_ok" != "true" ]; then
+              echo "ERRO: docker compose pull falhou apos 5 tentativas" >&2
+              exit 1
+            fi
             docker compose up -d laravel-prod
             docker image prune -f
             docker logout ghcr.io
