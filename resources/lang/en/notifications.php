@@ -30,6 +30,14 @@ return [
             'line3' => 'If you did not try to sign in, please ignore this email — your account is still safe.',
             'salutation' => 'Best regards, The Team',
         ],
+        'noShowOps' => [
+            'subject' => 'Possible no-show — service #:service_id',
+            'greetings' => 'Hello',
+            'line1' => 'Service #:service_id (:service_type) was scheduled for :time and the professional has not started it yet.',
+            'line2' => 'Professional: :vendor_name. Customer: :customer_name (:customer_phone).',
+            'line3' => 'It is worth contacting the professional and, if needed, reassigning the service or refunding the customer.',
+            'salutation' => 'Best regards, The Team',
+        ],
         'userRegistered' => [
             'line1' => 'Welcome to our app!',
             'line2' => 'Please click the button below to confirm your email address.',
@@ -69,6 +77,21 @@ return [
     'serviceStuck' => [
         'title' => 'Service not finished',
         'description' => 'The service ":service" has been in progress for :hours hours. Finish it to get paid.',
+    ],
+    // No-show detection (service still not started after the scheduled time).
+    'noShow' => [
+        'vendor' => [
+            'title' => 'Haven\'t left yet?',
+            'description' => 'Your :service_type service with :customer_name was at :time. If you are on your way, tap "On my way" in the app; if you can no longer make it, let us know.',
+        ],
+        'customer' => [
+            'title' => 'Confirming your service',
+            'description' => 'Your :service_type service was scheduled for :time. We are confirming with the professional and will be in touch shortly.',
+        ],
+        'ops' => [
+            'title' => 'Possible no-show — service #:service_id',
+            'description' => 'Service #:service_id (:service_type) scheduled for :time with :vendor_name has not started. Customer: :customer_name.',
+        ],
     ],
     'incompleteProfile' => [
         'greeting' => 'Hi :name,',

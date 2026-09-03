@@ -39,6 +39,14 @@ return [
             'line3' => 'Se não tentaste iniciar sessão, ignora este email — a tua conta continua segura.',
             'salutation' => 'Com os melhores cumprimentos, A Equipa',
         ],
+        'noShowOps' => [
+            'subject' => 'Possível não-comparência — serviço #:service_id',
+            'greetings' => 'Olá',
+            'line1' => 'O serviço #:service_id (:service_type) estava marcado para as :time e o profissional ainda não o iniciou.',
+            'line2' => 'Profissional: :vendor_name. Cliente: :customer_name (:customer_phone).',
+            'line3' => 'Convém contactar o profissional e, se necessário, reatribuir o serviço ou reembolsar o cliente.',
+            'salutation' => 'Com os melhores cumprimentos, A Equipa',
+        ],
         'userRegistered' => [
             'line1' => 'Bem-vindo à nossa aplicação!',
             'line2' => 'Por favor, clica no botão abaixo para confirmar o teu endereço de email.',
@@ -69,6 +77,21 @@ return [
     'serviceStuck' => [
         'title' => 'Serviço por concluir',
         'description' => 'O serviço ":service" está em execução há :hours horas. Conclui-o para receberes o pagamento.',
+    ],
+    // Deteção de não-comparência (serviço ainda por iniciar depois da hora marcada).
+    'noShow' => [
+        'vendor' => [
+            'title' => 'Ainda não saíste?',
+            'description' => 'O teu serviço de :service_type com :customer_name era às :time. Se estás a caminho, marca "A caminho" na app; se já não consegues ir, avisa-nos.',
+        ],
+        'customer' => [
+            'title' => 'A confirmar o teu serviço',
+            'description' => 'O teu serviço de :service_type estava marcado para as :time. Estamos a confirmar com o profissional e entramos em contacto em breve.',
+        ],
+        'ops' => [
+            'title' => 'Possível não-comparência — serviço #:service_id',
+            'description' => 'Serviço #:service_id (:service_type) marcado para :time com :vendor_name continua por iniciar. Cliente: :customer_name.',
+        ],
     ],
     'incompleteProfile' => [
         'greeting' => 'Olá :name,',
