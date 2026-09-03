@@ -40,4 +40,9 @@ Schedule::command('vendors:remind-incomplete-profile')->dailyAt('10:00')->withou
 // dinheiro que o tecnico ainda nao recebeu (e uma fatura que o cliente nao tem).
 Schedule::command('services:notify-stuck-in-progress')->hourly()->withoutOverlapping();
 
+// Nao-comparencia: agendamento que passou a hora e continua por iniciar (SCHEDULED).
+// Ao minuto porque as etapas sao a T+10/15/20min — de cinco em cinco minutos, o ops
+// so seria avisado bem depois. `withoutOverlapping` para nao duplicar envios.
+Schedule::command('services:detect-no-show')->everyMinute()->withoutOverlapping();
+
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
