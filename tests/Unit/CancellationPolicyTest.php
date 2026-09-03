@@ -85,8 +85,8 @@ class CancellationPolicyTest extends TestCase
     }
 
     /**
-     * Penalização por cancelar um agendamento: 24h -> 50%, 6h -> 75%,
-     * 1h -> 100%. Mais de 24h antes não custa nada.
+     * Penalização por cancelar um agendamento: 12h -> 50%, 6h -> 75%,
+     * 1h -> 100%. Mais de 12h antes não custa nada.
      *
      * @dataProvider scheduledPenaltyScenarios
      */
@@ -103,9 +103,10 @@ class CancellationPolicyTest extends TestCase
         return [
             'uma semana antes' => [168.0, 0.0],
             'dois dias antes' => [48.0, 0.0],
-            'pouco mais de 24h' => [24.5, 0.0],
-            'exatamente 24h' => [24.0, 0.5],
-            'meio dia antes' => [12.0, 0.5],
+            'um dia antes' => [24.0, 0.0],
+            'pouco mais de 12h' => [12.5, 0.0],
+            'exatamente 12h' => [12.0, 0.5],
+            'oito horas antes' => [8.0, 0.5],
             'pouco mais de 6h' => [6.5, 0.5],
             'exatamente 6h' => [6.0, 0.75],
             'duas horas antes' => [2.0, 0.75],

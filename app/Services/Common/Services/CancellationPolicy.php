@@ -52,9 +52,9 @@ class CancellationPolicy
      * horário e já não o consegue vender a outro cliente. Decisão do André.
      */
     public const SCHEDULED_PENALTY_TIERS = [
-        1 => 1.0,    // menos de 1 hora  -> 100%
-        6 => 0.75,   // menos de 6 horas -> 75%
-        24 => 0.5,   // menos de 24 horas -> 50%
+        1 => 1.0,    // menos de 1 hora   -> 100%
+        6 => 0.75,   // menos de 6 horas  -> 75%
+        12 => 0.5,   // menos de 12 horas -> 50%
     ];
 
     /**
