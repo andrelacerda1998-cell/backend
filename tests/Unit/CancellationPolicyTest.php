@@ -83,4 +83,60 @@ class CancellationPolicyTest extends TestCase
         $this->assertSame(0, $split['vendor']);
         $this->assertSame(0, $split['platform']);
     }
+
+    /**
+     * Penalização por cancelar um agendamento: 24h -> 50%, 6h -> 75%,
+     * 1h -> 100%. Mais de 24h antes não custa nada.
+     *
+     * @dataProvider scheduledPenaltyScenarios
+     */
+    public function test_scheduled_penalty_ratio_by_tier(float $hoursLeft, float $expected): void
+    {
+        $now = \Carbon\Carbon::parse('2026-09-03 12:00:00');
+        $scheduledAt = $now->copy()->addMinutes((int) round($hoursLeft * 60));
+
+        $this->assertSame($expected, CancellationPolicy::scheduledPenaltyRatio($scheduledAt, $now));
+    }
+
+    public static function scheduledPenaltyScenarios(): array
+    {
+        return [
+            'uma semana antes' => [168.0, 0.0],
+            'dois dias antes' => [48.0, 0.0],
+            'pouco mais de 24h' => [24.5, 0.0],
+            'exatamente 24h' => [24.0, 0.5],
+            'meio dia antes' => [12.0, 0.5],
+            'pouco mais de 6h' => [6.5, 0.5],
+            'exatamente 6h' => [6.0, 0.75],
+            'duas horas antes' => [2.0, 0.75],
+            'pouco mais de 1h' => [1.5, 0.75],
+            'exatamente 1h' => [1.0, 1.0],
+            'quinze minutos antes' => [0.25, 1.0],
+            'à hora marcada' => [0.0, 1.0],
+            'já passou' => [-3.0, 1.0],
+        ];
+    }
+
+    public function test_scheduled_penalty_without_date_does_not_charge(): void
+    {
+        $this->assertSame(0.0, CancellationPolicy::scheduledPenaltyRatio(null));
+    }
+
+    public function test_scheduled_penalty_amount_applies_the_ratio(): void
+    {
+        $this->assertSame(3000, CancellationPolicy::scheduledPenaltyAmount(6000, 0.5));
+        $this->assertSame(4500, CancellationPolicy::scheduledPenaltyAmount(6000, 0.75));
+        $this->assertSame(6000, CancellationPolicy::scheduledPenaltyAmount(6000, 1.0));
+        $this->assertSame(0, CancellationPolicy::scheduledPenaltyAmount(6000, 0.0));
+    }
+
+    public function test_scheduled_penalty_amount_rounds_and_normalizes(): void
+    {
+        // 25,25 a 50% dá 12,625 -> 12,63 ao cêntimo.
+        $this->assertSame(1263, CancellationPolicy::scheduledPenaltyAmount(2525, 0.5));
+        // Valores negativos vêm de payloads antigos; conta-se o módulo.
+        $this->assertSame(3000, CancellationPolicy::scheduledPenaltyAmount(-6000, 0.5));
+        // Nunca cobra mais do que o serviço, mesmo com um rácio disparatado.
+        $this->assertSame(6000, CancellationPolicy::scheduledPenaltyAmount(6000, 2.0));
+    }
 }
