@@ -17,6 +17,7 @@ use App\Services\Customer\Services\VendorSearchService;
 use App\Services\RateService;
 use App\Trait\Services\HasVendorDistance;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class RequestServiceController extends Controller
 {
@@ -161,6 +162,15 @@ class RequestServiceController extends Controller
 
             return new ApiSuccessResponse(['vendors' => $transformed]);
         } catch (\Exception $exception) {
+            // O "Something went wrong" que o cliente recebe não diz nada a
+            // ninguém; sem este registo, saber porque falhou uma procura obriga
+            // a adivinhar a partir do ecrã.
+            Log::error('Guest vendor search failed', [
+                'scheduled' => $request->boolean('scheduled'),
+                'service_type_id' => $request->get('service_type_id'),
+                'error' => $exception->getMessage(),
+            ]);
+
             return new ApiErrorResponse($exception);
         }
     }

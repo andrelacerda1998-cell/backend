@@ -4,6 +4,7 @@ namespace App\Services\Customer\Services;
 
 use App\DTO\Services\AddressCoordinatesDTO;
 use App\Enums\Schedule\ScheduleDay;
+use App\Enums\Services\AddressType;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Address;
 use App\Models\GeneralSettings\ServicesType;
@@ -11,6 +12,8 @@ use App\Models\Vendor;
 use App\Models\VendorScheduleSearch;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Laravel\Scout\Builder;
 use Meilisearch\Endpoints\Indexes;
 
 /**
@@ -47,8 +50,23 @@ class ScheduleVendorSearchService
         $this->servicesType = $servicesType;
         $this->serviceDurationMinutes = $servicesType->time ? (int) $servicesType->time : null;
 
-        $query = $this->buildSearchQuery();
-        $vendorIds = $query->take($this->limit * 2)->keys();
+        // O índice de pesquisa é um acelerador, não a única forma de responder.
+        // Quando falha (índice por criar, definições por aplicar, Meilisearch em
+        // baixo) o pedido rebentava com 500 e o cliente ficava sem conseguir
+        // agendar de todo — que é o que está a acontecer em produção. A pesquisa
+        // passa a cair para a base de dados, com os mesmos filtros.
+        try {
+            $vendorIds = $this->buildSearchQuery()->take($this->limit * 2)->keys();
+        } catch (\Throwable $e) {
+            // Registar a causa real: o 500 genérico não dizia o que falhou, e sem
+            // isto continuaríamos a adivinhar.
+            Log::warning('Schedule vendor search fell back to database', [
+                'reason' => $e->getMessage(),
+                'service_type_id' => $servicesType->id,
+            ]);
+
+            $vendorIds = $this->searchInDatabase($isTestCustomer);
+        }
 
         // Fetch full vendor models with relationships
         $vendors = Vendor::with([
@@ -245,7 +263,60 @@ class ScheduleVendorSearchService
         return $serviceDurationMinutes + (int) config('services.request.schedule_safety_margin_minutes', 60);
     }
 
-    private function buildSearchQuery(): \Laravel\Scout\Builder
+    /**
+     * A mesma pesquisa, feita na base de dados.
+     *
+     * Mais lenta do que o índice, mas responde: técnico válido, com morada de
+     * agendamento, que faz este tipo de serviço, com agenda ligada num dos dias
+     * relevantes e dentro do raio. A ordem é por distância, como no índice — o
+     * resto do ranking (auto-aceitação, nota) fica para o índice, porque aqui
+     * custaria mais do que vale.
+     *
+     * @return Collection<int, int>
+     */
+    private function searchInDatabase(bool $isTestCustomer): Collection
+    {
+        $latitude = (float) $this->address->latitude;
+        $longitude = (float) $this->address->longitude;
+        $radiusMeters = (int) config(
+            'services.request.schedule_search_distance',
+            config('services.request.new_service_search_distance', 50000),
+        );
+
+        $relevantDays = $this->getRelevantDaysOfWeek();
+
+        // Haversine em SQL: a distância que decide o raio e a ordem.
+        $distance = '(6371000 * acos(least(1, greatest(-1,'
+            .' cos(radians(?)) * cos(radians(addresses.latitude))'
+            .' * cos(radians(addresses.longitude) - radians(?))'
+            .' + sin(radians(?)) * sin(radians(addresses.latitude))))))';
+
+        return Vendor::query()
+            ->select('vendors.id')
+            // MIN + agrupar por técnico: quem tenha mais do que uma morada de
+            // agendamento apareceria repetido, e o cliente via o mesmo nome duas vezes.
+            ->selectRaw('MIN'.$distance.' as distance_meters', [$latitude, $longitude, $latitude])
+            ->join('users', 'users.id', '=', 'vendors.user_id')
+            ->join('addresses', function ($join) {
+                $join->on('addresses.user_id', '=', 'users.id')
+                    ->where('addresses.address_type', '=', AddressType::SCHEDULE_ADDRESS->value)
+                    ->whereNotNull('addresses.latitude')
+                    ->whereNotNull('addresses.longitude');
+            })
+            ->where('vendors.at_valid', true)
+            ->where('users.is_test', $isTestCustomer)
+            ->whereHas('servicesTypes', fn ($q) => $q->where('services_types.id', $this->servicesType->id))
+            ->whereHas('scheduleAvailable', fn ($q) => $q
+                ->where('schedule_available.is_enabled', true)
+                ->whereHas('scheduleDay', fn ($d) => $d->whereIn('schedule_days.day_name', $relevantDays)))
+            ->groupBy('vendors.id')
+            ->havingRaw('distance_meters <= ?', [$radiusMeters])
+            ->orderBy('distance_meters')
+            ->limit($this->limit * 2)
+            ->pluck('vendors.id');
+    }
+
+    private function buildSearchQuery(): Builder
     {
         $address = $this->address;
         $servicesType = $this->servicesType;
