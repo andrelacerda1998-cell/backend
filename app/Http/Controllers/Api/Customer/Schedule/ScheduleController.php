@@ -108,7 +108,9 @@ class ScheduleController
             $service->update(['nif' => $request->input('nif')]);
         }
 
-        if ($vendor->scheduleAvailable()->where('auto_accept', '=', true)->where('is_enabled', '=', true)->exists()) {
+        // Auto-aceitação respeita o dia da semana do agendamento (autoAcceptsOn),
+        // não basta ter auto-accept nalgum dia — ver incidente 13/08.
+        if ($vendor->autoAcceptsOn(Carbon::parse($schedule->scheduled_day))) {
             $schedule->update(['is_pending' => false]);
             AcceptScheduleEvent::dispatch($customer->id, ['schedule_id' => $schedule->id, 'service_id' => $serviceId]);
             $this->acceptService->acceptSchedule($service);

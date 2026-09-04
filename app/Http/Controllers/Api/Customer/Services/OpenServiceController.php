@@ -390,7 +390,9 @@ class OpenServiceController extends Controller
             'is_pending' => true,
         ]);
 
-        if ($vendor->scheduleAvailable()->where('auto_accept', '=', true)->where('is_enabled', '=', true)->exists()) {
+        // Auto-aceitação respeita o dia da semana do agendamento (autoAcceptsOn),
+        // não basta ter auto-accept nalgum dia — ver incidente 13/08.
+        if ($vendor->autoAcceptsOn(Carbon::parse($scheduledDay))) {
             $schedule->update(['is_pending' => false]);
             AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
             \App\Events\Vendor\Schedule\AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
