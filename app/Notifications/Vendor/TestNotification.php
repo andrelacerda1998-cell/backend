@@ -9,6 +9,7 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class TestNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
 
     public function __construct(private string $text, private string $title)
