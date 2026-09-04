@@ -55,6 +55,12 @@ class CancelService
      * avança — mais vale o cliente continuar com o serviço marcado do que ficar
      * cobrado a 100% de uma penalização de 50%.
      *
+     * As chamadas ao Payshop (capturar, reembolsar) correm FORA da transação de
+     * BD: movem dinheiro no gateway e um rollBack não as reverteria. Só as
+     * escritas de ledger (depósitos + estado) ficam na transação — locais e
+     * atómicas. Assim nunca se desfaz em BD dinheiro que já se moveu no gateway;
+     * uma falha depois da captura fica registada para reconciliação manual.
+     *
      * @throws ExceptionInterface
      * @throws \Exception
      * @throws \Throwable
@@ -76,36 +82,43 @@ class CancelService
             return;
         }
 
-        \DB::beginTransaction();
+        // Captura fora de qualquer transação de BD. Sem captura não se cobra
+        // ninguém e cai-se no cancelamento normal (o customerCancel trata do
+        // estado), para nunca se depositar dinheiro que não se conseguiu cobrar.
+        if (! $this->capturePayment()) {
+            $this->customerCancel();
+
+            return;
+        }
+
+        // A partir daqui o total foi capturado no Payshop. O reembolso da
+        // diferença (externo) e as escritas de ledger contam já com dinheiro
+        // movido — qualquer falha tem de ficar registada para reconciliação.
         try {
-            if (! $this->capturePayment()) {
-                $this->service->status = ServiceStatus::CANCELED;
-                $this->service->status_justification = 'internal/services.cancel.description';
-                $this->service->save();
-
-                \DB::commit();
-
-                return;
-            }
-
             $refund = $amount - $charge;
             if ($refund > 0) {
+                // Externo e fora da transação: se falhar, sobe a exceção antes de
+                // qualquer escrita de ledger — nada em BD mudou e o serviço fica
+                // marcado (o lado seguro). O valor capturado fica para reconciliar.
                 $this->service->paymentOrder->refund($refund);
             }
 
             $split = CancellationPolicy::split($charge);
 
-            $this->service->vendor->user->deposit($split['vendor'], $this->service->getMetaProduct());
-            system_wallet()->deposit($split['platform'], $this->service->getMetaProduct());
+            // Só o ledger na transação: depósitos + estado, tudo local e atómico.
+            \DB::transaction(function () use ($split) {
+                $this->service->vendor->user->deposit($split['vendor'], $this->service->getMetaProduct());
+                system_wallet()->deposit($split['platform'], $this->service->getMetaProduct());
 
-            $this->service->skipCancellationRefund = true;
-            $this->service->status = ServiceStatus::CANCELED;
-            $this->service->status_justification = 'internal/services.cancel.charged';
-            $this->service->save();
-
-            \DB::commit();
-        } catch (\Exception $e) {
-            \DB::rollBack();
+                $this->service->skipCancellationRefund = true;
+                $this->service->status = ServiceStatus::CANCELED;
+                $this->service->status_justification = 'internal/services.cancel.charged';
+                $this->service->save();
+            });
+        } catch (\Throwable $e) {
+            // O total já foi capturado; se falhou o reembolso ou o ledger, o
+            // dinheiro está movido mas a BD pode não refletir tudo — reportar
+            // para reconciliar à mão (reembolso e/ou crédito ao técnico).
             report($e);
             throw $e;
         }
