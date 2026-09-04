@@ -24,6 +24,12 @@ return [
         'minutes' => ' Minutes',
     ],
     'form' => [
+        'image_hint' => 'Square image, 800x800 px recommended. Max 5 MB (JPG, PNG or WEBP).',
+        'is_active' => 'Active in the app',
+        'sort_order' => 'Order',
+        'is_popular' => 'Show in "Popular services"',
+        'is_popular_hint' => 'Appears on the Home screen, in the featured section.',
+        'popular_order' => 'Featured order',
         'name' => 'Name',
         'image' => 'Image',
         'image_max_size' => 'Maximum size allowed: 5 MB',

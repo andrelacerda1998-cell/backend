@@ -1,5 +1,5 @@
 <?php
 
 return [
-    'general_settings' => 'General Settings'
+    'general_settings' => 'General Settings',
 ];

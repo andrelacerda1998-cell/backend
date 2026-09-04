@@ -40,6 +40,78 @@ class CancelService
     }
 
     /**
+     * Cancelamento de um serviço AGENDADO pelo cliente, com a penalização do
+     * escalão (CancellationPolicy::scheduledPenaltyRatio).
+     *
+     * Sem penalização é o cancelamento de sempre. Com penalização: captura-se o
+     * total (é o que o Payshop tem cativo), devolve-se ao cliente a parte que
+     * não é penalização, e reparte-se o que fica 50/50 com o técnico — a mesma
+     * repartição do cancelamento com o técnico a caminho, porque também aqui
+     * não houve trabalho feito.
+     *
+     * A ordem importa: sem captura não se cobra ninguém e cai-se no
+     * cancelamento normal, para nunca se depositar dinheiro que não se
+     * conseguiu cobrar. Se o reembolso da diferença falhar, o cancelamento não
+     * avança — mais vale o cliente continuar com o serviço marcado do que ficar
+     * cobrado a 100% de uma penalização de 50%.
+     *
+     * @throws ExceptionInterface
+     * @throws \Exception
+     * @throws \Throwable
+     */
+    public function customerCancelScheduled(float $penaltyRatio): void
+    {
+        $this->service->refresh();
+
+        if (! in_array($this->service->status, [ServiceStatus::PENDING, ServiceStatus::SCHEDULED], true)) {
+            return;
+        }
+
+        $amount = abs((int) $this->service->getRawOriginal('amount'));
+        $charge = CancellationPolicy::scheduledPenaltyAmount($amount, $penaltyRatio);
+
+        if ($charge <= 0) {
+            $this->customerCancel();
+
+            return;
+        }
+
+        \DB::beginTransaction();
+        try {
+            if (! $this->capturePayment()) {
+                $this->service->status = ServiceStatus::CANCELED;
+                $this->service->status_justification = 'internal/services.cancel.description';
+                $this->service->save();
+
+                \DB::commit();
+
+                return;
+            }
+
+            $refund = $amount - $charge;
+            if ($refund > 0) {
+                $this->service->paymentOrder->refund($refund);
+            }
+
+            $split = CancellationPolicy::split($charge);
+
+            $this->service->vendor->user->deposit($split['vendor'], $this->service->getMetaProduct());
+            system_wallet()->deposit($split['platform'], $this->service->getMetaProduct());
+
+            $this->service->skipCancellationRefund = true;
+            $this->service->status = ServiceStatus::CANCELED;
+            $this->service->status_justification = 'internal/services.cancel.charged';
+            $this->service->save();
+
+            \DB::commit();
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            report($e);
+            throw $e;
+        }
+    }
+
+    /**
      * Cancelamento pelo cliente ANTES de o pagamento MBWay ser confirmado. Usa um status
      * terminal próprio (CANCELED_MBWAY) porque o vendor nunca foi notificado deste serviço —
      * o controller não envia notificação de cancelamento neste caso. O save dispara o

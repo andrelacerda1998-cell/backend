@@ -17,6 +17,12 @@ return [
         'excludes' => 'Exclui',
     ],
     'form' => [
+        'image_hint' => 'Imagem quadrada, recomendado 800x800 px. Max. 5 MB (JPG, PNG ou WEBP).',
+        'is_active' => 'Ativo na app',
+        'sort_order' => 'Ordem',
+        'is_popular' => 'Mostrar em "Servicos populares"',
+        'is_popular_hint' => 'Aparece na Home, na seccao de destaques.',
+        'popular_order' => 'Ordem nos destaques',
         'name' => 'Nome',
         'image' => 'Imagem',
         'image_max_size' => 'Tamanho máximo permitido: 5 MB',

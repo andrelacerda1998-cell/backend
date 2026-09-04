@@ -21,12 +21,30 @@ class ServicesType extends Model implements Auditable, HasMedia
 
     protected array $translatable = ['name'];
 
-    protected $fillable = ['name', 'includes', 'excludes', 'suggested_price', 'time', 'starts_from', 'operation_area_id'];
+    protected $fillable = ['name', 'includes', 'excludes', 'suggested_price', 'time', 'starts_from', 'operation_area_id', 'sort_order', 'is_active', 'is_popular', 'popular_order'];
 
     protected $casts = [
         'includes' => TranslatableArrayCast::class,
         'excludes' => TranslatableArrayCast::class,
+        'is_active' => 'boolean',
+        'is_popular' => 'boolean',
     ];
+
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    /** Destaques da Home, pela ordem definida no backoffice. */
+    public function scopePopular($query)
+    {
+        return $query->where('is_popular', true)->orderBy('popular_order')->orderBy('id');
+    }
 
     public function vendors()
     {

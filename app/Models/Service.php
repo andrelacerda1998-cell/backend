@@ -431,6 +431,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'id' => $service->id,
             'status' => $service->status,
             'distance' => $service->distance,
+            // Início da execução: é daqui que a app calcula quanto falta para
+            // o serviço terminar (ecrã em curso e Live Activity do ecrã
+            // bloqueado). Estava só no payload do técnico — do lado do cliente
+            // a contagem não tinha por onde começar.
+            'on_the_way_at' => $service->on_the_way_at?->toIso8601String(),
+            'arrived_at' => $service->arrived_at?->toIso8601String(),
             // Unidades pedidas. Vai nos dois payloads: o técnico precisa de saber
             // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
             // precisa de ver o que comprou.
@@ -451,6 +457,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
                 'id' => $service->serviceType->id,
                 'name' => $service->serviceType->getTranslation('name', $language),
                 'time' => $service->serviceType->time,
+                // O que está e não está incluído. O ecrã de acompanhamento já
+                // os desenhava, mas nunca chegavam aqui — ficava sempre vazio,
+                // e o cliente com um serviço a decorrer não tinha onde ver o
+                // que contratou.
+                'includes' => $service->serviceType->getTranslatedIncludes($language),
+                'excludes' => $service->serviceType->getTranslatedExcludes($language),
                 'operation_area' => [
                     'id' => $service->serviceType->operationArea->id,
                     'name' => $service->serviceType->operationArea->getTranslation('name', $language),

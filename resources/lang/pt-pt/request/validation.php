@@ -1,4 +1,5 @@
 <?php
+
 return [
     'required' => 'O campo :attribute é obrigatório.',
     'unique' => 'O :attribute já foi utilizado.',
@@ -55,6 +56,6 @@ return [
         'avatar' => 'avatar',
         'address' => 'endereço',
         'postal_code' => 'código postal',
-        'locality' => 'distrito'
+        'locality' => 'distrito',
     ],
 ];

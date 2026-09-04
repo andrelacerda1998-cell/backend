@@ -8,7 +8,7 @@ use Spatie\Translatable\HasTranslations;
 
 class Gender extends Model implements Auditable
 {
-    use \OwenIt\Auditing\Auditable, HasTranslations;
+    use HasTranslations, \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['name'];
 

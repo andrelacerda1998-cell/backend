@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Administrators',
     'singular' => 'Administrator',
@@ -7,15 +8,15 @@ return [
         'reset_password_form' => [
             'options' => [
                 'email' => 'Enviar link de recuperação de password para email',
-                'password_input' => 'Definir nova password'
-            ]
-        ]
+                'password_input' => 'Definir nova password',
+            ],
+        ],
     ],
     'table' => [
         'name' => 'Nome',
         'nif' => 'NIF',
         'email' => 'email',
-        'canRequestService' => 'Can request service?'
+        'canRequestService' => 'Can request service?',
     ],
     'form' => [
         'personal_data' => 'Personal data',
@@ -34,5 +35,5 @@ return [
         'date_birthday' => 'Date of birth',
         'password' => 'Password',
         'password_confirmation' => 'Password confirmation',
-    ]
+    ],
 ];

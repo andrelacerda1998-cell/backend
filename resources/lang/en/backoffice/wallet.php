@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Wallets',
     'singular' => 'Wallet',
@@ -9,9 +10,9 @@ return [
         'service_type' => 'Tipo de serviço',
         'description' => 'Description',
         'created_at' => 'Created at',
-        'view' => 'View'
+        'view' => 'View',
     ],
     'form' => [
 
-    ]
+    ],
 ];

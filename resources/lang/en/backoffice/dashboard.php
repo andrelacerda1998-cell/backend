@@ -1,4 +1,5 @@
 <?php
+
 return [
     'requests' => [
         'today' => 'Requests today',

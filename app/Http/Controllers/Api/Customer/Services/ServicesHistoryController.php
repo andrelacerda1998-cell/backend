@@ -17,7 +17,7 @@ class ServicesHistoryController extends Controller
         try {
             $user = auth()->user();
 
-            if (!$user->isCustomer()) {
+            if (! $user->isCustomer()) {
                 throw new WrongApp;
             }
 
@@ -80,6 +80,11 @@ class ServicesHistoryController extends Controller
                             'latitude' => $service->address['latitude'] ?? null,
                             'longitude' => $service->address['longitude'] ?? null,
                         ] : null,
+                        // Um cancelamento tardio COBRA 100% (CancellationPolicy); um
+                        // cancelamento a tempo é reembolsado. Sem isto a app não
+                        // consegue distinguir os dois e mostrava o valor como pago
+                        // em ambos.
+                        'payment_status' => $service->payment_status,
                         'rating_by_customer' => $service->rating_by_customer,
                         'created_at' => $service->created_at,
                         'invoice_id' => $service->invoice_id,

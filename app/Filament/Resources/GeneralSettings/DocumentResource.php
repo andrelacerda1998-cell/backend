@@ -53,11 +53,11 @@ class DocumentResource extends Resource
 
                 Placeholder::make('created_at')
                     ->label(__('backoffice/document.form.created_at'))
-                    ->content(fn(?Document $record): string => $record?->created_at?->diffForHumans() ?? '-'),
+                    ->content(fn (?Document $record): string => $record?->created_at?->diffForHumans() ?? '-'),
 
                 Placeholder::make('updated_at')
                     ->label(__('backoffice/document.form.updated_at'))
-                    ->content(fn(?Document $record): string => $record?->updated_at?->diffForHumans() ?? '-'),
+                    ->content(fn (?Document $record): string => $record?->updated_at?->diffForHumans() ?? '-'),
             ]);
     }
 

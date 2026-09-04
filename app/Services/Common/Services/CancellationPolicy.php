@@ -45,6 +45,58 @@ class CancellationPolicy
     }
 
     /**
+     * Escalões de penalização ao cancelar um serviço AGENDADO, do mais caro
+     * para o mais barato: horas que faltam => fração cobrada.
+     *
+     * Quanto mais perto da hora marcada, mais caro: o técnico bloqueou o
+     * horário e já não o consegue vender a outro cliente. Decisão do André.
+     */
+    public const SCHEDULED_PENALTY_TIERS = [
+        1 => 1.0,    // menos de 1 hora   -> 100%
+        6 => 0.75,   // menos de 6 horas  -> 75%
+        12 => 0.5,   // menos de 12 horas -> 50%
+    ];
+
+    /**
+     * Fração do valor a cobrar por cancelar AGORA um serviço agendado (0 a 1).
+     *
+     * Sem data utilizável devolve 0 — não se cobra por uma conta que não se
+     * conseguiu fazer. Um agendamento cuja hora já passou fica no escalão
+     * máximo: o técnico está à porta ou já lá esteve.
+     */
+    public static function scheduledPenaltyRatio(?\DateTimeInterface $scheduledAt, ?\DateTimeInterface $now = null): float
+    {
+        if ($scheduledAt === null) {
+            return 0.0;
+        }
+
+        $now ??= now();
+        $hoursLeft = ($scheduledAt->getTimestamp() - $now->getTimestamp()) / 3600;
+
+        if ($hoursLeft <= 0) {
+            return 1.0;
+        }
+
+        foreach (self::SCHEDULED_PENALTY_TIERS as $withinHours => $ratio) {
+            if ($hoursLeft <= $withinHours) {
+                return $ratio;
+            }
+        }
+
+        return 0.0;
+    }
+
+    /** Valor a cobrar, em cêntimos, por cancelar agora (0 = cancelamento livre). */
+    public static function scheduledPenaltyAmount(int $amount, float $ratio): int
+    {
+        if ($ratio <= 0) {
+            return 0;
+        }
+
+        return (int) round(abs($amount) * min(1.0, $ratio));
+    }
+
+    /**
      * Reparte o valor COBRADO (em cêntimos) entre técnico e plataforma.
      *
      * O técnico leva metade (arredondada); a plataforma leva o RESTO, e não a

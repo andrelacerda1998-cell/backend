@@ -10,7 +10,10 @@ return [
     /**
      * Time in seconds for instant services
      */
-    'time_to_accept' => 60,
+    // 180s: a app mostra ao cliente um cronómetro de 3 minutos como espera
+    // máxima; este valor tem de bater certo com ele, senão o servidor cancela
+    // ao minuto 1 com o mostrador ainda em 2:00.
+    'time_to_accept' => 180,
     /**
      * Time in seconds for scheduled services (20 minutes)
      */

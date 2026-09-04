@@ -26,6 +26,7 @@ class GenderResource extends Resource
     {
         return __('backoffice/navigation.general_settings');
     }
+
     public static function form(Form $form): Form
     {
         return $form

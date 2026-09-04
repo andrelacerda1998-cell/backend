@@ -8,6 +8,7 @@ use Exception;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\SpatieMediaLibraryFileUpload;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\BulkActionGroup;
@@ -41,6 +42,7 @@ class OperationAreaResource extends Resource
     {
         return __('backoffice/navigation.general_settings');
     }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -50,9 +52,24 @@ class OperationAreaResource extends Resource
                     ->label(__('backoffice/operation-area.form.image'))
                     ->image()
                     ->previewable()
+                    ->imageEditor()
+                    ->imageCropAspectRatio('1:1')
+                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                     ->maxSize(5120)
-                    ->helperText(__('backoffice/operation-area.form.image_max_size'))
+                    // A app mostra a categoria num quadrado; dizê-lo aqui evita
+                    // imagens que ficam bem no backoffice e cortadas no telemóvel.
+                    ->helperText(__('backoffice/operation-area.form.image_hint'))
                     ->columnSpan(2),
+
+                // Ordem e visibilidade na app.
+                Toggle::make('is_active')
+                    ->label(__('backoffice/operation-area.form.is_active'))
+                    ->default(true),
+                TextInput::make('sort_order')
+                    ->label(__('backoffice/operation-area.form.sort_order'))
+                    ->numeric()
+                    ->default(0)
+                    ->minValue(0),
                 Translate::make()
                     ->columnSpan(2)
                     ->locales(['en', 'pt-pt'])
@@ -64,9 +81,9 @@ class OperationAreaResource extends Resource
                 Select::make('documents')
                     ->label(__('backoffice/operation-area.form.documents'))
                     ->multiple()
-                    ->options(function (){
+                    ->options(function () {
                         return Document::where('required', 'false')->pluck('name', 'id');
-                    })
+                    }),
             ]);
     }
 
@@ -79,7 +96,7 @@ class OperationAreaResource extends Resource
             ->columns([
                 ImageColumn::make('image')
                     ->label(__('backoffice/operation-area.table.image'))
-                    ->getStateUsing(fn(OperationArea $record) => $record->image_url)
+                    ->getStateUsing(fn (OperationArea $record) => $record->image_url)
                     ->size(50),
                 TextColumn::make('name')
                     ->label(__('backoffice/operation-area.table.name'))
@@ -90,13 +107,15 @@ class OperationAreaResource extends Resource
                         $documents = '';
                         if (isset($record->certifications)) {
                             foreach ($record->certifications as $document) {
-                                $documents .= $document['name'] . ', ';
+                                $documents .= $document['name'].', ';
                             }
+
                             return $documents;
                         }
+
                         return '-';
                     })
-                    ->label(__('backoffice/operation-area.table.certifications'))
+                    ->label(__('backoffice/operation-area.table.certifications')),
             ])
             ->filters([
                 TrashedFilter::make(),

@@ -17,15 +17,28 @@ use Spatie\Translatable\HasTranslations;
 
 class OperationArea extends Model implements Auditable, HasMedia
 {
-    use \OwenIt\Auditing\Auditable, HasFactory, SoftDeletes, HasTranslations, InteractsWithMedia;
+    use HasFactory, HasTranslations, InteractsWithMedia, \OwenIt\Auditing\Auditable, SoftDeletes;
 
-    protected $fillable = ['name', 'documents'];
+    protected $fillable = ['name', 'documents', 'sort_order', 'is_active'];
 
     protected array $translatable = ['name'];
 
     protected $casts = [
-        'documents' => 'collection'
+        'documents' => 'collection',
+        'is_active' => 'boolean',
     ];
+
+    /** Ordem definida no backoffice; id como desempate estável (o `name` é
+     *  traduzível — ordenar por ele ordenava o JSON, não o texto). */
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
 
     public function servicesType(): HasMany
     {
@@ -37,10 +50,10 @@ class OperationArea extends Model implements Auditable, HasMedia
         return $this->belongsToMany(Vendor::class, 'operation_area_vendors');
     }
 
-    public function certifications():Attribute
+    public function certifications(): Attribute
     {
-        return Attribute::make(get: function (){
-            return Document::whereIn('id', $this->documents?->values()->toArray()??[])->get();
+        return Attribute::make(get: function () {
+            return Document::whereIn('id', $this->documents?->values()->toArray() ?? [])->get();
         })->shouldCache();
     }
 
@@ -60,11 +73,12 @@ class OperationArea extends Model implements Auditable, HasMedia
 
     public function getImageUrlAttribute(): ?string
     {
-        if (!$this->hasMedia('image')) {
+        if (! $this->hasMedia('image')) {
             return null;
         }
 
-        $webpUrl = $this->getFirstTemporaryUrl(now()->addHours(2),'image', 'webp');
+        $webpUrl = $this->getFirstTemporaryUrl(now()->addHours(2), 'image', 'webp');
+
         return $webpUrl ?: $this->getFirstTemporaryUrl(now()->addHours(2), 'image');
     }
 }

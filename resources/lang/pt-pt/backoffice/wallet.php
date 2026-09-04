@@ -1,4 +1,5 @@
 <?php
+
 return [
     'plural' => 'Carteira',
     'singular' => 'Carteira',
@@ -8,9 +9,9 @@ return [
         'type' => 'Tipo',
         'description' => 'Descrição',
         'created_at' => 'Criado em',
-        'view' => 'Ver'
+        'view' => 'Ver',
     ],
     'form' => [
 
-    ]
+    ],
 ];
