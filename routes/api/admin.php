@@ -74,6 +74,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/vendors', [VendorController::class, 'index']);
     Route::put('/vendors/{id}/suspend', [VendorController::class, 'suspend']);
     Route::put('/vendors/{id}/restore', [VendorController::class, 'restore']);
+    // Workspace de faturação (InvoiceXpress): sem ele a Piquet não emite fatura
+    // em nome do técnico no fim do serviço. Mesmas condições do Filament.
+    Route::post('/vendors/{vendor}/invoice-workspace', [VendorController::class, 'createInvoiceWorkspace']);
 
     // Aba "Visão geral" -- indicadores reais (sem avgApprovalTime, ver nota
     // em VendorController::metrics()).

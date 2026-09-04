@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
+use App\Filament\Infolists\Sections\CompanySection;
+use App\Services\InvoiceXpress\SystemInvoiceService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
@@ -487,6 +489,35 @@ class VendorController extends Controller
         return ApiSuccessResponse::make($rows->all());
     }
 
+    /**
+     * POST /v1/admin/vendors/{vendor}/invoice-workspace
+     *
+     * Cria o workspace de faturação no InvoiceXpress. Sem ele a Piquet não
+     * consegue emitir fatura em nome do técnico no fim do serviço -- é o
+     * mesmo que a ação "Criar workspace de faturação" do Filament faz
+     * (App\Filament\Infolists\Sections\CompanySection).
+     *
+     * As condições (email/telefone verificado, documentos aprovados, IBAN,
+     * morada fiscal, workspace ainda não criado) são as MESMAS do Filament, e
+     * vêm da mesma função -- duplicá-las aqui era garantir que divergiam.
+     */
+    public function createInvoiceWorkspace(Vendor $vendor): ApiSuccessResponse|ApiErrorResponse
+    {
+        if ($razao = CompanySection::getWorkspaceDisabledReason($vendor)) {
+            return new ApiErrorResponse(null, $razao, 409);
+        }
+
+        try {
+            (new SystemInvoiceService)->createWorkspace($vendor);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return new ApiErrorResponse(null, 'Não foi possível criar o workspace: '.$e->getMessage(), 502);
+        }
+
+        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas'])));
+    }
+
     private function present(Vendor $vendor): array
     {
         // NÃO usar vendor->name / vendor->fullName / vendor->full_name -- todos
@@ -511,6 +542,18 @@ class VendorController extends Controller
             'can_accept_service' => (bool) $vendor->can_accept_service,
             'at_valid' => (bool) $vendor->at_valid,
             'at_validated_at' => $vendor->at_validated_at?->toIso8601String(),
+            // Dados da empresa -- os mesmos do CompanySection do Filament. Sem
+            // eles o backoffice não consegue dizer porque é que um técnico não
+            // pode receber faturas em nome dele.
+            'at_user' => $vendor->at_user,
+            'company_name' => $vendor->company_name,
+            'iban' => $vendor->iban,
+            'invoice_workspace' => $vendor->invoice_workspace ?: null,
+            // Porque é que o botão "Criar workspace" está bloqueado (null = pode
+            // criar). Vem calculado do servidor de propósito: as condições
+            // dependem de relações (documentos, morada fiscal) que não são
+            // enviadas na listagem, logo o cliente não as podia avaliar.
+            'invoice_workspace_blocker' => CompanySection::getWorkspaceDisabledReason($vendor),
             'status' => $vendor->status?->value,
             'suspended_at' => $vendor->deleted_at?->toIso8601String(),
             'created_at' => $vendor->created_at?->toIso8601String(),
