@@ -12,6 +12,7 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class NewScheduledServiceNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable, RespectsVendorPreference;
 
     public function __construct(private readonly Schedule $schedule) {}

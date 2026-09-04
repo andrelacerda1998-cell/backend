@@ -10,6 +10,7 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class ScheduleCanceledByCustomerNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
 
     private readonly int $scheduleId;

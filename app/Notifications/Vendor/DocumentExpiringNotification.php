@@ -17,6 +17,7 @@ use NotificationChannels\Expo\ExpoMessage;
  */
 class DocumentExpiringNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
 
     public function __construct(

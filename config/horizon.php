@@ -219,6 +219,26 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+
+        // Push (expo) numa queue própria COM RETRY: os erros do Expo são quase
+        // sempre transitórios (rede/5xx) e na queue default (tries=1) perdiam-se
+        // sem nova tentativa. As notificações reencaminham só o canal expo para
+        // aqui (App\Notifications\Concerns\RoutesExpoToPushQueue); o canal
+        // database fica na default, por isso o retry nunca duplica a linha da BD.
+        'supervisor-push' => [
+            'connection' => 'redis',
+            'queue' => ['push'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 3,
+            'backoff' => 30,
+            'timeout' => 60,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -228,11 +248,19 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-push' => [
+                'maxProcesses' => 3,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
         ],
 
         'development' => [
             'supervisor-1' => [
                 'maxProcesses' => 5,
+            ],
+            'supervisor-push' => [
+                'maxProcesses' => 2,
             ],
         ],
 
@@ -240,11 +268,17 @@ return [
             'supervisor-1' => [
                 'maxProcesses' => 3,
             ],
+            'supervisor-push' => [
+                'maxProcesses' => 1,
+            ],
         ],
 
         '*' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,
+            ],
+            'supervisor-push' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],

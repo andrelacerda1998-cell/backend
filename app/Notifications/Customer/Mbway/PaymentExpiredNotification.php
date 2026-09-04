@@ -10,6 +10,7 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class PaymentExpiredNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
 
     // O canal Expo faz um POST HTTP sem timeout próprio (o cliente Guzzle do pacote é

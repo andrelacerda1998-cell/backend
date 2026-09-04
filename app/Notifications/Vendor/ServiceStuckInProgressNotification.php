@@ -21,6 +21,7 @@ use NotificationChannels\Expo\ExpoMessage;
  */
 class ServiceStuckInProgressNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
 
     public function __construct(

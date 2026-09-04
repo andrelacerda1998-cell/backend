@@ -10,6 +10,7 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class ServiceCanceledByVendorNotification extends Notification implements ShouldQueue
 {
+    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
 
     public function __construct(private readonly Service $service) {}
