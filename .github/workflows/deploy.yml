@@ -249,5 +249,14 @@ jobs:
               exit 1
             fi
             docker compose up -d laravel-prod
+
+            # Definicoes dos indices de pesquisa (config/scout.php): sem isto, um
+            # indice novo fica sem filterableAttributes e todas as pesquisas que
+            # filtram por eles rebentam. Foi o que aconteceu ao indice de
+            # agendamento -- o cliente deixou de conseguir ver horarios.
+            # Idempotente: aplicar duas vezes nao faz mal.
+            docker compose exec -T laravel-prod php artisan scout:sync-index-settings || \
+              echo "AVISO: scout:sync-index-settings falhou; verificar o Meilisearch" >&2
+
             docker image prune -f
             docker logout ghcr.io
