@@ -52,7 +52,13 @@ readonly class ServiceRequestedData
                     'name' => $user->vendor->user->name,
                 ],
             ],
-            customer: $service->customer?->only(['id', 'name', 'address']),
+            customer: $service->customer ? [
+                ...$service->customer->only(['id', 'name', 'address']),
+                // Contacto do cliente só depois de aceite/confirmado (schedule não-pending).
+                'phone' => ($service->schedule && ! $service->schedule->is_pending)
+                    ? $service->customer->phone_number
+                    : null,
+            ] : [],
             // Moradas guardadas nem sempre têm city/state (há registos só com nome e
             // coordenadas) — o acesso direto rebentava a lista inteira com 500.
             address: ['name' => $service->address
