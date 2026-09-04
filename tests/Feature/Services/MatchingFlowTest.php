@@ -165,13 +165,22 @@ class MatchingFlowTest extends TestCase
 
     private function start(bool $scheduled = false)
     {
+        // O slot tem de cair num dia ÚTIL: os blocos de agenda dos técnicos
+        // nascem desligados ao fim-de-semana (VendorObserver), e o matching
+        // agendado só convida quem tem o bloco livre. Com `now()->addDay()` cru,
+        // o teste falhava sempre que corresse à sexta ou sábado (0 candidatos).
+        $slot = now()->addDay();
+        while ($slot->isWeekend()) {
+            $slot->addDay();
+        }
+
         return $this->actingAs($this->customer, 'api')
             ->postJson('/api/v1/customer/services/matching', [
                 'service_type' => $this->type->id,
                 'scheduled' => $scheduled,
                 'schedule' => $scheduled ? [
-                    'scheduled_day' => now()->addDay()->toDateString(),
-                    'scheduled_time_start' => now()->addDay()->setTime(10, 0)->toDateTimeString(),
+                    'scheduled_day' => $slot->toDateString(),
+                    'scheduled_time_start' => $slot->copy()->setTime(10, 0)->toDateTimeString(),
                 ] : null,
             ]);
     }
