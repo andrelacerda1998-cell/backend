@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
+use App\Enums\Services\AddressType;
 use App\Filament\Infolists\Sections\CompanySection;
 use App\Services\InvoiceXpress\SystemInvoiceService;
 use App\Http\Controllers\Controller;
@@ -73,7 +74,11 @@ class VendorController extends Controller
             });
         }
 
-        $vendors = $query->orderByDesc('created_at')->paginate($perPage);
+        // Eager-load do que o present() lê: sem isto, cada linha da página
+        // dispara uma query por relação (documentos e morada fiscal incluídos)
+        // e uma listagem de 100 técnicos passava das 300 queries.
+        $vendors = $query->with(['user', 'operationAreas', 'addresses', 'documents'])
+            ->orderByDesc('created_at')->paginate($perPage);
 
         return ApiSuccessResponse::make([
             'items' => collect($vendors->items())->map($this->present(...))->all(),
@@ -100,7 +105,7 @@ class VendorController extends Controller
 
         $vendor->delete();
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh()));
+        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
     }
 
     public function restore(int $id): ApiSuccessResponse|ApiErrorResponse
@@ -117,7 +122,7 @@ class VendorController extends Controller
 
         $vendor->restore();
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh()));
+        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
     }
 
     /**
@@ -526,6 +531,7 @@ class VendorController extends Controller
         // User::setNameAttribute() nunca gravar 'name'). first_name/last_name
         // do user são as colunas reais.
         $user = $vendor->user;
+        $fiscal = $vendor->addresses->firstWhere('address_type', AddressType::FISCAL_ADDRESS);
 
         return [
             'id' => $vendor->id,
@@ -554,6 +560,13 @@ class VendorController extends Controller
             // dependem de relações (documentos, morada fiscal) que não são
             // enviadas na listagem, logo o cliente não as podia avaliar.
             'invoice_workspace_blocker' => CompanySection::getWorkspaceDisabledReason($vendor),
+            // Morada FISCAL (a que vai na fatura), não a morada de serviço --
+            // é a que o CompanySection exige para criar o workspace.
+            'billing_address' => $fiscal
+                ? trim(($fiscal->street_name ?? '').' '.($fiscal->street_number ?? ''))
+                : null,
+            'postal_code' => $fiscal?->postal_code,
+            'city' => $fiscal?->city,
             'status' => $vendor->status?->value,
             'suspended_at' => $vendor->deleted_at?->toIso8601String(),
             'created_at' => $vendor->created_at?->toIso8601String(),
