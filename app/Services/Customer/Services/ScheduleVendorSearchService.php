@@ -83,8 +83,21 @@ class ScheduleVendorSearchService
             ->whereHas('user', fn ($q) => $q->where('is_test', $isTestCustomer))
             ->get();
 
-        // Filter vendors that have availability in the next 15 days
-        $vendors = $this->filterByAvailabilityNext15Days($vendors);
+        // Filter vendors that have availability in the next 15 days.
+        // Um técnico com agenda mal preenchida não pode deitar abaixo a procura
+        // toda: fica de fora, com registo, e os outros seguem.
+        $vendors = $vendors->filter(function (Vendor $vendor) {
+            try {
+                return $this->filterByAvailabilityNext15Days(collect([$vendor]))->isNotEmpty();
+            } catch (\Throwable $e) {
+                Log::warning('Vendor skipped while checking schedule availability', [
+                    'vendor_id' => $vendor->id,
+                    'reason' => $e->getMessage(),
+                ]);
+
+                return false;
+            }
+        })->values();
 
         // Maintain Meilisearch ordering
         $vendors = $vendors->sortBy(function ($vendor) use ($vendorIds) {

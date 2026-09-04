@@ -86,42 +86,57 @@ class RequestServiceController extends Controller
                 $matchingVendors = $scheduleSearchService->search($guestAddress, $serviceType, false);
 
                 $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress) {
-                    $rateService = app(RateService::class);
-                    $hourlyRate = $vendor->getRawOriginal('price_rate');
-                    // Unidades: a lista de técnicos mostra o preço FINAL, por isso
-                    // tem de já contar com elas — senão o cliente compara valores de
-                    // uma unidade e no checkout aparece outro número.
-                    $timeService = $serviceType->time * $quantity;
+                    try {
+                        $rateService = app(RateService::class);
+                        $hourlyRate = $vendor->getRawOriginal('price_rate');
+                        // Unidades: a lista de técnicos mostra o preço FINAL, por isso
+                        // tem de já contar com elas — senão o cliente compara valores de
+                        // uma unidade e no checkout aparece outro número.
+                        $timeService = $serviceType->time * $quantity;
 
-                    $scheduleAddress = $vendor->addresses()
-                        ->where('address_type', AddressType::SCHEDULE_ADDRESS)
-                        ->first();
+                        $scheduleAddress = $vendor->addresses()
+                            ->where('address_type', AddressType::SCHEDULE_ADDRESS)
+                            ->first();
 
-                    if ($scheduleAddress === null) {
+                        if ($scheduleAddress === null) {
+                            return null;
+                        }
+
+                        $vendorRatings = $vendor->averageRating()
+                            ->where('operation_area_id', $serviceType->operation_area_id)
+                            ->first();
+
+                        $distance = $this->calculateVendorDistance($vendor, $guestAddress);
+                        $price = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
+                        $original_price = $rateService->calculateForCustomerForOldPrice($hourlyRate, $timeService, $distance);
+
+                        return [
+                            'id' => $vendor->id,
+                            'name' => $vendor->user->name,
+                            'rate' => $price,
+                            'original_price' => $original_price,
+                            'distance' => $distance,
+                            // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
+                            // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
+                            // cliente com nota maxima, indistinguivel de quem a merecera.
+                            'rating' => $vendorRatings?->average_rating,
+                            'ratings_count' => $vendorRatings?->total_ratings ?? 0,
+                            'avatar' => $vendor->user->avatar,
+                        ];
+                    } catch (\Throwable $e) {
+                        // Um técnico com dados incompletos (sem utilizador, sem
+                        // morada, sem preço) deixava o pedido inteiro em 500 e o
+                        // cliente sem conseguir agendar. Fica de fora e os outros
+                        // aparecem — mas o erro fica registado, senão o buraco
+                        // some-se em silêncio.
+                        Log::warning('Schedule vendor skipped while building list', [
+                            'vendor_id' => $vendor->id,
+                            'service_type_id' => $serviceType->id,
+                            'error' => $e->getMessage(),
+                        ]);
+
                         return null;
                     }
-
-                    $vendorRatings = $vendor->averageRating()
-                        ->where('operation_area_id', $serviceType->operation_area_id)
-                        ->first();
-
-                    $distance = $this->calculateVendorDistance($vendor, $guestAddress);
-                    $price = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
-                    $original_price = $rateService->calculateForCustomerForOldPrice($hourlyRate, $timeService, $distance);
-
-                    return [
-                        'id' => $vendor->id,
-                        'name' => $vendor->user->name,
-                        'rate' => $price,
-                        'original_price' => $original_price,
-                        'distance' => $distance,
-                        // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
-                        // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
-                        // cliente com nota maxima, indistinguivel de quem a merecera.
-                        'rating' => $vendorRatings?->average_rating,
-                        'ratings_count' => $vendorRatings?->total_ratings ?? 0,
-                        'avatar' => $vendor->user->avatar,
-                    ];
                 })->filter()->values()->take(3);
             } else {
                 $matchingVendors = $searchService->search($guestAddress, $serviceType, false);
@@ -161,7 +176,10 @@ class RequestServiceController extends Controller
             }
 
             return new ApiSuccessResponse(['vendors' => $transformed]);
-        } catch (\Exception $exception) {
+        } catch (\Throwable $exception) {
+            // Throwable e não Exception: um \Error de PHP (ler propriedade de
+            // null, um argumento do tipo errado) não é Exception, passava aqui
+            // ao lado sem sequer ficar registado, e o cliente via só um 500.
             // O "Something went wrong" que o cliente recebe não diz nada a
             // ninguém; sem este registo, saber porque falhou uma procura obriga
             // a adivinhar a partir do ecrã.
@@ -169,6 +187,7 @@ class RequestServiceController extends Controller
                 'scheduled' => $request->boolean('scheduled'),
                 'service_type_id' => $request->get('service_type_id'),
                 'error' => $exception->getMessage(),
+                'at' => $exception->getFile().':'.$exception->getLine(),
             ]);
 
             return new ApiErrorResponse($exception);
