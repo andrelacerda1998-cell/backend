@@ -43,4 +43,30 @@ class AutoAcceptDefaultTest extends TestCase
 
         $this->assertTrue($vendor->fresh()->autoAcceptsOn());
     }
+
+    /**
+     * Regressão do incidente 13/08: com uma data, a auto-aceitação tem de olhar
+     * para o bloco DESSE dia da semana. O fim-de-semana nasce desligado
+     * (VendorObserver), por isso nem com a auto-aceitação ligada em todos os
+     * blocos um agendamento de sábado pode ser aceite sozinho — tem de cair no
+     * caminho manual. É o que os quatro pontos do fluxo clássico passaram a usar.
+     */
+    public function test_auto_accept_respects_the_weekday(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $vendor->scheduleAvailable()->update(['auto_accept' => true]);
+        $vendor = $vendor->fresh();
+
+        $weekday = now()->next(\Carbon\Carbon::MONDAY);
+        $weekend = now()->next(\Carbon\Carbon::SATURDAY);
+
+        $this->assertTrue(
+            $vendor->autoAcceptsOn($weekday),
+            'dia útil (segunda) está ligado — deve auto-aceitar',
+        );
+        $this->assertFalse(
+            $vendor->autoAcceptsOn($weekend),
+            'sábado nasce desligado — não pode auto-aceitar',
+        );
+    }
 }
