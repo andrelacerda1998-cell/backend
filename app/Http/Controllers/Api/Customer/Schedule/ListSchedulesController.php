@@ -46,6 +46,9 @@ class ListSchedulesController extends Controller
                     'id' => $schedule->vendor->id,
                     'name' => $schedule->vendor->user->name,
                     'avatar' => $schedule->vendor->user->avatar,
+                    // Contacto do técnico só depois de aceite/confirmado — em pending
+                    // ainda não há compromisso e não expomos o número.
+                    'phone' => $schedule->is_pending ? null : $schedule->vendor->user->phone_number,
                 ] : null,
                 'service_type' => $schedule->serviceType ? [
                     'id' => $schedule->serviceType->id,
