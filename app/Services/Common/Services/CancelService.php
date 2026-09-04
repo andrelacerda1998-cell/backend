@@ -82,10 +82,27 @@ class CancelService
             return;
         }
 
+        $order = $this->service->paymentOrder;
+
+        // Sincroniza o estado do Payshop antes de decidir (best-effort). Importa
+        // numa RETRY: se a tentativa anterior já reembolsou mas o ledger falhou,
+        // o serviço ficou marcado e voltamos aqui — o refund não pode repetir-se.
+        try {
+            $order?->updateData();
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        // Idempotência do refund (único efeito externo não-reversível por retry):
+        // se a order já está (parcialmente) reembolsada, o reembolso desta
+        // penalização já aconteceu antes. Não recapturar nem reembolsar — só
+        // concluir o ledger, que num rollBack anterior não chegou a persistir.
+        $alreadyRefunded = $order && in_array($order->status, [Status::PARTIALLY_REFUNDED, Status::REFUNDED], true);
+
         // Captura fora de qualquer transação de BD. Sem captura não se cobra
         // ninguém e cai-se no cancelamento normal (o customerCancel trata do
         // estado), para nunca se depositar dinheiro que não se conseguiu cobrar.
-        if (! $this->capturePayment()) {
+        if (! $alreadyRefunded && ! $this->capturePayment()) {
             $this->customerCancel();
 
             return;
@@ -96,11 +113,11 @@ class CancelService
         // movido — qualquer falha tem de ficar registada para reconciliação.
         try {
             $refund = $amount - $charge;
-            if ($refund > 0) {
+            if ($refund > 0 && ! $alreadyRefunded) {
                 // Externo e fora da transação: se falhar, sobe a exceção antes de
                 // qualquer escrita de ledger — nada em BD mudou e o serviço fica
                 // marcado (o lado seguro). O valor capturado fica para reconciliar.
-                $this->service->paymentOrder->refund($refund);
+                $order->refund($refund);
             }
 
             $split = CancellationPolicy::split($charge);
