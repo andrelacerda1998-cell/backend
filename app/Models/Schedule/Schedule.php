@@ -2,6 +2,7 @@
 
 namespace App\Models\Schedule;
 
+use App\Enums\Schedule\ScheduleRecurrence;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\User;
@@ -22,7 +23,9 @@ use Illuminate\Support\Facades\Date;
  * @property Date $scheduled_day
  * @property string $scheduled_time_start
  * @property string $scheduled_time_end
- * @property boolean $is_pending
+ * @property ScheduleRecurrence|null $recurrence
+ * @property int|null $recurrence_parent_id
+ * @property bool $is_pending
  */
 #[ObservedBy(ScheduleObserver::class)]
 class Schedule extends Model
@@ -39,7 +42,13 @@ class Schedule extends Model
         'scheduled_day',
         'scheduled_time_start',
         'scheduled_time_end',
+        'recurrence',
+        'recurrence_parent_id',
         'is_pending',
+    ];
+
+    protected $casts = [
+        'recurrence' => ScheduleRecurrence::class,
     ];
 
     public function vendor(): BelongsTo

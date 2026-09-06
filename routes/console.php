@@ -12,6 +12,10 @@ Schedule::command('model:prune', ['--model' => MonitoredScheduledTaskLogItem::cl
 
 Schedule::command('clear:deleted-users')->daily();
 
+// Series de agendamentos que se repetem: a marcacao seguinte nasce depois de a
+// anterior se realizar. De madrugada, para o cliente a ver logo de manha.
+Schedule::command('schedules:create-recurring')->dailyAt('04:30')->withoutOverlapping();
+
 Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOverlapping();
 
 // Liberta serviços de cartão presos em PENDING_3DS há >10 min (resgata os pagos tardiamente,
