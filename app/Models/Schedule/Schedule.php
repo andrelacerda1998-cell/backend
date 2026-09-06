@@ -44,11 +44,13 @@ class Schedule extends Model
         'scheduled_time_end',
         'recurrence',
         'recurrence_parent_id',
+        'payment_reminder_sent_at',
         'is_pending',
     ];
 
     protected $casts = [
         'recurrence' => ScheduleRecurrence::class,
+        'payment_reminder_sent_at' => 'datetime',
     ];
 
     public function vendor(): BelongsTo

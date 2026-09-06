@@ -16,6 +16,12 @@ Schedule::command('clear:deleted-users')->daily();
 // anterior se realizar. De madrugada, para o cliente a ver logo de manha.
 Schedule::command('schedules:create-recurring')->dailyAt('04:30')->withoutOverlapping();
 
+// Numa serie, cada ocorrencia e paga a parte: avisar o cliente entre 72h e 48h
+// antes para confirmar. De hora a hora porque a janela e de 24h e o aviso deve
+// sair perto do inicio dela; a coluna payment_reminder_sent_at trata da
+// idempotencia, por isso correr a mais nao duplica avisos.
+Schedule::command('schedules:remind-recurring-payment')->hourly()->withoutOverlapping();
+
 Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOverlapping();
 
 // Liberta serviços de cartão presos em PENDING_3DS há >10 min (resgata os pagos tardiamente,
