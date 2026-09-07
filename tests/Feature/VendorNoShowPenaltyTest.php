@@ -4,13 +4,16 @@ namespace Tests\Feature;
 
 use App\Enums\Services\ServiceStatus;
 use App\Models\GeneralSettings\ServicesType;
+use App\Models\Schedule\Schedule;
 use App\Models\Service;
+use App\Models\SupportTicket;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\Vendor\NoShowPenaltyNotification;
 use App\Services\Common\Services\VendorNoShowPolicy;
 use Database\Seeders\GenderSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
@@ -147,5 +150,89 @@ class VendorNoShowPenaltyTest extends TestCase
             ->assertStatus(401);
 
         $this->assertNull($service->fresh()->vendor_no_show_at);
+    }
+
+    // --- o que o tecnico ve e pode fazer ------------------------------------
+
+    public function test_o_tecnico_ve_as_suas_faltas_com_o_valor_cobrado(): void
+    {
+        $service = $this->makeService(4000);
+        $this->declareNoShow($service)->assertOk();
+
+        $response = $this->actingAs($service->vendor->user, 'api')->getJson('/api/v1/vendor/no-shows');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data.no_shows'));
+        $this->assertSame(2000, $response->json('data.no_shows.0.penalty'));
+        $this->assertFalse($response->json('data.no_shows.0.disputed'));
+    }
+
+    public function test_contestar_abre_um_ticket_de_suporte_e_nao_reverte_nada(): void
+    {
+        $service = $this->makeService(4000);
+        $vendorUser = $service->vendor->user;
+        $this->declareNoShow($service)->assertOk();
+
+        $this->actingAs($vendorUser, 'api')
+            ->postJson("/api/v1/vendor/no-shows/{$service->id}/dispute", ['message' => 'O cliente nao estava em casa.'])
+            ->assertOk();
+
+        // Quem decide se houve engano e uma pessoa: o saldo fica como estava.
+        $this->assertSame('-2000', $vendorUser->fresh()->balance);
+        $this->assertSame(1, SupportTicket::where('vendor_id', $service->vendor_id)->count());
+        $this->assertTrue(
+            $this->actingAs($vendorUser, 'api')->getJson('/api/v1/vendor/no-shows')->json('data.no_shows.0.disputed')
+        );
+    }
+
+    public function test_a_mesma_falta_nao_se_contesta_duas_vezes(): void
+    {
+        $service = $this->makeService(4000);
+        $this->declareNoShow($service)->assertOk();
+        $vendorUser = $service->vendor->user;
+
+        $this->actingAs($vendorUser, 'api')->postJson("/api/v1/vendor/no-shows/{$service->id}/dispute", ['message' => 'x'])->assertOk();
+        $this->actingAs($vendorUser, 'api')->postJson("/api/v1/vendor/no-shows/{$service->id}/dispute", ['message' => 'x'])->assertStatus(409);
+    }
+
+    public function test_nao_se_contesta_a_falta_de_outro_tecnico(): void
+    {
+        $service = $this->makeService(4000);
+        $this->declareNoShow($service)->assertOk();
+        $outro = Vendor::factory()->create();
+
+        $this->actingAs($outro->user, 'api')
+            ->postJson("/api/v1/vendor/no-shows/{$service->id}/dispute", ['message' => 'x'])
+            ->assertStatus(404);
+    }
+
+    // --- a fila do backoffice --------------------------------------------------
+
+    public function test_o_backoffice_ve_as_suspeitas_e_as_declaradas(): void
+    {
+        // Suspeita: marcado para ha 2 horas e nunca chegou a "Cheguei".
+        $suspeito = $this->makeService(4000);
+        Schedule::query()->create([
+            'vendor_id' => $suspeito->vendor_id,
+            'customer_id' => $suspeito->customer_id,
+            'service_type_id' => $suspeito->services_type_id,
+            'service_id' => $suspeito->id,
+            'scheduled_day' => Carbon::now('Europe/Lisbon')->subHours(2)->toDateString(),
+            'scheduled_time_start' => Carbon::now('Europe/Lisbon')->subHours(2)->format('H:i:s'),
+            'scheduled_time_end' => Carbon::now('Europe/Lisbon')->subHour()->format('H:i:s'),
+            'is_pending' => false,
+        ]);
+
+        $declarado = $this->makeService(3000);
+        $this->declareNoShow($declarado)->assertOk();
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer token-de-teste'])
+            ->getJson('/api/v1/admin/services/vendor-no-shows');
+
+        $response->assertOk();
+        $this->assertSame([$suspeito->id], array_column($response->json('data.suspected'), 'service_id'));
+        $this->assertSame(2000, $response->json('data.suspected.0.penalty_if_declared'));
+        $this->assertSame([$declarado->id], array_column($response->json('data.declared'), 'service_id'));
+        $this->assertSame(1500, $response->json('data.declared.0.vendor_no_show_penalty'));
     }
 }
