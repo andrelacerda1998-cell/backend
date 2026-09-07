@@ -152,6 +152,10 @@ return [
         'title' => 'Marcação libertada',
         'description' => ':service_type de :day não foi confirmada a tempo e o horário ficou livre. Podes marcar de novo quando quiseres.',
     ],
+    'scheduleAttendanceReminder' => [
+        'title' => 'Serviço marcado para daqui a 3 dias',
+        'description' => ':service_type dia :day às :time — confirma que vais para o cliente saber que está tudo tratado.',
+    ],
     'scheduleReminder' => [
         'customer' => [
             'title' => 'Lembrete de serviço',

@@ -81,7 +81,7 @@ class ScheduleController extends Controller
             );
         }
 
-        return new APISuccessResponse;
+        return new ApiSuccessResponse;
     }
 
     public function updateAvailability(Request $request): ApiSuccessResponse
@@ -103,7 +103,7 @@ class ScheduleController extends Controller
             );
         }
 
-        return new APISuccessResponse;
+        return new ApiSuccessResponse;
     }
 
     public function schedules(): ApiSuccessResponse
@@ -164,6 +164,15 @@ class ScheduleController extends Controller
             ->get();
 
         $schedules->each(function ($schedule) {
+            // Ocorrência de uma série ainda por pagar: não está à espera do
+            // técnico, está à espera do cliente. O prazo de 20 minutos existe
+            // para pedidos que o técnico deixou sem resposta; aqui marcava como
+            // confirmado — dias antes do serviço — o que ninguém confirmou, e o
+            // agendamento aparecia-lhe na agenda sem ele ter aceitado nada.
+            if (! $schedule->service_id) {
+                return;
+            }
+
             if ($schedule->created_at && $schedule->created_at->lt(now()->subMinutes(20))) {
                 $schedule->is_pending = false;
             }
