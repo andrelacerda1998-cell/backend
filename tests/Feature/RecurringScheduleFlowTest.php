@@ -250,4 +250,42 @@ class RecurringScheduleFlowTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_a_ocorrencia_por_pagar_nao_entra_na_agenda_do_tecnico(): void
+    {
+        [, $vendor, , $first] = $this->makeSeries();
+        $next = app(CreateNextRecurrence::class)->forSchedule($first);
+
+        // A lista de pendentes do técnico tem um prazo de 20 minutos que marca
+        // como confirmado o que é mais antigo. Uma ocorrência de série nasce
+        // dias antes — sem esta salvaguarda, ficava confirmada sozinha.
+        $next->forceFill(['created_at' => Carbon::now()->subDays(2)])->save();
+
+        $this->actingAs($vendor->user, 'api')
+            ->getJson('/api/v1/vendor/schedule/pending-schedules')
+            ->assertSuccessful();
+
+        $this->assertTrue(
+            (bool) $next->fresh()->is_pending,
+            'Uma ocorrência por pagar não pode ser dada como confirmada pelo prazo dos 20 minutos',
+        );
+        $this->assertNull($next->fresh()->service_id);
+    }
+
+    public function test_libertada_sai_da_agenda_do_tecnico(): void
+    {
+        [, $vendor, , $first] = $this->makeSeries();
+        $next = app(CreateNextRecurrence::class)->forSchedule($first);
+
+        $startsAt = Carbon::parse($next->scheduled_day.' 14:30:00', 'Europe/Lisbon');
+        Carbon::setTestNow($startsAt->copy()->subHours(40));
+
+        $this->artisan('schedules:release-unpaid')->assertSuccessful();
+
+        // Nem na lista de agendamentos, nem na de pendentes: o soft delete
+        // tira-a de qualquer consulta ao modelo.
+        $this->assertSame(0, $vendor->schedules()->whereKey($next->id)->count());
+
+        Carbon::setTestNow();
+    }
 }
