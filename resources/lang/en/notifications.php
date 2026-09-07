@@ -152,6 +152,10 @@ return [
         'title' => 'Booking released',
         'description' => ':service_type on :day was not confirmed in time and the slot is free again. You can book it whenever you want.',
     ],
+    'scheduleAttendanceReminder' => [
+        'title' => 'Service booked in 3 days',
+        'description' => ':service_type on :day at :time — confirm you are going so the customer knows it is all set.',
+    ],
     'scheduleReminder' => [
         'customer' => [
             'title' => 'Service reminder',

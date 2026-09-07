@@ -27,6 +27,10 @@ Schedule::command('schedules:remind-recurring-payment')->hourly()->withoutOverla
 // perder mais tempo do que o necessario com uma marcacao que ninguem confirmou.
 Schedule::command('schedules:release-unpaid')->hourly()->withoutOverlapping();
 
+// A 72h do servico, lembrar o tecnico do que tem marcado e pedir confirmacao.
+// De hora a hora: a janela e de 12h e o aviso deve sair perto do inicio dela.
+Schedule::command('schedules:remind-vendor-attendance')->hourly()->withoutOverlapping();
+
 Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOverlapping();
 
 // Liberta serviços de cartão presos em PENDING_3DS há >10 min (resgata os pagos tardiamente,

@@ -122,5 +122,7 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::get('/details/{schedule}', [App\Http\Controllers\Api\Vendor\Schedule\ScheduleController::class, 'getScheduleData']);
         Route::post('/go-to-location/{service}', App\Http\Controllers\Api\Vendor\Schedule\GoToLocationController::class);
         Route::post('/{schedule}/cancel', App\Http\Controllers\Api\Vendor\Schedule\CancelScheduleController::class);
+        // Botão do lembrete das 72h: "confirmo que vou".
+        Route::post('/{schedule}/confirm-attendance', App\Http\Controllers\Api\Vendor\Schedule\ConfirmScheduleAttendanceController::class);
     });
 });
