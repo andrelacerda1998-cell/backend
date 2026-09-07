@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Api\Customer\Services;
 
+use App\Enums\Schedule\ScheduleRecurrence;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class OpenServiceRequest extends FormRequest
 {
@@ -18,6 +20,11 @@ class OpenServiceRequest extends FormRequest
             'schedule.scheduled_day' => 'required_if:scheduled,true|date',
             'schedule.scheduled_time_start' => 'required_if:scheduled,true|date_format:H:i',
             'schedule.scheduled_time_end' => 'required_if:scheduled,true|date_format:H:i|after:schedule.scheduled_time_start',
+            // Confirmar uma ocorrência de uma série: o pagamento é de uma
+            // marcação que JÁ existe. Sem isto criava-se uma segunda no mesmo
+            // horário e o cliente ficava com duas.
+            'schedule.schedule_id' => 'nullable|integer|exists:schedule,id',
+            'schedule.recurrence' => ['nullable', Rule::in(ScheduleRecurrence::values())],
             // A app já enviava customer_notes há muito, mas o campo não estava
             // aqui nem era escrito em createService(): o cliente escrevia as
             // instruções de acesso ("campainha do 2.º direito") e ninguém as
