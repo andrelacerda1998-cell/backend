@@ -69,7 +69,15 @@ readonly class ServiceRequestedData
             customer_photos: $service->customerPhotosPayload(),
             service_area: $service->serviceType->operationArea->only(['name']),
             service_type: $service->serviceType->only(['id', 'time', 'name']),
-            schedule: $service->schedule?->only('scheduled_day', 'scheduled_time_start', 'scheduled_time_end'),
+            // vendor_confirmed_at vai junto: é o que permite à app do técnico
+            // mostrar "Confirmar presença" ou "Presença confirmada" sem ter de
+            // perguntar por outro pedido.
+            schedule: $service->schedule
+                ? array_merge(
+                    $service->schedule->only('scheduled_day', 'scheduled_time_start', 'scheduled_time_end'),
+                    ['vendor_confirmed_at' => $service->schedule->vendor_confirmed_at?->toIso8601String()],
+                )
+                : null,
             date_label: $service->date_label,
             updated_at: $service->updated_at,
             server_time: now(),
