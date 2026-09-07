@@ -148,6 +148,10 @@ return [
         'title' => 'Confirma o teu próximo serviço',
         'description' => ':service_type dia :day às :time — confirma e paga para garantires o horário.',
     ],
+    'recurringScheduleReleased' => [
+        'title' => 'Marcação libertada',
+        'description' => ':service_type de :day não foi confirmada a tempo e o horário ficou livre. Podes marcar de novo quando quiseres.',
+    ],
     'scheduleReminder' => [
         'customer' => [
             'title' => 'Lembrete de serviço',

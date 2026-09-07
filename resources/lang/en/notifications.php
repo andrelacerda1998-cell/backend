@@ -148,6 +148,10 @@ return [
         'title' => 'Confirm your next service',
         'description' => ':service_type on :day at :time — confirm and pay to secure the slot.',
     ],
+    'recurringScheduleReleased' => [
+        'title' => 'Booking released',
+        'description' => ':service_type on :day was not confirmed in time and the slot is free again. You can book it whenever you want.',
+    ],
     'scheduleReminder' => [
         'customer' => [
             'title' => 'Service reminder',
