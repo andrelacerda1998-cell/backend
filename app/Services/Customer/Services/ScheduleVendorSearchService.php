@@ -145,8 +145,21 @@ class ScheduleVendorSearchService
         $existingSchedules = $vendor->schedules()
             ->whereDate('scheduled_day', '>=', $today)
             ->whereDate('scheduled_day', '<=', $today->copy()->addDays($this->daysAhead))
-            ->whereHas('service', function ($query) {
-                $query->whereNotIn('status', [ServiceStatus::REFUSED, ServiceStatus::CANCELED, ServiceStatus::CANCELED_MBWAY, ServiceStatus::REFUSED_MBWAY, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::ARCHIVED, ServiceStatus::PENDING_3DS]);
+            ->where(function ($query) {
+                $query
+                    ->whereHas('service', function ($service) {
+                        $service->whereNotIn('status', [ServiceStatus::REFUSED, ServiceStatus::CANCELED, ServiceStatus::CANCELED_MBWAY, ServiceStatus::REFUSED_MBWAY, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::ARCHIVED, ServiceStatus::PENDING_3DS]);
+                    })
+                    // Ocorrência de uma série ainda por pagar: o horário está
+                    // reservado para aquele cliente até 48h antes (é o que a app
+                    // lhe promete no checkout), por isso não pode ser vendido a
+                    // outro. Passadas as 48h sem pagamento, o comando
+                    // schedules:release-unpaid liberta-a e ela deixa de contar.
+                    // Sem este ramo, o whereHas excluía-a — não tem serviço — e o
+                    // mesmo horário era oferecido a toda a gente.
+                    ->orWhere(function ($pending) {
+                        $pending->whereNull('service_id')->whereNotNull('recurrence_parent_id');
+                    });
             })
             ->get();
 

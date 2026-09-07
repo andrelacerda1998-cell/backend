@@ -22,6 +22,11 @@ Schedule::command('schedules:create-recurring')->dailyAt('04:30')->withoutOverla
 // idempotencia, por isso correr a mais nao duplica avisos.
 Schedule::command('schedules:remind-recurring-payment')->hourly()->withoutOverlapping();
 
+// O horario de uma ocorrencia por pagar fica reservado ate 48h antes; passado
+// esse limite volta a ficar disponivel. De hora a hora, para o tecnico nao
+// perder mais tempo do que o necessario com uma marcacao que ninguem confirmou.
+Schedule::command('schedules:release-unpaid')->hourly()->withoutOverlapping();
+
 Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOverlapping();
 
 // Liberta serviços de cartão presos em PENDING_3DS há >10 min (resgata os pagos tardiamente,

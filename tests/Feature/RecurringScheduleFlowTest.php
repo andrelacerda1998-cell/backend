@@ -12,6 +12,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\Customer\ConfirmRecurringScheduleNotification;
+use App\Notifications\Customer\RecurringScheduleReleasedNotification;
 use App\Services\Common\Services\MaterializePendingSchedule;
 use App\Services\Schedule\CreateNextRecurrence;
 use Database\Seeders\GenderSeeder;
@@ -190,5 +191,63 @@ class RecurringScheduleFlowTest extends TestCase
 
         // A marcação da outra pessoa fica intocada; o pagamento cria a sua.
         $this->assertNull($next->fresh()->service_id);
+    }
+
+    public function test_o_horario_por_pagar_fica_reservado_ate_as_48h(): void
+    {
+        [$customer, , , $first] = $this->makeSeries();
+        $next = app(CreateNextRecurrence::class)->forSchedule($first);
+
+        // Três dias antes: dentro do prazo, o horário é dele.
+        $startsAt = Carbon::parse($next->scheduled_day.' 14:30:00', 'Europe/Lisbon');
+        Carbon::setTestNow($startsAt->copy()->subDays(3));
+
+        $this->artisan('schedules:release-unpaid')->assertSuccessful();
+
+        $this->assertNotSoftDeleted('schedule', ['id' => $next->id]);
+        Notification::assertNothingSentTo($customer);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_passadas_as_48h_sem_pagamento_o_horario_e_libertado_e_o_cliente_avisado(): void
+    {
+        [$customer, , , $first] = $this->makeSeries();
+        $next = app(CreateNextRecurrence::class)->forSchedule($first);
+
+        // 40 horas antes: passou o limite.
+        $startsAt = Carbon::parse($next->scheduled_day.' 14:30:00', 'Europe/Lisbon');
+        Carbon::setTestNow($startsAt->copy()->subHours(40));
+
+        $this->artisan('schedules:release-unpaid')->assertSuccessful();
+
+        // assertSoftDeleted e não fresh(): o fresh() ignora os scopes e devolve
+        // o registo mesmo depois de apagado.
+        $this->assertSoftDeleted('schedule', ['id' => $next->id]);
+        Notification::assertSentTo($customer, RecurringScheduleReleasedNotification::class);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_uma_ocorrencia_ja_paga_nunca_e_libertada(): void
+    {
+        [$customer, $vendor, $serviceType, $first] = $this->makeSeries();
+        $next = app(CreateNextRecurrence::class)->forSchedule($first);
+
+        $service = Service::factory()->create([
+            'customer_id' => $customer->id,
+            'vendor_id' => $vendor->id,
+            'services_type_id' => $serviceType->id,
+        ]);
+        $next->update(['service_id' => $service->id]);
+
+        $startsAt = Carbon::parse($next->scheduled_day.' 14:30:00', 'Europe/Lisbon');
+        Carbon::setTestNow($startsAt->copy()->subHours(2));
+
+        $this->artisan('schedules:release-unpaid')->assertSuccessful();
+
+        $this->assertNotSoftDeleted('schedule', ['id' => $next->id]);
+
+        Carbon::setTestNow();
     }
 }
