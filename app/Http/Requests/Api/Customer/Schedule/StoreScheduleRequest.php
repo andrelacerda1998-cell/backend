@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Api\Customer\Schedule;
 
+use App\Enums\Schedule\ScheduleRecurrence;
 use App\Rules\NifRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreScheduleRequest extends FormRequest
 {
@@ -17,7 +19,10 @@ class StoreScheduleRequest extends FormRequest
             'service_id' => 'nullable|exists:services,id',
             'scheduled_time_start' => 'required|date_format:H:i',
             'scheduled_time_end' => 'required|date_format:H:i|after:scheduled_time_start',
-            'nif' => ['string','nullable','max:9', new NifRule()],
+            'nif' => ['string', 'nullable', 'max:9', new NifRule],
+            // Repetição: a marcação seguinte só nasce depois desta se realizar,
+            // por isso aqui guarda-se apenas a regra.
+            'recurrence' => ['nullable', Rule::in(ScheduleRecurrence::values())],
         ];
     }
 }

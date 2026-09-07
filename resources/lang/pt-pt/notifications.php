@@ -144,6 +144,10 @@ return [
         'title' => 'Profissional a caminho',
         'description' => 'está a caminho da tua morada',
     ],
+    'confirmRecurringSchedule' => [
+        'title' => 'Confirma o teu próximo serviço',
+        'description' => ':service_type dia :day às :time — confirma e paga para garantires o horário.',
+    ],
     'scheduleReminder' => [
         'customer' => [
             'title' => 'Lembrete de serviço',

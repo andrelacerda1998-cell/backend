@@ -144,6 +144,10 @@ return [
         'title' => 'Professional on the way',
         'description' => 'is on the way to your location',
     ],
+    'confirmRecurringSchedule' => [
+        'title' => 'Confirm your next service',
+        'description' => ':service_type on :day at :time — confirm and pay to secure the slot.',
+    ],
     'scheduleReminder' => [
         'customer' => [
             'title' => 'Service reminder',

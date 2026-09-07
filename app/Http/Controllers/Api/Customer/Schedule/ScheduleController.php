@@ -95,6 +95,7 @@ class ScheduleController
                 'service_id' => $serviceId,
                 'scheduled_time_start' => Carbon::parse($request->input('scheduled_time_start')),
                 'scheduled_time_end' => Carbon::parse($request->input('scheduled_time_end')),
+                'recurrence' => $request->input('recurrence'),
                 'is_pending' => true,
             ]);
 
