@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
 use App\Http\Controllers\Api\Admin\PaymentOrderController;
+use App\Http\Controllers\Api\Admin\VendorNoShowController;
 use App\Http\Controllers\Api\Admin\VendorPaymentController;
 use App\Http\Controllers\Api\Admin\VoucherController;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,10 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // interno + email/notificação; a transferência bancária é manual).
     Route::get('/vendor-payments', [VendorPaymentController::class, 'index']);
     Route::put('/vendor-payments/{vendor}/pay', [VendorPaymentController::class, 'pay']);
+
+    // Dar um serviço como falta do técnico: cobra-lhe 50% do que ia receber e
+    // cancela o serviço (o que reembolsa o cliente). Ver VendorNoShowPolicy.
+    Route::post('/services/{service}/vendor-no-show', VendorNoShowController::class);
 
     // Reembolso / libertação de cativo dos pagamentos da app (Payshop).
     // Passa pelo SDK para o estado local acompanhar; recusa se o serviço
