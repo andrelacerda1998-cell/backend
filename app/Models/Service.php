@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
 use OwenIt\Auditing\Contracts\Auditable;
+use RwInteractive\PayshopSdk\Models\PaymentMethod;
 use RwInteractive\PayshopSdk\Models\PaymentOrder;
 use Spatie\Geocoder\Exceptions\CouldNotGeocode;
 use Spatie\Geocoder\Facades\Geocoder;
@@ -422,6 +423,35 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         ];
     }
 
+    /**
+     * O método de pagamento usado neste serviço, para a app o mostrar.
+     *
+     * Só o que serve para o identificar: tipo, marca e últimos quatro dígitos
+     * do cartão, ou o telemóvel do MB Way. Nada que sirva para cobrar — o token
+     * fica no servidor.
+     */
+    public function paymentMethodPayload(): ?array
+    {
+        $methodId = $this->paymentOrder?->payment_method_id;
+        if (! $methodId) {
+            return null;
+        }
+
+        $method = PaymentMethod::find($methodId);
+        if (! $method) {
+            return null;
+        }
+
+        return [
+            'id' => $method->id,
+            'type' => $method->type,
+            'brand' => $method->brand,
+            'last4' => $method->last4,
+            // Só faz sentido no MB Way; nos cartões vem vazio.
+            'phone_number' => $method->phone_number,
+        ];
+    }
+
     public function formatDataForCustomer(): array
     {
         $service = $this;
@@ -447,6 +477,11 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'customer_photos' => $service->customerPhotosPayload(),
             'vendor_notes' => $service->vendor_notes,
             'amount' => $service->amount,
+            // Método de pagamento DESTE serviço (não o predefinido da carteira).
+            // É onde os extras vão ser cobrados — ver ChargeServiceExtra, que
+            // usa paymentOrder->payment_method_id —, e sem isto a app pedia ao
+            // cliente para aprovar uma cobrança sem lhe dizer onde ia sair.
+            'payment_method' => $service->paymentMethodPayload(),
             'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),
             'vendor' => $service?->vendor?->user ? [
                 'user' => $service->vendor->user->only('name', 'phone_number', 'email', 'avatar'),
