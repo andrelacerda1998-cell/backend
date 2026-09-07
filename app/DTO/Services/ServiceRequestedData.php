@@ -37,6 +37,19 @@ readonly class ServiceRequestedData
         public int $updated_timestamp,
     ) {}
 
+    /**
+     * Itens sem tradução na língua atual chegam aqui como string vazia
+     * (TranslatableArrayCast::getTranslated). Mandá-los para a app dava linhas
+     * em branco na lista do que o serviço inclui.
+     */
+    private static function cleanList(array $items): array
+    {
+        return array_values(array_filter(
+            array_map(static fn ($item) => is_string($item) ? trim($item) : '', $items),
+            static fn (string $item) => $item !== '',
+        ));
+    }
+
     public static function fromArray(Service $service, User $user): self
     {
         return new self(
@@ -68,14 +81,30 @@ readonly class ServiceRequestedData
             customer_notes: $service->customer_notes,
             customer_photos: $service->customerPhotosPayload(),
             service_area: $service->serviceType->operationArea->only(['name']),
-            service_type: $service->serviceType->only(['id', 'time', 'name']),
+            // includes/excludes vão para a app do técnico pelo mesmo motivo por
+            // que vão para a do cliente: é o que separa "o que combinei fazer"
+            // de "o que o cliente vai pedir na hora" — e é aí que nascem as
+            // discussões à porta de casa.
+            service_type: [
+                ...$service->serviceType->only(['id', 'time', 'name']),
+                'includes' => self::cleanList($service->serviceType->getTranslatedIncludes()),
+                'excludes' => self::cleanList($service->serviceType->getTranslatedExcludes()),
+            ],
             // vendor_confirmed_at vai junto: é o que permite à app do técnico
             // mostrar "Confirmar presença" ou "Presença confirmada" sem ter de
             // perguntar por outro pedido.
             schedule: $service->schedule
                 ? array_merge(
                     $service->schedule->only('scheduled_day', 'scheduled_time_start', 'scheduled_time_end'),
-                    ['vendor_confirmed_at' => $service->schedule->vendor_confirmed_at?->toIso8601String()],
+                    [
+                        'vendor_confirmed_at' => $service->schedule->vendor_confirmed_at?->toIso8601String(),
+                        // O técnico tem de saber que este cliente volta: uma
+                        // marcação que se repete todas as semanas pesa de outra
+                        // maneira na agenda do que uma avulsa.
+                        'recurrence' => $service->schedule->recurrence?->value,
+                        'is_recurring' => $service->schedule->recurrence !== null
+                            || $service->schedule->recurrence_parent_id !== null,
+                    ],
                 )
                 : null,
             date_label: $service->date_label,
