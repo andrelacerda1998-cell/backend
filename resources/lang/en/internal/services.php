@@ -15,6 +15,7 @@ return [
         'fee' => 'Cancellation fee',
         'description' => 'The customer has cancelled the job request before it could be accepted.',
         'charged' => 'The customer cancelled after the technician was on the way or on site — charged 100%.',
+        'vendor_no_show' => 'The professional did not show up — service canceled and customer refunded.',
     ],
     'mbway' => [
         'canceled' => 'The customer canceled before the MBWay payment was confirmed.',
