@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\DocumentController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\SentNotificationController;
+use App\Http\Controllers\Api\Admin\ServiceController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
 use App\Http\Controllers\Api\Admin\SmsCodeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
@@ -44,8 +45,15 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
 
     // Dar um serviço como falta do técnico: cobra-lhe 50% do que ia receber e
     // cancela o serviço (o que reembolsa o cliente). Ver VendorNoShowPolicy.
+    /*
+     * Serviços pedidos na app, para o backoffice. Tem de vir DEPOIS das rotas
+     * mais específicas de /services/... e ANTES de {service}, senão
+     * "vendor-no-shows" seria lido como um id de serviço.
+     */
     Route::get('/services/vendor-no-shows', VendorNoShowListController::class);
     Route::post('/services/{service}/vendor-no-show', VendorNoShowController::class);
+    Route::get('/services', [ServiceController::class, 'index']);
+    Route::get('/services/{service}', [ServiceController::class, 'show']);
 
     // Reembolso / libertação de cativo dos pagamentos da app (Payshop).
     // Passa pelo SDK para o estado local acompanhar; recusa se o serviço
