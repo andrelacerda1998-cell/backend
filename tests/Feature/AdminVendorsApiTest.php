@@ -99,7 +99,16 @@ class AdminVendorsApiTest extends TestCase
     public function test_it_searches_vendors_by_name_nif_and_phone(): void
     {
         $target = $this->makeVendor(['first_name' => 'Ana', 'last_name' => 'Silva', 'nif' => '123456789']);
-        $this->makeVendor(['first_name' => 'Bruno', 'last_name' => 'Costa']);
+        // O email tem de ser fixo: a pesquisa tambem varre o email, e o factory
+        // gera um aleatorio que em ~1% dos casos contem "ana" (shana,
+        // shanahan, adriana...). Quando calhava, este vendor entrava nos
+        // resultados, davam 2 em vez de 1 e o deploy parava sem ninguem ter
+        // mexido em nada.
+        $this->makeVendor([
+            'first_name' => 'Bruno',
+            'last_name' => 'Costa',
+            'email' => 'bruno.costa@example.test',
+        ]);
 
         $this->withAuth()
             ->getJson('/api/v1/admin/vendors?search=ana')
