@@ -79,6 +79,10 @@ return [
         'description' => 'The service ":service" has been in progress for :hours hours. Finish it to get paid.',
     ],
     // No-show detection (service still not started after the scheduled time).
+    'noShowPenalty' => [
+        'title' => 'You missed a job',
+        'description' => 'The :service_type job was marked as a no-show. :amount € was deducted from your earnings — half of what you were going to receive. If you think this is a mistake, contact support.',
+    ],
     'noShow' => [
         'vendor' => [
             'title' => 'Haven\'t left yet?',

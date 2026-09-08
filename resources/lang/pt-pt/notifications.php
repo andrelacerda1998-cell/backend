@@ -79,6 +79,10 @@ return [
         'description' => 'O serviço ":service" está em execução há :hours horas. Conclui-o para receberes o pagamento.',
     ],
     // Deteção de não-comparência (serviço ainda por iniciar depois da hora marcada).
+    'noShowPenalty' => [
+        'title' => 'Faltaste a um serviço',
+        'description' => 'O serviço de :service_type foi dado como falta. Foram descontados :amount € dos teus ganhos — metade do que ias receber. Se achas que houve engano, fala com o suporte.',
+    ],
     'noShow' => [
         'vendor' => [
             'title' => 'Ainda não saíste?',

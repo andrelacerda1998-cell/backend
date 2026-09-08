@@ -95,6 +95,13 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::post('/tickets', [App\Http\Controllers\Api\Vendor\SupportTicketController::class, 'store']);
     });
 
+    // Faltas registadas ao próprio técnico, e a contestação de cada uma
+    // (abre um ticket de suporte — quem decide se houve engano é uma pessoa).
+    Route::group(['prefix' => 'no-shows'], function () {
+        Route::get('/', [App\Http\Controllers\Api\Vendor\NoShowController::class, 'index']);
+        Route::post('/{service}/dispute', [App\Http\Controllers\Api\Vendor\NoShowController::class, 'dispute']);
+    });
+
     Route::group(['prefix' => 'cities'], function () {
         Route::get('/', [App\Http\Controllers\Api\Vendor\Cities\CitiesController::class, 'index']);
         Route::post('/', [App\Http\Controllers\Api\Vendor\Cities\CitiesController::class, 'store']);
