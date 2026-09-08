@@ -97,8 +97,13 @@ class MatchingCandidateLifecycleTest extends TestCase
         $this->assertSame(ServiceStatus::MATCHING, $service->status);
     }
 
-    public function test_request_closes_at_the_third_acceptance(): void
+    public function test_o_pedido_nao_fecha_ao_terceiro_sim(): void
     {
+        // O comportamento anterior era fechar as vagas ao terceiro sim. Mudou:
+        // quem chega ao cliente passou a ser decidido pelo ranking, e para isso
+        // toda a gente convidada tem de poder responder enquanto a janela dela
+        // corre. Sem isto, os melhores nunca chegariam a entrar se demorassem
+        // uns segundos a mais do que os piores.
         $service = $this->service();
 
         foreach ([1, 2, 3] as $rank) {
@@ -107,11 +112,49 @@ class MatchingCandidateLifecycleTest extends TestCase
 
         $fourth = $this->candidate($service, 4, CandidateStatus::NOTIFIED);
 
-        $this->assertFalse(
+        $this->assertTrue(
             $this->matching->accept($fourth),
-            'ao terceiro sim o pedido fecha — o quarto não pode aceitar uma vaga que já não existe'
+            'com o corte a ser feito por ranking, o quarto ainda pode responder'
         );
-        $this->assertSame(CandidateStatus::LOST, $fourth->refresh()->status);
+        $this->assertSame(CandidateStatus::ACCEPTED, $fourth->refresh()->status);
+    }
+
+    public function test_o_cliente_ve_os_melhores_e_nao_os_mais_rapidos(): void
+    {
+        // Os piores aceitam primeiro, o melhor aceita por ultimo. Se o corte
+        // fosse por ordem de chegada, o rank 1 nunca aparecia ao cliente.
+        $service = $this->service();
+
+        foreach ([6, 5, 4, 1] as $rank) {
+            $this->assertTrue($this->matching->accept($this->candidate($service, $rank, CandidateStatus::NOTIFIED)));
+        }
+
+        $vistos = $this->matching->selectableFor($service->refresh());
+
+        $this->assertCount(3, $vistos, 'o cliente ve no maximo shortlist_size');
+        $this->assertSame([1, 4, 5], $vistos->pluck('rank')->all());
+    }
+
+    public function test_um_melhor_que_responde_tarde_empurra_outro_para_fora(): void
+    {
+        // O custo assumido deste desenho: quem aceitou e estava no top 3 pode
+        // sair de la sem o cliente chegar a ve-lo. Fica coberto por um teste
+        // para nao ser descoberto por acidente em producao.
+        $service = $this->service();
+
+        foreach ([3, 4, 5] as $rank) {
+            $this->matching->accept($this->candidate($service, $rank, CandidateStatus::NOTIFIED));
+        }
+
+        $this->assertSame([3, 4, 5], $this->matching->selectableFor($service)->pluck('rank')->all());
+
+        $this->matching->accept($this->candidate($service, 2, CandidateStatus::NOTIFIED));
+
+        $this->assertSame(
+            [2, 3, 4],
+            $this->matching->selectableFor($service)->pluck('rank')->all(),
+            'o rank 5 saiu do top 3 quando o rank 2 aceitou'
+        );
     }
 
     public function test_expired_window_cannot_be_accepted(): void

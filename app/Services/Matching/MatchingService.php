@@ -19,7 +19,15 @@ use Illuminate\Support\Facades\DB;
  * Põe candidatos em cima da mesa para um serviço — ver docs/matching.md.
  *
  * UM caminho só, para os dois modos: notifica por ondas, dos melhores para
- * baixo, e fecha ao terceiro sim. O cliente escolhe entre quem se disponibilizou.
+ * baixo. Todos os convidados podem aceitar enquanto a janela deles corre, e o
+ * cliente escolhe entre os MELHORES `shortlist_size` de quem aceitou — por
+ * ranking, e não por ordem de chegada.
+ *
+ * Aceitar deixou de garantir lugar no ecrã do cliente: um profissional melhor
+ * que responda depois empurra outro para fora do top 3. É deliberado — quem
+ * chega ao cliente é decidido pela avaliação, preço e distância, e não por quem
+ * tem o telemóvel na mão. O custo é mais gente a aceitar sem ganhar, e paga-se
+ * com o tamanho da onda e a duração da janela.
  *
  * O imediato foi unificado com o agendado por decisão de produto (ver nota
  * abaixo). Antes tinha um percurso próprio — shortlist sem notificar, cliente
@@ -120,19 +128,6 @@ class MatchingService
                 return false;
             }
 
-            // Ao terceiro sim o pedido fecha. Sem este travão, quem responde
-            // depois aceita para uma vaga que já não existe.
-            if ($this->hasEnoughAcceptances($candidate->service)) {
-                $candidate->update([
-                    'status' => CandidateStatus::LOST,
-                    'responded_at' => now(),
-                ]);
-
-                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
-
-                return false;
-            }
-
             $candidate->update([
                 'status' => CandidateStatus::ACCEPTED,
                 'responded_at' => now(),
@@ -142,11 +137,6 @@ class MatchingService
             // vez de esperar que a janela feche. É o que torna a espera
             // progressiva: aos poucos segundos já há uma opção para escolher.
             $this->notifyCustomer($candidate, MatchingCandidateAcceptedEvent::class);
-
-            // Ao terceiro sim o pedido fecha para todos os outros, já.
-            if ($this->hasEnoughAcceptances($candidate->service)) {
-                $this->closeRemaining($candidate->service, $candidate->id);
-            }
 
             return true;
         });
@@ -339,6 +329,17 @@ class MatchingService
     }
 
     /** Fecha o pedido para quem ainda não respondeu e avisa-o. */
+    /**
+     * SEM CHAMADAS desde que o pedido deixou de fechar ao terceiro sim.
+     *
+     * Servia para dizer "já preenchido" a quem ainda não tinha respondido no
+     * momento em que as vagas enchiam. Deixou de haver esse momento: agora toda
+     * a gente convidada pode aceitar até a janela dela fechar, e quem perde é
+     * avisado pelo `select()` com o motivo certo ("o cliente escolheu outro").
+     *
+     * Fica no sítio em vez de apagado — se algum dia voltar a haver um limite
+     * de aceitações, é isto que se volta a ligar.
+     */
     private function closeRemaining(Service $service, int $exceptId): void
     {
         $remaining = $service->candidates()
@@ -508,9 +509,17 @@ class MatchingService
      */
     public function selectableFor(Service $service): Collection
     {
+        // Os MELHORES `shortlist_size`, e não os primeiros a responder. Quem
+        // chega ao ecrã do cliente é decidido pelo ranking, não pela rapidez a
+        // tocar no botão. `rank` é 1-based e o melhor é o menor.
+        //
+        // O corte é aqui e não no `accept()` de propósito: um profissional
+        // melhor que responda mais tarde tem de poder entrar e empurrar outro
+        // para fora do top 3 — é isso que "os melhores 3" quer dizer.
         return $service->candidates()
             ->where('status', CandidateStatus::ACCEPTED)
             ->orderBy('rank')
+            ->limit($this->settings->shortlist_size)
             ->get();
     }
 

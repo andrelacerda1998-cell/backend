@@ -67,7 +67,8 @@ cliente escolhe categoria → tipo → "agendar" + data/hora
   → notifica a 1.ª onda (N melhores)
   → cada aceitação aparece AO VIVO no ecrã do cliente (não se espera pelos 3)
   → se ao fim de X segundos houver menos de 3, notifica a onda seguinte
-  → ao 3.º sim, o pedido fecha e os restantes recebem "já preenchido"
+  → todos os convidados podem responder até a janela deles fechar
+  → o cliente vê sempre os MELHORES 3 de quem aceitou, por ranking
   → cliente escolhe → checkout → pago → agendado
   → nenhum aceitou → "tentar novamente"
 ```
@@ -185,8 +186,16 @@ que desiste da app.
 **O perdedor é avisado em segundos, com motivo.** "O cliente escolheu outro
 profissional" imediatamente, nunca silêncio. Silêncio é o que destrói a confiança.
 
-**Ao 3.º sim, o pedido fecha.** Quem ainda não respondeu deixa de ver o pedido e
-recebe "já preenchido" — não fica a responder a algo que já não existe.
+**O corte é por ranking, não por rapidez.** Toda a gente convidada pode aceitar
+enquanto a janela dela corre, e o cliente vê os melhores `shortlist_size` de quem
+aceitou. Sem isto, quem chegasse ao cliente era quem tivesse o telemóvel na mão,
+e o ranking só decidia quem era convidado.
+
+O custo é assumido: mais gente aceita sem ganhar, e um profissional que estava no
+top 3 pode ser empurrado para fora por outro melhor que responda depois — perde
+sem o cliente chegar a vê-lo. Paga-se com o tamanho da onda e a duração da
+janela, que são definições e não constantes. Quem perde é avisado em segundos
+com o motivo, como sempre foi.
 
 ## O que faz o tempo passar
 

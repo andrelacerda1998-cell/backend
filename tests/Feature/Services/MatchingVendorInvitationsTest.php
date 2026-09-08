@@ -164,31 +164,36 @@ class MatchingVendorInvitationsTest extends TestCase
             ->assertJsonPath('message', 'This invitation has expired');
     }
 
-    public function test_late_acceptance_is_told_the_request_was_filled(): void
+    public function test_uma_resposta_tardia_continua_a_ser_aceite(): void
     {
+        // Antes, ao terceiro sim o pedido fechava e o quarto levava 409. Deixou
+        // de fechar: quem chega ao cliente e decidido pelo ranking, e para isso
+        // toda a gente convidada tem de poder responder enquanto a janela dela
+        // corre — senao um profissional melhor perdia o lugar por ter demorado
+        // uns segundos a mais.
         foreach ([1, 2, 3] as $rank) {
             app(MatchingService::class)->accept($this->invitation($rank));
         }
 
         $late = $this->invitation(4);
 
-        // Nunca silêncio: saber que outro foi mais rápido é diferente de achar
-        // que a app está partida.
         $this->asVendor($late)
             ->postJson("/api/v1/vendor/services/matching/{$late->id}/accept")
-            ->assertStatus(409)
-            ->assertJsonPath('message', 'This request has already been filled');
+            ->assertOk();
     }
 
-    public function test_the_third_acceptance_closes_the_request_for_everyone_else(): void
+    public function test_o_pedido_nao_e_fechado_a_quem_ainda_nao_respondeu(): void
     {
+        // Consequencia direta: ja nao ha o momento "ja preenchido". Quem nao
+        // for escolhido e avisado pelo select(), com o motivo certo — o que o
+        // test_losing_is_announced_immediately cobre.
         $waiting = $this->invitation(4);
 
         foreach ([1, 2, 3] as $rank) {
             app(MatchingService::class)->accept($this->invitation($rank));
         }
 
-        Event::assertDispatched(
+        Event::assertNotDispatched(
             MatchingRequestClosedEvent::class,
             fn ($e) => $e->payload['candidate_id'] === $waiting->id
         );
