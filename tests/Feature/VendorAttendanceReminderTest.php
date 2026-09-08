@@ -144,4 +144,20 @@ class VendorAttendanceReminderTest extends TestCase
 
         $this->assertNull($schedule->fresh()->vendor_confirmed_at);
     }
+
+    public function test_o_lembrete_leva_o_tecnico_ao_ecra_onde_confirma(): void
+    {
+        // Sem `data` no toExpo, a push abria a app na home: o tecnico recebia
+        // "confirma que vais" e nao tinha como la chegar.
+        [$vendor, $schedule] = $this->makeSchedule();
+        $notification = new ScheduleAttendanceReminderNotification($schedule);
+
+        $message = $notification->toExpo($vendor->user);
+        // O canal Expo faz json_encode do `data` antes de enviar (e a app
+        // desserializa do outro lado — ver useNotification.tsx).
+        $data = json_decode($message->toArray()['data'] ?? '{}', true);
+
+        $this->assertSame('schedule_attendance', $data['open_type'] ?? null);
+        $this->assertSame($schedule->id, $data['open_id'] ?? null);
+    }
 }

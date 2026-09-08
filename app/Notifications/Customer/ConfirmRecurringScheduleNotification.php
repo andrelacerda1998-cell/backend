@@ -57,7 +57,14 @@ class ConfirmRecurringScheduleNotification extends Notification implements Shoul
                 'time' => $time,
             ], $language))
             ->priority('high')
-            ->playSound();
+            ->playSound()
+            // Mesma razão do lembrete de presença: sem `data` a push não leva
+            // o cliente ao ecrã onde paga a ocorrência seguinte, e a série
+            // morre por falta de um toque.
+            ->data([
+                'open_type' => 'schedule',
+                'open_id' => $this->schedule->id,
+            ]);
     }
 
     public function toArray($notifiable): array
