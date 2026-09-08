@@ -60,6 +60,15 @@ class OperationAreasController extends Controller
                 return [
                     'id' => $service->id,
                     'name' => $service->getTranslation('name', $lang),
+                    // Os destaques desenham os mesmos cartoes que a lista por
+                    // area, e o ecra de detalhe abre com o objeto que vier
+                    // daqui. Faltando estes campos, marcar `is_popular` no
+                    // backoffice apagava os precos da Home E deixava o detalhe
+                    // com meio ecra vazio (o cartao "Inclui" esconde-se quando
+                    // a lista vem vazia) — sem ninguem ter tocado na app.
+                    'starts_from' => $service->starts_from,
+                    'includes' => $service->getTranslatedIncludes(),
+                    'excludes' => $service->getTranslatedExcludes(),
                     'time' => $service->time,
                     'image' => $service->image_url,
                     'operation_area' => $service->operationArea ? [
@@ -91,7 +100,12 @@ class OperationAreasController extends Controller
                 'excludes' => $service->getTranslatedExcludes(),
                 'starts_from' => $service->starts_from,
                 'time' => $service->time,
-                'image' => $service->getFirstTemporaryUrl(now()->addHour(), 'image'),
+                // `image_url` prefere a conversao webp e so cai no original se
+                // ela nao existir. Aqui pedia-se o original sempre — e o
+                // original do catalogo anda nos ~2 MB por tipo, com 26 tipos
+                // numa categoria. O endpoint dos destaques ja usava image_url;
+                // eram duas respostas diferentes para a mesma imagem.
+                'image' => $service->image_url,
                 'operation_area' => [
                     'id' => $operationArea->id,
                     'name' => $operationArea->getTranslation('name', $lang),
