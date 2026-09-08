@@ -288,4 +288,20 @@ class RecurringScheduleFlowTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_o_aviso_de_pagamento_leva_o_cliente_ao_ecra_da_marcacao(): void
+    {
+        // Sem `data` no toExpo, o cliente recebia "paga a proxima semana" e a
+        // push abria a app na home — a serie morria por falta de um toque.
+        [$customer, , , $first] = $this->makeSeries();
+        $this->artisan('schedules:create-recurring')->assertSuccessful();
+        $schedule = Schedule::query()->where('recurrence_parent_id', $first->id)->firstOrFail();
+
+        $notification = new ConfirmRecurringScheduleNotification($schedule);
+        $message = $notification->toExpo($customer);
+        $data = json_decode($message->toArray()['data'] ?? '{}', true);
+
+        $this->assertSame('schedule', $data['open_type'] ?? null);
+        $this->assertSame($schedule->id, $data['open_id'] ?? null);
+    }
 }

@@ -58,7 +58,15 @@ class ScheduleAttendanceReminderNotification extends Notification implements Sho
                 'time' => $time,
             ], $language))
             ->priority('high')
-            ->playSound();
+            ->playSound()
+            // Sem isto a push abria a app na home: o `action` abaixo vai só no
+            // toArray (a notificação guardada em BD), e o que a app lê ao tocar
+            // no push é o `data` do Expo. O técnico recebia "confirma que vais"
+            // e não tinha como lá chegar.
+            ->data([
+                'open_type' => 'schedule_attendance',
+                'open_id' => $this->schedule->id,
+            ]);
     }
 
     public function toArray($notifiable): array
