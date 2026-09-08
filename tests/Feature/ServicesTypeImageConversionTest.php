@@ -47,10 +47,18 @@ class ServicesTypeImageConversionTest extends TestCase
 
     public function test_os_dois_endpoints_servem_a_conversao_e_nao_o_original(): void
     {
-        // A conversao webp esta marcada como ->queued(): sem a fila a correr em
-        // linha, nao chega a ser gerada, os dois endpoints caiem no original e
-        // o teste passava com ou sem a correcao — sem provar nada.
-        config(['queue.default' => 'sync']);
+        // A conversao webp esta marcada como ->queued(): sem ela ser gerada, os
+        // dois endpoints caiem no original e o teste passava com ou sem a
+        // correcao — sem provar nada.
+        //
+        // Desliga-se a fila NA MEDIA LIBRARY em vez de por `queue.default` a
+        // sync: o `ScheduleSoftDeleteTest` corre logo antes (ordem alfabetica)
+        // e chama `Queue::fake()`, e este teste chegou a falhar uma vez numa
+        // corrida completa por depender do estado da fila. Assim nao depende.
+        config([
+            'media-library.queue_conversions_by_default' => false,
+            'queue.default' => 'sync',
+        ]);
         Storage::fake('public');
         $area = OperationArea::factory()->create(['is_active' => true]);
         $tipo = $this->tipoComImagem($area);

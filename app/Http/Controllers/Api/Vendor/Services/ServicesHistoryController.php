@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Api\Vendor\Services;
 
+use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Models\ServiceCandidate;
 use App\Exceptions\Api\Common\Service\ServiceNotFound;
 use App\Exceptions\Api\User\WrongApp;
 use App\Http\Controllers\Controller;
@@ -52,6 +54,25 @@ class ServicesHistoryController extends Controller
                     ->where('status', ServiceStatus::REFUSED)
                     ->where('updated_at', '>=', now()->startOfWeek())
                     ->sum('amount_for_vendor'),
+                // Convites de selecao que caducaram sem resposta, esta semana.
+                //
+                // Os `lost_week_*` acima contam servicos em REFUSED, que so o
+                // fluxo antigo produz: no matching, recusar marca o CANDIDATO
+                // como declined e o servico nunca chega a REFUSED. Ou seja, o
+                // cartao da Home estava a medir um fluxo que ja nao e o normal.
+                //
+                // E uma CONTAGEM e nao um valor de proposito. Somar o
+                // `amount_for_vendor` dos convites perdidos dizia ao tecnico que
+                // aquele dinheiro era dele — e nao era: mesmo respondendo, teria
+                // de ficar no top 3 por ranking e depois ser escolhido pelo
+                // cliente. Prometer euros que dependem de duas coisas que ele
+                // nao controla e o tipo de numero que destroi a confianca quando
+                // ele percebe.
+                'missed_invitations_week' => ServiceCandidate::query()
+                    ->where('vendor_id', $user->vendor->id)
+                    ->where('status', CandidateStatus::EXPIRED)
+                    ->where('expires_at', '>=', now()->startOfWeek())
+                    ->count(),
             ];
 
             $servicesLength = $services->count();
