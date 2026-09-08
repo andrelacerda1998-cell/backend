@@ -34,7 +34,7 @@ class ServiceController extends Controller
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
         $query = Service::query()
-            ->with(['customerUser', 'vendor.user', 'servicesType', 'schedule'])
+            ->with(['customerUser', 'vendor.user', 'serviceType', 'schedule'])
             ->withCount([
                 'candidates as candidates_notified' => fn ($q) => $q->where('status', CandidateStatus::NOTIFIED),
                 'candidates as candidates_accepted' => fn ($q) => $q->where('status', CandidateStatus::ACCEPTED),
@@ -93,7 +93,7 @@ class ServiceController extends Controller
      */
     public function show(Service $service): ApiSuccessResponse
     {
-        $service->load(['customerUser', 'vendor.user', 'servicesType', 'schedule', 'candidates.vendor.user']);
+        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user']);
 
         return ApiSuccessResponse::make([
             ...$this->present($service),
@@ -141,8 +141,8 @@ class ServiceController extends Controller
             'technician_id' => $service->vendor_id,
             'technician_name' => $service->vendor?->user?->name,
             'category_id' => $service->services_type_id,
-            'category_name' => $service->servicesType?->name,
-            'service_name' => $service->servicesType?->name,
+            'category_name' => $service->serviceType?->name,
+            'service_name' => $service->serviceType?->name,
             'location' => $morada['address'] ?? $morada['street'] ?? null,
             'city' => $morada['city'] ?? $morada['locality'] ?? null,
             'source' => 'app',
