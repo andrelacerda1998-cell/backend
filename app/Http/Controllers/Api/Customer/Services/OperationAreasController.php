@@ -60,6 +60,11 @@ class OperationAreasController extends Controller
                 return [
                     'id' => $service->id,
                     'name' => $service->getTranslation('name', $lang),
+                    // Os destaques desenham o mesmo cartao que a lista por
+                    // area, e esse cartao so mostra "Desde X €" quando o campo
+                    // vem. Sem isto, marcar `is_popular` no backoffice apagava
+                    // os precos da Home sem ninguem ter tocado na app.
+                    'starts_from' => $service->starts_from,
                     'time' => $service->time,
                     'image' => $service->image_url,
                     'operation_area' => $service->operationArea ? [
