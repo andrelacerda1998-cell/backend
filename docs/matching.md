@@ -102,14 +102,29 @@ faixas e o preço ordena **dentro** da faixa. Faixas configuráveis em
 
 ### Arranque a frio
 
-Um profissional sem avaliações não tem faixa. Se ficar no fundo, nunca é
-escolhido, nunca recebe avaliação, e nunca sai do fundo — a oferta nova morre à
-nascença.
+Um profissional sem avaliações, ou com duas ou três, não tem nota que diga nada.
+Se ficar no fundo nunca é escolhido, nunca recebe avaliação, e nunca sai do fundo
+— a oferta nova morre à nascença. E como o corte para o ecrã do cliente passou a
+ser por ranking, essa armadilha fecha-se por completo.
 
-Regra: **uma das 3 vagas é reservada** a quem tem menos de
-`matching.new_vendor_min_ratings` avaliações (por omissão 5), desde que cumpra os
-critérios de elegibilidade. Se não houver ninguém nessas condições, a vaga volta
-ao ranking normal.
+Duas regras, e as duas medem-se pelo mesmo `matching.new_vendor_min_ratings`
+(por omissão 5):
+
+1. **Ordena como faixa A até às primeiras 5 avaliações**, seja qual for a média —
+   incluindo quem ainda não tem nenhuma. Dá uma porta de entrada, e evita que um
+   único 4 (média 4,0 = faixa B) tire a visibilidade a quem mal começou.
+2. **Uma das 3 vagas da onda é reservada** a quem está abaixo desse limiar, desde
+   que cumpra os critérios de elegibilidade. Se não houver ninguém nessas
+   condições, a vaga volta ao ranking normal.
+
+**Isto só ordena.** A nota MOSTRADA ao cliente continua a ser a real, e `null`
+para quem não tem nenhuma — não se inventa nota a quem a vê. O cliente distingue
+os dois casos pelo `is_new_vendor` no payload.
+
+Custo assumido: quatro notas de 1 estrela ainda ordenam como faixa A. É o preço
+de deixar a nota estabilizar antes de contar, e está coberto por um teste
+(`test_o_amortecedor_protege_tambem_quem_comecou_mal`) para não ser descoberto
+por acidente.
 
 ## Preços
 

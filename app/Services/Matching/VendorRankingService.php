@@ -222,12 +222,13 @@ class VendorRankingService
 
         $rating = $ratings[$vendor->id] ?? null;
         $average = $rating['avg'] ?? null;
+        $count = (int) ($rating['count'] ?? 0);
 
         return new RankedVendor(
             vendor: $vendor,
             ratingAverage: $average,
-            ratingCount: $rating['count'] ?? 0,
-            ratingBand: $average === null ? null : $this->band($average),
+            ratingCount: $count,
+            ratingBand: $this->bandFor($average, $count),
             distance: (float) $prices['distance'],
             quotedAmount: $prices['customer_amount'],
             quotedAmountForVendor: $prices['vendor_amount'],
@@ -241,6 +242,31 @@ class VendorRankingService
      * ordenação direta por média, empates são raros e o primeiro critério
      * decidiria sempre sozinho.
      */
+    /**
+     * Faixa usada para ordenar, ja com o amortecedor de arranque.
+     *
+     * Ate as primeiras `new_vendor_min_ratings` avaliacoes, conta como faixa A
+     * (0) independentemente da media — incluindo quem ainda nao tem nenhuma.
+     *
+     * Duas razoes. O corte para o ecra do cliente e por rank: quem arranca no
+     * fundo nunca e visto, nunca ganha avaliacoes, e nunca sai do fundo. E com
+     * uma ou duas notas a media ainda nao diz nada — um unico 4 punha alguem
+     * em 4,0 (faixa B) e tirava-lhe a visibilidade por causa de um cliente.
+     *
+     * ISTO SO ORDENA. A nota MOSTRADA ao cliente continua a ser a real, ou
+     * `null` para quem nao tem nenhuma — ver o payload do MatchingController e
+     * o `test_no_ratings_means_null_not_five_stars`. Nao se inventa nota a quem
+     * a ve; da-se oportunidade a quem ainda nao a tem.
+     */
+    public function bandFor(?float $average, int $ratingCount): int
+    {
+        if ($ratingCount < $this->settings->new_vendor_min_ratings) {
+            return 0;
+        }
+
+        return $this->band((float) $average);
+    }
+
     public function band(float $average): int
     {
         foreach (array_values($this->settings->rating_bands) as $index => $floor) {
