@@ -45,6 +45,26 @@ class PopularServicesTypesPriceTest extends TestCase
             ->assertJsonPath('data.services.0.starts_from', 4000);
     }
 
+    public function test_os_destaques_trazem_o_ambito_do_servico(): void
+    {
+        // O ecra de detalhe abre com o objeto que vier desta lista, e os
+        // cartoes "Inclui"/"Nao inclui" escondem-se quando a lista vem vazia.
+        // Sem estes campos, o detalhe abria com meio ecra em branco.
+        $area = OperationArea::factory()->create(['is_active' => true]);
+        ServicesType::factory()->create([
+            'operation_area_id' => $area->id,
+            'is_active' => true,
+            'is_popular' => true,
+            'includes' => ['Deslocacao do tecnico ao local'],
+            'excludes' => ['Substituicao de tubagens'],
+        ]);
+
+        $resposta = $this->getJson('/api/v1/common/services/services-types/popular')->assertOk();
+
+        $this->assertNotEmpty($resposta->json('data.services.0.includes'));
+        $this->assertNotEmpty($resposta->json('data.services.0.excludes'));
+    }
+
     public function test_os_dois_endpoints_concordam_no_preco(): void
     {
         $area = OperationArea::factory()->create(['is_active' => true]);
