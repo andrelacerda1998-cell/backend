@@ -235,4 +235,46 @@ class VendorNoShowPenaltyTest extends TestCase
         $this->assertSame([$declarado->id], array_column($response->json('data.declared'), 'service_id'));
         $this->assertSame(1500, $response->json('data.declared.0.vendor_no_show_penalty'));
     }
+
+    // --- o caminho que faltava: falta com o servico ja ACEITE ---------------
+
+    public function test_um_servico_aceite_tambem_e_cancelado_e_reembolsado(): void
+    {
+        // "Marcou A caminho e nunca apareceu": o cliente pagou e continua a
+        // pagar se o servico nao for cancelado.
+        $service = $this->makeService(4000, ServiceStatus::ACCEPTED);
+        $vendorUser = $service->vendor->user;
+        $vendorUser->deposit(10000);
+
+        $this->declareNoShow($service)->assertOk();
+
+        $fresh = $service->fresh();
+        $this->assertSame(2000, $fresh->vendor_no_show_penalty);
+        $this->assertSame('8000', $vendorUser->fresh()->balance);
+        // O reembolso ao cliente vive no ServiceObserver e so dispara quando o
+        // servico passa a CANCELED. Se ficar em ACCEPTED, o tecnico e
+        // penalizado E o cliente fica cobrado por um servico que ninguem fez.
+        $this->assertSame(ServiceStatus::CANCELED, $fresh->status);
+    }
+
+    public function test_uma_falta_com_o_tecnico_a_caminho_nao_cobra_o_cliente(): void
+    {
+        // A ARMADILHA: `cancelOpenService()` — o cancelamento normal de um
+        // servico aberto — quando o tecnico ja marcou "a caminho" COBRA 100% ao
+        // cliente e da metade ao tecnico (CancellationPolicy). E a regra certa
+        // para o CLIENTE que desiste em cima da hora, e o oposto do que se quer
+        // numa falta. Este teste existe para quem "arranjar" isto a seguir.
+        $service = $this->makeService(4000, ServiceStatus::ACCEPTED);
+        $service->forceFill(['on_the_way_at' => now()->subMinutes(30)])->save();
+        $vendorUser = $service->vendor->user;
+        $vendorUser->deposit(10000);
+
+        $this->declareNoShow($service)->assertOk();
+
+        // So o debito da penalizacao: 10000 - 2000. Se o cliente tivesse sido
+        // cobrado, o tecnico teria RECEBIDO metade por cima disto.
+        $this->assertSame('8000', $vendorUser->fresh()->balance);
+        $this->assertSame(ServiceStatus::CANCELED, $service->fresh()->status);
+        $this->assertFalse($service->fresh()->skipCancellationRefund);
+    }
 }

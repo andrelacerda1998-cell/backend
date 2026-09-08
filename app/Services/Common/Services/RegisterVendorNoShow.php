@@ -72,7 +72,14 @@ class RegisterVendorNoShow
         // rollback não o desfaria. A penalização já está registada — se o
         // cancelamento falhar, fica um serviço por cancelar à mão, e não um
         // técnico penalizado duas vezes.
-        (new CancelService($this->service))->customerCancel();
+        //
+        // `vendorNoShowCancel` e não `customerCancel`: este último só age em
+        // PENDING/SCHEDULED, e uma falta com o serviço já em ACCEPTED (marcou
+        // "a caminho" e nunca apareceu) deixava-o preso nesse estado — o
+        // técnico penalizado e o cliente cobrado por um serviço que ninguém
+        // fez. Também não serve o `cancelOpenService`, que nesse caso COBRA o
+        // cliente a 100%.
+        (new CancelService($this->service))->vendorNoShowCancel();
 
         // O técnico tem de saber porque é que o saldo mudou, e no mesmo dia:
         // descobrir um débito sem explicação semanas depois é como isto se

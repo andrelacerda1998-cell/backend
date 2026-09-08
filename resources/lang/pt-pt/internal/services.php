@@ -15,6 +15,7 @@ return [
         'fee' => 'Taxa de cancelamento',
         'description' => 'O cliente cancelou o serviço antes de ser aceite.',
         'charged' => 'O cliente cancelou depois de o técnico estar a caminho ou no local — cobrança de 100%.',
+        'vendor_no_show' => 'O técnico não compareceu — serviço cancelado e cliente reembolsado.',
     ],
     'mbway' => [
         'canceled' => 'O cliente cancelou antes de o pagamento MBWay ser confirmado.',

@@ -142,6 +142,44 @@ class CancelService
     }
 
     /**
+     * Cancelamento por FALTA DO TÉCNICO — o cliente é reembolsado, sempre.
+     *
+     * Existe à parte do `cancelOpenService()` por uma razão que custa dinheiro
+     * a quem se engane: esse, quando o técnico já marcou "a caminho", chama o
+     * `cancelWithCharge()` — cobra 100% ao cliente e reparte 50/50 com o
+     * técnico. É a regra certa para o CLIENTE que desiste em cima da hora, e
+     * exatamente ao contrário do que se quer aqui: numa falta, o cliente
+     * ficaria cobrado por um serviço que ninguém fez e o técnico receberia
+     * metade ao mesmo tempo que é penalizado.
+     *
+     * O `customerCancel()` também não serve: só age em PENDING/SCHEDULED, e um
+     * técnico que marcou "a caminho" e nunca apareceu deixa o serviço em
+     * ACCEPTED. Ficava preso nesse estado, sem nunca chegar a CANCELED — e o
+     * reembolso vive no ServiceObserver, que só dispara nessa transição.
+     * (Encontrado pelo Rodrigo na revisão dos PR #21–#30.)
+     */
+    public function vendorNoShowCancel(): void
+    {
+        $this->service->refresh();
+
+        if (! in_array($this->service->status, [
+            ServiceStatus::PENDING,
+            ServiceStatus::SCHEDULED,
+            ServiceStatus::ACCEPTED,
+        ], true)) {
+            return;
+        }
+
+        \DB::transaction(function () {
+            // `skipCancellationRefund` fica a false de propósito: é o que deixa
+            // o ServiceObserver libertar/reembolsar o pagamento ao gravar.
+            $this->service->status = ServiceStatus::CANCELED;
+            $this->service->status_justification = 'internal/services.cancel.vendor_no_show';
+            $this->service->save();
+        });
+    }
+
+    /**
      * Cancelamento pelo cliente ANTES de o pagamento MBWay ser confirmado. Usa um status
      * terminal próprio (CANCELED_MBWAY) porque o vendor nunca foi notificado deste serviço —
      * o controller não envia notificação de cancelamento neste caso. O save dispara o
