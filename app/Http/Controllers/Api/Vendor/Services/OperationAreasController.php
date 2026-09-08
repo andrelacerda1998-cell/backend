@@ -12,10 +12,15 @@ class OperationAreasController extends Controller
 {
     public function index()
     {
-        $operation_areas = OperationArea::select(['id', 'name'])->get();
         $lang = app()->getLocale();
 
-        $operation_areas = OperationArea::with(['servicesType'])
+        // `active()` nas duas pontas, como no controlador do cliente: uma
+        // categoria (ou um trabalho) desativada no backoffice deixou de existir
+        // para quem pede o serviço. Sem isto o técnico inscrevia-se em
+        // competências que já não geram pedidos — e ficava à espera de trabalho
+        // que nunca chega, sem perceber porquê.
+        $operation_areas = OperationArea::active()
+            ->with(['servicesType' => fn ($q) => $q->active()])
             ->get()
             ->map(function (OperationArea $operation_area) use ($lang) {
                 $name = $operation_area->getTranslation('name', $lang);
@@ -39,7 +44,8 @@ class OperationAreasController extends Controller
         if ($vendor) {
             $lang = app()->getLocale();
 
-            $operation_areas = OperationArea::with(['servicesType'])
+            $operation_areas = OperationArea::active()
+                ->with(['servicesType' => fn ($q) => $q->active()])
                 ->get()
                 ->map(function (OperationArea $operation_area) use ($lang, $vendor) {
                     $name = $operation_area->getTranslation('name', $lang);
@@ -47,7 +53,7 @@ class OperationAreasController extends Controller
                     return [
                         'id' => $operation_area->id,
                         'name' => $name,
-                        'services_types' => $operation_area->servicesType->map(function ($serviceType) use ($lang, $vendor) {
+                        'services_types' => $operation_area->servicesType->map(function ($serviceType) use ($lang) {
                             return [
                                 'id' => $serviceType->id,
                                 'name' => $serviceType->getTranslation('name', $lang),
@@ -55,16 +61,15 @@ class OperationAreasController extends Controller
                                 'current_price' => optional($serviceType->pivot)->price_rate,
                             ];
                         })->values(),
-                        'services_types_subscribed' =>
-                            $vendor->servicesTypes
-                                ->where('operation_area_id', $operation_area->id)
-                                ->pluck('id')
-                                ->values()
+                        'services_types_subscribed' => $vendor->servicesTypes
+                            ->where('operation_area_id', $operation_area->id)
+                            ->pluck('id')
+                            ->values(),
                     ];
                 });
 
-            return new ApiSuccessResponse(compact( 'operation_areas'));
-        };
+            return new ApiSuccessResponse(compact('operation_areas'));
+        }
 
         return new ApiSuccessResponse(compact('operation_areas'));
     }
