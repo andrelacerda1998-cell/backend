@@ -55,7 +55,10 @@ class VendorRankingTest extends TestCase
             vendor: $vendor,
             ratingAverage: $rating,
             ratingCount: $ratingCount,
-            ratingBand: $rating === null ? null : $this->ranking->band($rating),
+            // A MESMA regra da producao, e nao uma copia: se o helper calculasse
+            // a faixa por fora, os testes continuariam verdes com o ranking
+            // partido.
+            ratingBand: $this->ranking->bandFor($rating, $ratingCount),
             distance: $distance,
             quotedAmount: $amount,
             quotedAmountForVendor: (int) round($amount * 0.7),
@@ -113,8 +116,11 @@ class VendorRankingTest extends TestCase
         $this->assertSame(['perto', 'longe'], $this->names($this->ranking->shortlist($list)));
     }
 
-    public function test_unrated_vendor_ranks_below_every_band(): void
+    public function test_quem_ainda_nao_tem_avaliacoes_arranca_na_faixa_a(): void
     {
+        // Antes ficava atras de toda a gente, incluindo de quem tem 2,0. Com o
+        // corte para o ecra do cliente a ser por rank, isso era uma armadilha
+        // fechada: nunca visto, logo nunca avaliado, logo nunca visto.
         $list = collect([
             $this->candidate('sem_avaliacoes', null, 0, 1000, 0.5),
             $this->candidate('fraco', 2.0, 30, 9000, 20.0),
@@ -122,9 +128,40 @@ class VendorRankingTest extends TestCase
 
         $ranked = $this->ranking->shortlist($list);
 
-        // Mais barato e mais perto, e mesmo assim atrás: sem historial não se
-        // promete qualidade ao cliente.
-        $this->assertSame(['fraco', 'sem_avaliacoes'], $this->names($ranked));
+        $this->assertSame(['sem_avaliacoes', 'fraco'], $this->names($ranked));
+    }
+
+    public function test_o_amortecedor_dura_ate_as_cinco_avaliacoes(): void
+    {
+        // A quinta avaliacao e o momento em que a nota passa a contar. Com 4 a
+        // media ainda nao decide; com 5 decide.
+        $quase = $this->candidate('com_quatro', 2.0, 4, 9000, 20.0);
+        $ja = $this->candidate('com_cinco', 2.0, 5, 9000, 20.0);
+
+        $this->assertSame(0, $quase->ratingBand, 'com 4 avaliacoes ainda esta na faixa A');
+        $this->assertSame(3, $ja->ratingBand, 'a quinta avaliacao poe a media a contar');
+    }
+
+    public function test_o_amortecedor_protege_tambem_quem_comecou_mal(): void
+    {
+        // CONSEQUENCIA ASSUMIDA, coberta de proposito para nao ser descoberta
+        // em producao: quatro notas de 1 estrela continuam a ordenar como
+        // faixa A. E o preco de deixar a nota estabilizar antes de contar.
+        //
+        // Se isto doer, a saida nao e baixar o limiar as cegas — e olhar para
+        // `new_vendor_min_ratings`, que e uma definicao editavel.
+        $list = collect([
+            $this->candidate('comecou_mal', 1.0, 4, 1000, 0.5),
+            $this->candidate('solido', 4.9, 50, 9000, 20.0),
+        ]);
+
+        $ranked = $this->ranking->shortlist($list);
+
+        $this->assertSame(
+            ['comecou_mal', 'solido'],
+            $this->names($ranked),
+            'mesma faixa, e o mais barato e mais perto ganha — mesmo com quatro 1 estrela'
+        );
     }
 
     public function test_reserves_the_last_slot_for_a_newcomer(): void

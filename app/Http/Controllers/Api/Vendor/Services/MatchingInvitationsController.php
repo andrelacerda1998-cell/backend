@@ -119,13 +119,17 @@ class MatchingInvitationsController extends Controller
         }
 
         if (! $this->matching->accept($candidate)) {
-            // Chegou tarde, ou a janela fechou. Dizer qual dos dois foi é o que
-            // separa "o sistema está partido" de "outro foi mais rápido".
+            // A janela dele fechou, ou o pedido ja saiu de selecao (o cliente
+            // escolheu, ou desistiu). Dizer qual dos dois foi e o que separa
+            // "o sistema esta partido" de "cheguei tarde".
+            //
+            // Deixou de haver o caso "ja preenchido": o pedido nao fecha ao
+            // terceiro sim, por isso aceitar so falha quando ja nao ha pedido.
             return new ApiErrorResponse(
                 new Exception,
                 $candidate->refresh()->hasExpired()
                     ? 'This invitation has expired'
-                    : 'This request has already been filled',
+                    : 'This request is no longer available',
                 409
             );
         }

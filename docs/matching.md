@@ -67,7 +67,8 @@ cliente escolhe categoria → tipo → "agendar" + data/hora
   → notifica a 1.ª onda (N melhores)
   → cada aceitação aparece AO VIVO no ecrã do cliente (não se espera pelos 3)
   → se ao fim de X segundos houver menos de 3, notifica a onda seguinte
-  → ao 3.º sim, o pedido fecha e os restantes recebem "já preenchido"
+  → todos os convidados podem responder até a janela deles fechar
+  → o cliente vê sempre os MELHORES 3 de quem aceitou, por ranking
   → cliente escolhe → checkout → pago → agendado
   → nenhum aceitou → "tentar novamente"
 ```
@@ -101,14 +102,41 @@ faixas e o preço ordena **dentro** da faixa. Faixas configuráveis em
 
 ### Arranque a frio
 
-Um profissional sem avaliações não tem faixa. Se ficar no fundo, nunca é
-escolhido, nunca recebe avaliação, e nunca sai do fundo — a oferta nova morre à
-nascença.
+Um profissional sem avaliações, ou com duas ou três, não tem nota que diga nada.
+Se ficar no fundo nunca é escolhido, nunca recebe avaliação, e nunca sai do fundo
+— a oferta nova morre à nascença. E como o corte para o ecrã do cliente passou a
+ser por ranking, essa armadilha fecha-se por completo.
 
-Regra: **uma das 3 vagas é reservada** a quem tem menos de
-`matching.new_vendor_min_ratings` avaliações (por omissão 5), desde que cumpra os
-critérios de elegibilidade. Se não houver ninguém nessas condições, a vaga volta
-ao ranking normal.
+Duas regras, e as duas medem-se pelo mesmo `matching.new_vendor_min_ratings`
+(por omissão 5):
+
+1. **Ordena como faixa A até às primeiras 5 avaliações**, seja qual for a média —
+   incluindo quem ainda não tem nenhuma. Dá uma porta de entrada, e evita que um
+   único 4 (média 4,0 = faixa B) tire a visibilidade a quem mal começou.
+2. **Uma das 3 vagas da onda é reservada** a quem está abaixo desse limiar, desde
+   que cumpra os critérios de elegibilidade. Se não houver ninguém nessas
+   condições, a vaga volta ao ranking normal.
+
+**Isto só ordena.** A nota MOSTRADA ao cliente continua a ser a real, e `null`
+para quem não tem nenhuma — não se inventa nota a quem a vê. O cliente distingue
+os dois casos pelo `is_new_vendor` no payload.
+
+### Quando o amortecedor acaba mais cedo
+
+O amortecedor é para a nota estabilizar, não para segurar quem já mostrou o que
+faz. **Se as PRIMEIRAS 3 avaliações forem todas abaixo de 3 estrelas, a proteção
+acaba aí** e a nota real passa a contar antes das cinco.
+
+São as primeiras três e pela ordem em que foram dadas, não três quaisquer:
+`{1, 1, 4}` mantém a proteção, `{1, 1, 2}` perde-a. Recuperar depois não a
+devolve — devolve nota, que é o que passa a contar.
+
+A pergunta só se faz a quem está dentro do amortecedor (3 a 4 avaliações). Quem
+já passou das cinco não é protegido de qualquer forma, e não vale a consulta.
+
+Custo que fica: até às três avaliações, ou com um arranque misto, quem começou
+mal ainda ordena como faixa A. É o preço de não condenar ninguém por um cliente
+ou dois, e está coberto por testes para não ser descoberto por acidente.
 
 ## Preços
 
@@ -185,8 +213,16 @@ que desiste da app.
 **O perdedor é avisado em segundos, com motivo.** "O cliente escolheu outro
 profissional" imediatamente, nunca silêncio. Silêncio é o que destrói a confiança.
 
-**Ao 3.º sim, o pedido fecha.** Quem ainda não respondeu deixa de ver o pedido e
-recebe "já preenchido" — não fica a responder a algo que já não existe.
+**O corte é por ranking, não por rapidez.** Toda a gente convidada pode aceitar
+enquanto a janela dela corre, e o cliente vê os melhores `shortlist_size` de quem
+aceitou. Sem isto, quem chegasse ao cliente era quem tivesse o telemóvel na mão,
+e o ranking só decidia quem era convidado.
+
+O custo é assumido: mais gente aceita sem ganhar, e um profissional que estava no
+top 3 pode ser empurrado para fora por outro melhor que responda depois — perde
+sem o cliente chegar a vê-lo. Paga-se com o tamanho da onda e a duração da
+janela, que são definições e não constantes. Quem perde é avisado em segundos
+com o motivo, como sempre foi.
 
 ## O que faz o tempo passar
 
