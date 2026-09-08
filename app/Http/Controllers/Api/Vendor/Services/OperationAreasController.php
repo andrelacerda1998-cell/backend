@@ -32,6 +32,12 @@ class OperationAreasController extends Controller
                         return [
                             'id' => $serviceType->id,
                             'name' => $serviceType->getTranslation('name', $lang),
+                            // A mesma imagem que o cliente vê ao escolher o
+                            // serviço (`image_url` no model). Reconhecer o
+                            // trabalho pelo ícone é mais rápido do que ler 26
+                            // linhas de texto — e é assim que o técnico decide
+                            // o que sabe fazer.
+                            'image' => $serviceType->image_url,
                             'suggested_price' => $serviceType->suggested_price,
                             'current_price' => optional($serviceType->pivot)->price_rate,
                         ];
