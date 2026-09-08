@@ -23,6 +23,12 @@ use Illuminate\Support\Facades\DB;
  */
 class VendorRankingService
 {
+    /** Quantas notas iniciais se olham para decidir que o arranque correu mal. */
+    private const BAD_START_RATINGS = 3;
+
+    /** Abaixo disto conta como nota má, para efeitos do arranque. */
+    private const BAD_START_BELOW = 3.0;
+
     use CalculateServicePriceForCustomer;
 
     public function __construct(private MatchingSettings $settings)
@@ -165,9 +171,9 @@ class VendorRankingService
      * à última avaliação. Quem decide a ordem lê a fonte.
      *
      * @param  int[]  $vendorIds
-     * @return array<int, array{avg: float, count: int}>
+     * @return array<int, array{avg: float, count: int, bad_start: bool}>
      */
-    private function ratingsFor(array $vendorIds, ServicesType $serviceType): array
+    public function ratingsFor(array $vendorIds, ServicesType $serviceType): array
     {
         if (empty($vendorIds)) {
             return [];
@@ -175,7 +181,7 @@ class VendorRankingService
 
         $typeIds = ServicesType::where('operation_area_id', $serviceType->operation_area_id)->pluck('id');
 
-        return Service::query()
+        $aggregate = Service::query()
             ->select('vendor_id', DB::raw('AVG(rating_by_customer) as avg_rating'), DB::raw('COUNT(rating_by_customer) as total'))
             ->whereIn('vendor_id', $vendorIds)
             ->whereIn('services_type_id', $typeIds)
@@ -189,6 +195,69 @@ class VendorRankingService
                     'count' => (int) $row->total,
                 ],
             ])
+            ->all();
+
+        $badStart = $this->badStarters(array_keys($aggregate), $aggregate, $typeIds->all());
+
+        foreach ($aggregate as $vendorId => $row) {
+            $aggregate[$vendorId]['bad_start'] = in_array($vendorId, $badStart, true);
+        }
+
+        return $aggregate;
+    }
+
+    /**
+     * Quem abriu com as PRIMEIRAS `BAD_START_RATINGS` notas todas abaixo de
+     * `BAD_START_BELOW` estrelas.
+     *
+     * O amortecedor de arranque existe para a nota estabilizar antes de contar.
+     * Não existe para segurar indefinidamente quem já mostrou o que faz: três
+     * clientes seguidos a dar menos de 3 não é ruído, é um padrão. A partir daí
+     * a nota real conta, mesmo antes das cinco.
+     *
+     * Só se pergunta a quem ainda está dentro do amortecedor — quem já passou
+     * das cinco avaliações não é protegido de qualquer forma, e não vale uma
+     * consulta.
+     *
+     * Ordena por `updated_at` porque não há coluna de "avaliado em": o serviço
+     * é atualizado no momento em que o cliente avalia, e é o mais próximo disso
+     * que existe.
+     *
+     * @param  int[]  $vendorIds
+     * @param  array<int, array{avg: float, count: int}>  $aggregate
+     * @param  int[]  $typeIds
+     * @return int[]
+     */
+    private function badStarters(array $vendorIds, array $aggregate, array $typeIds): array
+    {
+        $candidates = array_values(array_filter(
+            $vendorIds,
+            fn (int $id) => $aggregate[$id]['count'] >= self::BAD_START_RATINGS
+                && $aggregate[$id]['count'] < $this->settings->new_vendor_min_ratings
+        ));
+
+        if (empty($candidates)) {
+            return [];
+        }
+
+        return Service::query()
+            ->select('vendor_id', 'rating_by_customer', 'updated_at')
+            ->whereIn('vendor_id', $candidates)
+            ->whereIn('services_type_id', $typeIds)
+            ->where('status', ServiceStatus::CLOSED)
+            ->whereNotNull('rating_by_customer')
+            ->orderBy('vendor_id')
+            ->orderBy('updated_at')
+            ->get()
+            ->groupBy('vendor_id')
+            ->filter(function ($rows) {
+                $first = $rows->take(self::BAD_START_RATINGS);
+
+                return $first->count() === self::BAD_START_RATINGS
+                    && $first->every(fn ($r) => (float) $r->rating_by_customer < self::BAD_START_BELOW);
+            })
+            ->keys()
+            ->map(fn ($id) => (int) $id)
             ->all();
     }
 
@@ -228,7 +297,7 @@ class VendorRankingService
             vendor: $vendor,
             ratingAverage: $average,
             ratingCount: $count,
-            ratingBand: $this->bandFor($average, $count),
+            ratingBand: $this->bandFor($average, $count, (bool) ($rating['bad_start'] ?? false)),
             distance: (float) $prices['distance'],
             quotedAmount: $prices['customer_amount'],
             quotedAmountForVendor: $prices['vendor_amount'],
@@ -258,8 +327,15 @@ class VendorRankingService
      * o `test_no_ratings_means_null_not_five_stars`. Nao se inventa nota a quem
      * a ve; da-se oportunidade a quem ainda nao a tem.
      */
-    public function bandFor(?float $average, int $ratingCount): int
+    public function bandFor(?float $average, int $ratingCount, bool $badStart = false): int
     {
+        // Três clientes seguidos abaixo de 3 estrelas acabam com a proteção
+        // antes das cinco: o amortecedor é para a nota estabilizar, não para
+        // segurar quem já mostrou o que faz.
+        if ($badStart) {
+            return $this->band((float) $average);
+        }
+
         if ($ratingCount < $this->settings->new_vendor_min_ratings) {
             return 0;
         }

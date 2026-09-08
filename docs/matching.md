@@ -121,10 +121,22 @@ Duas regras, e as duas medem-se pelo mesmo `matching.new_vendor_min_ratings`
 para quem não tem nenhuma — não se inventa nota a quem a vê. O cliente distingue
 os dois casos pelo `is_new_vendor` no payload.
 
-Custo assumido: quatro notas de 1 estrela ainda ordenam como faixa A. É o preço
-de deixar a nota estabilizar antes de contar, e está coberto por um teste
-(`test_o_amortecedor_protege_tambem_quem_comecou_mal`) para não ser descoberto
-por acidente.
+### Quando o amortecedor acaba mais cedo
+
+O amortecedor é para a nota estabilizar, não para segurar quem já mostrou o que
+faz. **Se as PRIMEIRAS 3 avaliações forem todas abaixo de 3 estrelas, a proteção
+acaba aí** e a nota real passa a contar antes das cinco.
+
+São as primeiras três e pela ordem em que foram dadas, não três quaisquer:
+`{1, 1, 4}` mantém a proteção, `{1, 1, 2}` perde-a. Recuperar depois não a
+devolve — devolve nota, que é o que passa a contar.
+
+A pergunta só se faz a quem está dentro do amortecedor (3 a 4 avaliações). Quem
+já passou das cinco não é protegido de qualquer forma, e não vale a consulta.
+
+Custo que fica: até às três avaliações, ou com um arranque misto, quem começou
+mal ainda ordena como faixa A. É o preço de não condenar ninguém por um cliente
+ou dois, e está coberto por testes para não ser descoberto por acidente.
 
 ## Preços
 
