@@ -1,0 +1,62 @@
+name: Ler definições do matching em produção
+
+# So por accionamento manual. NAO corre em push, nunca: existe para responder a
+# uma pergunta pontual -- "que valores e que a producao esta mesmo a usar?" --
+# e nao para fazer parte de nenhum fluxo automatico.
+on:
+  workflow_dispatch:
+
+# De proposito SEM o grupo de concorrencia `deploy-production`: isto e uma
+# leitura, nao deve segurar o lugar a um deploy nem ficar atras de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler definições
+    runs-on: ubuntu-latest
+    # Necessario para chegar aos mesmos segredos que o deploy usa, e traz de
+    # borla o portao de aprovacao manual. Abrir uma sessao SSH ao servidor de
+    # producao merece uma aprovacao explicita, mesmo so para ler.
+    environment: production
+    steps:
+      - name: Ler as definições no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # O comando e FIXO neste ficheiro, e NAO um input do workflow. Aceitar
+          # um comando por parametro transformava este botao numa shell remota
+          # para producao a espera de ser usada -- que e exatamente o que nao se
+          # quer ter. Para ler outra coisa, altera-se o ficheiro e passa por
+          # revisao, como qualquer outra alteracao.
+          script: |
+            set -euo pipefail
+            cd ~/project-laravel
+
+            # Resolve a CLASSE, e nao um SELECT a tabela `settings`, de
+            # proposito: e o mesmo caminho que a app percorre. Se uma migration
+            # de definicoes nao tiver corrido, isto rebenta com "missing
+            # settings" -- que e precisamente a avaria que se quer apanhar. Um
+            # SELECT dizia que a linha faltava, mas nao provava que o resto
+            # resolve.
+            docker compose exec -T laravel-prod php artisan tinker --execute='
+              $s = app(App\Settings\MatchingSettings::class);
+              foreach ([
+                  "shortlist_size",
+                  "wave_size",
+                  "wave_interval_seconds",
+                  "max_waves",
+                  "vendor_response_seconds_immediate",
+                  "vendor_response_seconds_scheduled",
+                  "customer_choice_seconds",
+                  "customer_choice_seconds_scheduled",
+                  "checkout_seconds",
+                  "new_vendor_min_ratings",
+                  "require_recent_activity_minutes",
+              ] as $k) {
+                  echo str_pad($k, 36)." = ".$s->$k.PHP_EOL;
+              }
+              echo str_pad("rating_bands", 36)." = ".implode(", ", $s->rating_bands).PHP_EOL;
+            '
