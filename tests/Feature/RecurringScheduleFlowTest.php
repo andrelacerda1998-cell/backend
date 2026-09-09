@@ -102,6 +102,30 @@ class RecurringScheduleFlowTest extends TestCase
         $this->assertSame(1, Schedule::query()->where('recurrence_parent_id', $first->id)->count());
     }
 
+    public function test_cancelar_a_proxima_ocorrencia_para_a_serie(): void
+    {
+        [, , , $first] = $this->makeSeries();
+
+        $next = app(CreateNextRecurrence::class)->forSchedule($first);
+        $this->assertNotNull($next);
+
+        // O cliente cancela a próxima. É assim que se para uma série — não há
+        // outro botão para isso (ver o docblock do CreateNextRecurrence).
+        // `delete()` é soft-delete, como no CancelScheduleController.
+        $next->delete();
+
+        // O comando diário volta a olhar para a mesma ocorrência passada
+        // durante sete dias. Não pode ressuscitar o que o cliente cancelou.
+        $recriada = app(CreateNextRecurrence::class)->forSchedule($first);
+
+        $this->assertNull($recriada, 'Cancelar a próxima tem de parar a série, não adiá-la um dia');
+        $this->assertSame(
+            0,
+            Schedule::query()->where('recurrence_parent_id', $first->id)->count(),
+            'Não pode existir nenhuma ocorrência viva depois do cancelamento'
+        );
+    }
+
     public function test_o_cliente_e_avisado_uma_vez_dentro_da_janela(): void
     {
         [$customer, , , $first] = $this->makeSeries();

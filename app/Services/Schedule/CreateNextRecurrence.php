@@ -40,7 +40,20 @@ class CreateNextRecurrence
         // Idempotencia: este metodo corre a partir de um comando diario. Sem
         // esta verificacao, dois disparos no mesmo dia criavam - e cobravam -
         // duas marcacoes iguais ao cliente.
+        //
+        // `withTrashed()` porque cancelar e um SOFT delete (ver
+        // CancelScheduleController) e parar a serie e cancelar a proxima - nao
+        // existe outro botao para isso. Sem isto, a ocorrencia cancelada
+        // deixava de contar como existente e o comando recriava-a no dia
+        // seguinte; como ele volta a olhar para a mesma ocorrencia passada
+        // durante sete dias, o cliente teria de a cancelar todos os dias
+        // durante uma semana para a serie parar mesmo.
+        //
+        // A marcacao ressuscitada nascia `is_pending`, portanto entrava na
+        // agenda do profissional e no aviso de pagamento ao cliente - um
+        // servico que ele tinha cancelado a pedir-lhe dinheiro.
         $exists = Schedule::query()
+            ->withTrashed()
             ->where('customer_id', $schedule->customer_id)
             ->where('service_type_id', $schedule->service_type_id)
             ->whereDate('scheduled_day', $nextDay)
