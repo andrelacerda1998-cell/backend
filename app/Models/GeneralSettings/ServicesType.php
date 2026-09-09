@@ -21,6 +21,18 @@ class ServicesType extends Model implements Auditable, HasMedia
 
     protected array $translatable = ['name'];
 
+    /**
+     * ATENÇÃO À UNIDADE DO `starts_from`: está em EUROS, não em cêntimos.
+     *
+     * A app do cliente multiplica por 100 antes de formatar. Uma base de
+     * desenvolvimento pode ter estes valores em cêntimos e enganar quem lá
+     * olhar — a produção é que manda. Confirma-se sem sessão nenhuma:
+     *
+     *   GET /api/v1/common/services/services-types/popular
+     *   -> "Rotura de Cano", starts_from: 75   (= 75,00 €)
+     *
+     * @var list<string>
+     */
     protected $fillable = ['name', 'includes', 'excludes', 'suggested_price', 'time', 'starts_from', 'operation_area_id', 'sort_order', 'is_active', 'is_popular', 'popular_order'];
 
     protected $casts = [

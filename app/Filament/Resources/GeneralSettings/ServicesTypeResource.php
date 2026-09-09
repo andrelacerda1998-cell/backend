@@ -112,6 +112,10 @@ class ServicesTypeResource extends Resource
                     ->suffix(__('backoffice/service-type.form.minutes')),
                 TextInput::make('starts_from')
                     ->label(__('backoffice/service-type.form.starts_from'))
+                    // A unidade estava declarada apenas no "(€)" do rótulo, e
+                    // isso nao chega: quem preenche olha para a caixa, nao para
+                    // o titulo. Escrever "40" e escrever quarenta euros.
+                    ->helperText(__('backoffice/service-type.form.starts_from_hint'))
                     ->numeric()
                     ->integer()
                     ->minValue(0),

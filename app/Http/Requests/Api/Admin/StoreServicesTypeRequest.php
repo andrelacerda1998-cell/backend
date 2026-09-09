@@ -20,6 +20,7 @@ class StoreServicesTypeRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'operation_area_id' => ['required', 'integer', 'exists:operation_areas,id'],
             'time' => ['required', 'integer', 'min:0'],
+            // Em EUROS e não em cêntimos — ver o comentário da coluna.
             'starts_from' => ['nullable', 'integer', 'min:0'],
             // Idem 'includes'/'excludes': no Filament cada item tem EN + PT-PT;
             // aqui é uma lista simples de texto, gravada nas duas línguas.

@@ -17,6 +17,7 @@ class UpdateServicesTypeRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'operation_area_id' => ['sometimes', 'required', 'integer', 'exists:operation_areas,id'],
             'time' => ['sometimes', 'required', 'integer', 'min:0'],
+            // Em EUROS e não em cêntimos — ver o comentário da coluna.
             'starts_from' => ['nullable', 'integer', 'min:0'],
             'includes' => ['nullable', 'array'],
             'includes.*' => ['string', 'max:255'],

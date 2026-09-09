@@ -24,6 +24,7 @@ return [
         'minutes' => ' Minutes',
     ],
     'form' => [
+        'starts_from_hint' => 'In whole euros, not cents. Entering 40 shows "From 40,00 €" in the app.',
         'image_hint' => 'Square image, 800x800 px recommended. Max 5 MB (JPG, PNG or WEBP).',
         'is_active' => 'Active in the app',
         'sort_order' => 'Order',
