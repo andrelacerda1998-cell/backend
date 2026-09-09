@@ -370,6 +370,11 @@ class MatchingController extends Controller
                 'payment_status' => $service->payment_status,
                 'amount' => $service->amount,
                 'vendor_id' => $service->vendor_id,
+                // A app precisa de saber o modo para dizer a verdade na espera:
+                // no imediato as respostas chegam em segundos e vale a pena
+                // ficar; no agendado podem demorar meia hora, e mandar o cliente
+                // olhar para o ecrã todo esse tempo seria mentir-lhe.
+                'scheduled' => $this->matching->isScheduled($service),
             ],
             'candidates' => $candidates->map(fn (ServiceCandidate $c) => [
                 'id' => $c->id,

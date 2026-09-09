@@ -51,6 +51,7 @@ class MatchingFlowTest extends TestCase
             'vendor_response_seconds_immediate' => 60,
             'vendor_response_seconds_scheduled' => 1800,
             'customer_choice_seconds' => 120,
+            'customer_choice_seconds_scheduled' => 1800,
             'checkout_seconds' => 300,
             'rating_bands' => [4.5, 4.0, 3.0],
             'new_vendor_min_ratings' => 5,

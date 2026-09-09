@@ -120,6 +120,16 @@ return [
         // feel cheated when they lose — and stop replying.
         'description' => 'Tell us if you are available. The customer picks from whoever replies.',
     ],
+    'matchingCandidatesReady' => [
+        'title' => 'Someone can come',
+        // Say what to DO, not just what happened: whoever gets this has a
+        // clock running and needs to know the decision is theirs.
+        'description' => 'Professionals available for :service_type. Pick the one you prefer.',
+    ],
+    'matchingFailed' => [
+        'title' => 'Nobody available right now',
+        'description' => 'We could not find professionals for :service_type. Try again or book another time.',
+    ],
     'scheduledService' => [
         'title' => 'New service scheduled for :when',
         'description' => 'of :service_type',
