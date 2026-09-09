@@ -17,6 +17,7 @@ return [
         'excludes' => 'Exclui',
     ],
     'form' => [
+        'starts_from_hint' => 'Em euros inteiros, não em cêntimos. Escrever 40 mostra "Desde 40,00 €" na app.',
         'image_hint' => 'Imagem quadrada, recomendado 800x800 px. Max. 5 MB (JPG, PNG ou WEBP).',
         'is_active' => 'Ativo na app',
         'sort_order' => 'Ordem',
