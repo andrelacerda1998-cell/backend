@@ -279,7 +279,7 @@ Nenhum destes números é inventado aqui; são pontos de calibração com dados 
 | `max_waves` | 3 | até onde vai antes de desistir |
 | `vendor_response_seconds_immediate` | 60 | igual à janela de hoje |
 | `vendor_response_seconds_scheduled` | 1800 | 30 min |
-| `customer_choice_seconds` | 120 | quanto tempo o cliente tem para escolher |
+| `customer_choice_seconds` | 200 | quanto tempo o cliente tem para escolher (cobre os ~180 s das ondas do imediato) |
 | `checkout_seconds` | 300 | quanto tempo tem para pagar depois de escolher |
 | `rating_bands` | `[4.5, 4.0, 3.0]` | fronteiras das faixas |
 | `new_vendor_min_ratings` | 5 | abaixo disto conta como profissional novo |
