@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\CoverageController;
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\DocumentController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
+use App\Http\Controllers\Api\Admin\NotificationCampaignController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\SentNotificationController;
 use App\Http\Controllers\Api\Admin\ServiceController;
@@ -52,6 +53,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
      */
     Route::get('/services/vendor-no-shows', VendorNoShowListController::class);
     Route::post('/services/{service}/vendor-no-show', VendorNoShowController::class);
+    // Campanhas de push: leitura, mais o interruptor para parar uma que esteja
+    // a correr mal. Criar continua no Filament — criar uma é enviar push a
+    // milhares de pessoas.
+    Route::get('/notification-campaigns', [NotificationCampaignController::class, 'index']);
+    Route::put('/notification-campaigns/{campaign}/active', [NotificationCampaignController::class, 'setActive']);
+
     Route::get('/services', [ServiceController::class, 'index']);
     Route::get('/services/{service}', [ServiceController::class, 'show']);
 
