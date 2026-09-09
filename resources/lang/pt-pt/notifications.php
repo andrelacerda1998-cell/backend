@@ -120,6 +120,16 @@ return [
         // profissional sentir-se enganado quando perde — e deixar de responder.
         'description' => 'Diz se tens disponibilidade. O cliente escolhe entre quem responder.',
     ],
+    'matchingCandidatesReady' => [
+        'title' => 'Já há quem possa ir',
+        // Diz o que falta FAZER, e não só o que aconteceu: quem recebe isto
+        // tem um relógio a correr e precisa de saber que a decisão é dele.
+        'description' => 'Profissionais disponíveis para :service_type. Escolhe quem preferes.',
+    ],
+    'matchingFailed' => [
+        'title' => 'Ninguém disponível de momento',
+        'description' => 'Não encontrámos profissionais para :service_type. Tenta outra vez ou marca para outra hora.',
+    ],
     'scheduledService' => [
         'title' => 'Novo serviço agendado para :when',
         'description' => 'de :service_type',

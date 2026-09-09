@@ -32,8 +32,19 @@ class MatchingSettings extends Settings
     /** Janela de resposta num pedido agendado — há tempo, não há pressa. */
     public int $vendor_response_seconds_scheduled;
 
-    /** Quanto tempo o cliente tem para escolher antes de as propostas caducarem. */
+    /** Quanto tempo o cliente tem para escolher, num pedido imediato. */
     public int $customer_choice_seconds;
+
+    /**
+     * O mesmo, num pedido agendado.
+     *
+     * Separado do imediato porque o cliente está noutra situação: marcou para
+     * quinta-feira e fechou a app. O relógio conta a partir da primeira
+     * aceitação, por isso com o valor do imediato o pedido morria minutos
+     * depois de ele o ter feito — com profissionais disponíveis do outro lado
+     * e a janela deles ainda aberta durante meia hora.
+     */
+    public int $customer_choice_seconds_scheduled;
 
     /** Quanto tempo tem para pagar depois de escolher. */
     public int $checkout_seconds;

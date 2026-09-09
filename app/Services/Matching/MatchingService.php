@@ -10,6 +10,8 @@ use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
+use App\Notifications\Customer\MatchingCandidatesReadyNotification;
+use App\Notifications\Customer\MatchingFailedNotification;
 use App\Notifications\Vendor\MatchingInvitationNotification;
 use App\Settings\MatchingSettings;
 use Illuminate\Support\Collection;
@@ -138,7 +140,38 @@ class MatchingService
             // progressiva: aos poucos segundos já há uma opção para escolher.
             $this->notifyCustomer($candidate, MatchingCandidateAcceptedEvent::class);
 
+            // O websocket acima só chega a quem tem o ecrã de seleção aberto.
+            // Este push é para quem não tem — que num pedido imediato é o caso
+            // normal, porque quem tem uma avaria em casa está a tratar dela e
+            // não a olhar para a app.
+            //
+            // Só à PRIMEIRA aceitação: as seguintes mudam a lista, não a
+            // decisão. A contagem é feita aqui dentro, com o serviço trancado,
+            // porque duas aceitações simultâneas veriam ambas "sou a primeira".
+            if ($service->candidates()->where('status', CandidateStatus::ACCEPTED)->count() === 1) {
+                $this->pushCandidatesReady($service);
+            }
+
             return true;
+        });
+    }
+
+    /**
+     * Push ao cliente a dizer que já há por quem escolher.
+     *
+     * Depois do commit e não já: a notificação é enfileirada, e um worker
+     * rápido podia lê-la antes de a aceitação estar gravada — avisava o cliente
+     * de uma lista que ainda não existia. Fora da transação também protege o
+     * profissional: um push falhado não pode desfazer o sim dele.
+     */
+    private function pushCandidatesReady(Service $service): void
+    {
+        DB::afterCommit(function () use ($service) {
+            try {
+                $service->customer?->notify(new MatchingCandidatesReadyNotification($service));
+            } catch (\Throwable $e) {
+                report($e);
+            }
         });
     }
 
@@ -282,6 +315,17 @@ class MatchingService
             foreach ($pending as $candidate) {
                 $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
             }
+
+            // O desfecho negativo tem de chegar pelo mesmo caminho que o
+            // positivo. Sem isto, quem fechou a app ficava a acreditar que o
+            // pedido continuava vivo e só descobria que não ao voltar.
+            DB::afterCommit(function () use ($service) {
+                try {
+                    $service->customer?->notify(new MatchingFailedNotification($service));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            });
         });
     }
 

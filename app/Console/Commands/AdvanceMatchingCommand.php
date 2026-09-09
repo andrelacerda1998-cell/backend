@@ -60,8 +60,16 @@ class AdvanceMatchingCommand extends Command
             $firstAcceptedAt = $service->candidates()->accepted()->min('responded_at');
 
             if ($firstAcceptedAt) {
+                // Janela por modo. No imediato o cliente está a olhar para o
+                // ecrã e uns minutos chegam; no agendado marcou para outro dia
+                // e fechou a app — dar-lhe o mesmo tempo era matar o pedido
+                // enquanto os convites ainda estavam abertos.
+                $choiceWindow = $matching->isScheduled($service)
+                    ? $settings->customer_choice_seconds_scheduled
+                    : $settings->customer_choice_seconds;
+
                 if (\Carbon\Carbon::parse($firstAcceptedAt)
-                    ->addSeconds($settings->customer_choice_seconds)
+                    ->addSeconds($choiceWindow)
                     ->isFuture()) {
                     continue;
                 }
