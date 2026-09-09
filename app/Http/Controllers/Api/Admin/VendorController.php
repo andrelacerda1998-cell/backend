@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
+use App\Enums\Services\AddressType;
+use App\Filament\Infolists\Sections\CompanySection;
+use App\Services\InvoiceXpress\SystemInvoiceService;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
@@ -71,7 +74,11 @@ class VendorController extends Controller
             });
         }
 
-        $vendors = $query->orderByDesc('created_at')->paginate($perPage);
+        // Eager-load do que o present() lê: sem isto, cada linha da página
+        // dispara uma query por relação (documentos e morada fiscal incluídos)
+        // e uma listagem de 100 técnicos passava das 300 queries.
+        $vendors = $query->with(['user', 'operationAreas', 'addresses', 'documents'])
+            ->orderByDesc('created_at')->paginate($perPage);
 
         return ApiSuccessResponse::make([
             'items' => collect($vendors->items())->map($this->present(...))->all(),
@@ -98,7 +105,7 @@ class VendorController extends Controller
 
         $vendor->delete();
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh()));
+        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
     }
 
     public function restore(int $id): ApiSuccessResponse|ApiErrorResponse
@@ -115,7 +122,7 @@ class VendorController extends Controller
 
         $vendor->restore();
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh()));
+        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
     }
 
     /**
@@ -487,6 +494,35 @@ class VendorController extends Controller
         return ApiSuccessResponse::make($rows->all());
     }
 
+    /**
+     * POST /v1/admin/vendors/{vendor}/invoice-workspace
+     *
+     * Cria o workspace de faturação no InvoiceXpress. Sem ele a Piquet não
+     * consegue emitir fatura em nome do técnico no fim do serviço -- é o
+     * mesmo que a ação "Criar workspace de faturação" do Filament faz
+     * (App\Filament\Infolists\Sections\CompanySection).
+     *
+     * As condições (email/telefone verificado, documentos aprovados, IBAN,
+     * morada fiscal, workspace ainda não criado) são as MESMAS do Filament, e
+     * vêm da mesma função -- duplicá-las aqui era garantir que divergiam.
+     */
+    public function createInvoiceWorkspace(Vendor $vendor): ApiSuccessResponse|ApiErrorResponse
+    {
+        if ($razao = CompanySection::getWorkspaceDisabledReason($vendor)) {
+            return new ApiErrorResponse(null, $razao, 409);
+        }
+
+        try {
+            (new SystemInvoiceService)->createWorkspace($vendor);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return new ApiErrorResponse(null, 'Não foi possível criar o workspace: '.$e->getMessage(), 502);
+        }
+
+        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas'])));
+    }
+
     private function present(Vendor $vendor): array
     {
         // NÃO usar vendor->name / vendor->fullName / vendor->full_name -- todos
@@ -495,6 +531,7 @@ class VendorController extends Controller
         // User::setNameAttribute() nunca gravar 'name'). first_name/last_name
         // do user são as colunas reais.
         $user = $vendor->user;
+        $fiscal = $vendor->addresses->firstWhere('address_type', AddressType::FISCAL_ADDRESS);
 
         return [
             'id' => $vendor->id,
@@ -511,6 +548,25 @@ class VendorController extends Controller
             'can_accept_service' => (bool) $vendor->can_accept_service,
             'at_valid' => (bool) $vendor->at_valid,
             'at_validated_at' => $vendor->at_validated_at?->toIso8601String(),
+            // Dados da empresa -- os mesmos do CompanySection do Filament. Sem
+            // eles o backoffice não consegue dizer porque é que um técnico não
+            // pode receber faturas em nome dele.
+            'at_user' => $vendor->at_user,
+            'company_name' => $vendor->company_name,
+            'iban' => $vendor->iban,
+            'invoice_workspace' => $vendor->invoice_workspace ?: null,
+            // Porque é que o botão "Criar workspace" está bloqueado (null = pode
+            // criar). Vem calculado do servidor de propósito: as condições
+            // dependem de relações (documentos, morada fiscal) que não são
+            // enviadas na listagem, logo o cliente não as podia avaliar.
+            'invoice_workspace_blocker' => CompanySection::getWorkspaceDisabledReason($vendor),
+            // Morada FISCAL (a que vai na fatura), não a morada de serviço --
+            // é a que o CompanySection exige para criar o workspace.
+            'billing_address' => $fiscal
+                ? trim(($fiscal->street_name ?? '').' '.($fiscal->street_number ?? ''))
+                : null,
+            'postal_code' => $fiscal?->postal_code,
+            'city' => $fiscal?->city,
             'status' => $vendor->status?->value,
             'suspended_at' => $vendor->deleted_at?->toIso8601String(),
             'created_at' => $vendor->created_at?->toIso8601String(),
