@@ -43,7 +43,7 @@ class RequestServiceController extends Controller
 
             $matchingVendors = $searchService->search($userAddress, $requestedServiceType, false);
 
-            $transformedVendors = $this->transformVendors($matchingVendors, $requestedServiceType, $userAddress);
+            $transformedVendors = $this->transformVendors($matchingVendors, $requestedServiceType, $userAddress, $quantity);
             $transformedVendors = $transformedVendors->filter();
 
             return new ApiSuccessResponse(['vendors' => $transformedVendors]);
@@ -194,9 +194,9 @@ class RequestServiceController extends Controller
         }
     }
 
-    private function transformVendors($vendors, ServicesType $serviceType, $userAddress)
+    private function transformVendors($vendors, ServicesType $serviceType, $userAddress, int $quantity = 1)
     {
-        return $vendors->transform(function (Vendor $vendor) use ($serviceType, $userAddress) {
+        return $vendors->transform(function (Vendor $vendor) use ($serviceType, $userAddress, $quantity) {
             $rateService = app(RateService::class);
 
             $vendorUser = $vendor->user;
