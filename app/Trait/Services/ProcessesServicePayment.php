@@ -5,7 +5,6 @@ namespace App\Trait\Services;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use RwInteractive\PayshopSdk\Exceptions\Api\CreditCardValidationRequired;
-use App\Models\PaymentMethod;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
@@ -73,7 +72,7 @@ trait ProcessesServicePayment
         return $validationUrl;
     }
 
-    protected function processMbwayPayment(User $customer, Service $service, Vendor $vendor, $total, PaymentMethod $paymentMethod): ?string
+    protected function processMbwayPayment(User $customer, Service $service, Vendor $vendor, $total, $paymentMethod): ?string
     {
         $validationUrl = null;
 
