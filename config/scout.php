@@ -135,7 +135,7 @@ return [
         'key' => env('MEILISEARCH_KEY'),
         'index-settings' => [
             \App\Models\Vendor::class => [
-                'filterableAttributes' => ['id', 'user.name', 'user.email', '_geo', 'services_types', 'geoTime', 'status', 'ratings', 'is_test'],
+                'filterableAttributes' => ['id', 'user.name', 'user.email', '_geo', 'services_types', 'geoTime', 'status', 'ratings', 'is_test', 'at_valid'],
                 'sortableAttributes' => ['_geo', 'ratings.average_rating'],
             ],
             \App\Models\VendorScheduleSearch::class => [
