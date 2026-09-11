@@ -43,7 +43,7 @@ class RequestServiceController extends Controller
 
             $matchingVendors = $searchService->search($userAddress, $requestedServiceType, false);
 
-            $transformedVendors = $this->transformVendors($matchingVendors, $requestedServiceType, $userAddress);
+            $transformedVendors = $this->transformVendors($matchingVendors, $requestedServiceType, $userAddress, $quantity);
             $transformedVendors = $transformedVendors->filter();
 
             return new ApiSuccessResponse(['vendors' => $transformedVendors]);
@@ -85,7 +85,7 @@ class RequestServiceController extends Controller
             if ($isScheduled) {
                 $matchingVendors = $scheduleSearchService->search($guestAddress, $serviceType, false);
 
-                $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress) {
+                $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress, $quantity) {
                     try {
                         $rateService = app(RateService::class);
                         $hourlyRate = $vendor->getRawOriginal('price_rate');
@@ -141,7 +141,7 @@ class RequestServiceController extends Controller
             } else {
                 $matchingVendors = $searchService->search($guestAddress, $serviceType, false);
 
-                $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress) {
+                $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress, $quantity) {
                     $rateService = app(RateService::class);
                     $hourlyRate = $vendor->getRawOriginal('price_rate');
                     // Unidades: a lista de técnicos mostra o preço FINAL, por isso
@@ -194,9 +194,9 @@ class RequestServiceController extends Controller
         }
     }
 
-    private function transformVendors($vendors, ServicesType $serviceType, $userAddress)
+    private function transformVendors($vendors, ServicesType $serviceType, $userAddress, int $quantity = 1)
     {
-        return $vendors->transform(function (Vendor $vendor) use ($serviceType, $userAddress) {
+        return $vendors->transform(function (Vendor $vendor) use ($serviceType, $userAddress, $quantity) {
             $rateService = app(RateService::class);
 
             $vendorUser = $vendor->user;
