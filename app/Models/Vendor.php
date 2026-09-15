@@ -578,6 +578,56 @@ class Vendor extends Model implements Auditable
         });
     }
 
+    /**
+     * Dias de antecedencia com que se avisa que um documento vai expirar.
+     *
+     * O mesmo numero que o ecra de Documentos usa em `is_expiring_soon`
+     * (DocumentController@index): duas leituras diferentes da mesma regra
+     * davam um aviso na Home que o ecra de Documentos nao confirmava.
+     */
+    public const DOCUMENT_EXPIRY_WARNING_DAYS = 30;
+
+    /**
+     * Documentos aprovados a chegar ao fim da validade — ou ja fora dela.
+     *
+     * A app tem o aviso desde sempre, mas lia um campo que ninguem enviava:
+     * o tecnico so descobria o problema quando deixava de receber trabalho.
+     * Vai no /me, e nao num pedido proprio, porque e a mesma informacao que
+     * ja decide se ele pode aceitar servicos.
+     *
+     * Inclui os expirados (dias negativos) para o aviso poder mudar de tom
+     * sem precisar de outra fonte.
+     */
+    public function expiringDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $limite = now()->startOfDay()->addDays(self::DOCUMENT_EXPIRY_WARNING_DAYS);
+
+            return $this->documents()
+                ->where('status', 'approved')
+                ->whereNotNull('expiration_date')
+                ->whereDate('expiration_date', '<=', $limite->toDateString())
+                ->with('type')
+                ->get()
+                ->map(function (VendorDocuments $documento) {
+                    $validade = Carbon::parse($documento->expiration_date)->startOfDay();
+                    $dias = (int) now()->startOfDay()->diffInDays($validade, false);
+
+                    return [
+                        'id' => $documento->document_id,
+                        'name' => $documento->type?->name,
+                        'days_to_expire' => $dias,
+                        // Expirado so a partir do dia SEGUINTE ao ultimo dia de
+                        // validade — espelho de allDocumentsVerified().
+                        'is_expired' => $dias < 0,
+                    ];
+                })
+                ->filter(fn (array $documento) => $documento['name'] !== null)
+                ->sortBy('days_to_expire')
+                ->values();
+        });
+    }
+
     public function optionalDocuments(): Attribute
     {
         return Attribute::make(get: function () {

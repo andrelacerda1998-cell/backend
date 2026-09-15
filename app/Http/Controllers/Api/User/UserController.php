@@ -9,7 +9,6 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
 use App\Services\Vendor\ZoneDemand;
-use App\Models\Auth\Authentications;
 use Illuminate\Http\Response;
 use Tymon\JWTAuth\Exceptions\JWTException;
 
@@ -50,6 +49,9 @@ class UserController extends Controller
                         'name' => $item['name'],
                         'reason' => $item['reason'] ?? null,
                     ]),
+                // Documentos a chegar ao fim da validade. A app ja tinha o
+                // aviso; faltava-lhe a informacao.
+                'expiring_documents' => $vendor->expiring_documents,
                 'current_location' => [
                     'latitude' => $vendor->currentLocation->latitude ?? 0,
                     'longitude' => $vendor->currentLocation->longitude ?? 0,
