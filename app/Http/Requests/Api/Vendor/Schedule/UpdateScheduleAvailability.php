@@ -19,8 +19,10 @@ class UpdateScheduleAvailability extends FormRequest
             'user_id' => 'required|integer|exists:users,id',
 
             'available_days' => 'required|array',
+            // `auto_accept` fica aceite mas ignorado: a app do profissional
+            // deixou de o enviar a 15/09/2026 e versoes antigas ainda o mandam.
             'available_days.*' => 'required|array:auto_accept,time_start,time_end,is_enabled',
-            'available_days.*.auto_accept' => 'required|boolean',
+            'available_days.*.auto_accept' => 'sometimes|boolean',
             'available_days.*.time_start' => 'required|date_format:H:i',
             'available_days.*.time_end' => 'required|date_format:H:i|after:available_days.*.time_start',
             'available_days.*.is_enabled' => 'required|boolean',

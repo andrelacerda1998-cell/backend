@@ -196,7 +196,6 @@ class ScheduleVendorSearchService
                 $date,
                 $availability->time_start,
                 $availability->time_end,
-                $availability->auto_accept,
                 $dayOfWeek,
                 $existingSchedules,
                 $now,
@@ -216,7 +215,6 @@ class ScheduleVendorSearchService
         Carbon $date,
         string $timeStart,
         string $timeEnd,
-        bool $autoAccept,
         string $dayName,
         $existingSchedules,
         Carbon $now,
@@ -272,7 +270,6 @@ class ScheduleVendorSearchService
                     'day_name' => $dayName,
                     'time_start' => $slotStart,
                     'time_end' => $slotEnd,
-                    'auto_accept' => $autoAccept,
                 ]);
             }
         }
@@ -371,12 +368,10 @@ class ScheduleVendorSearchService
 
             // Sort criteria (order matters for ranking):
             // 1. Distance (ascending - closer is better)
-            // 2. Has auto-accept (descending - true first)
-            // 3. Is online (descending - online first)
-            // 4. Average rating (descending - higher is better)
+            // 2. Is online (descending - online first)
+            // 3. Average rating (descending - higher is better)
             $options['sort'] = [
                 sprintf('_geoPoint(%F, %F):asc', $latitude, $longitude),
-                'has_auto_accept:desc',
                 'is_online:desc',
                 'average_rating:desc',
             ];

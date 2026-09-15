@@ -2,14 +2,11 @@
 
 namespace App\Http\Controllers\Api\Customer\Services\traits;
 
-use App\Events\Vendor\Schedule\ServiceScheduledEvent;
 use App\Events\Vendor\Services\CreateServiceEvent;
 use App\Models\Service;
 use App\Models\Vendor;
-use App\Notifications\Vendor\NewScheduledServiceNotification;
 use App\Notifications\Vendor\NewServiceAvailableNotification;
 use App\Services\RateService;
-use Illuminate\Support\Carbon;
 
 trait NotifyVendor
 {
@@ -33,21 +30,6 @@ trait NotifyVendor
         // Payload usa a distância gravada no serviço (regra de pricing: agendado = morada de agenda,
         // imediato = GPS), para o profissional ver a mesma distância pela qual é pago.
         $serviceData = $this->prepareServiceData($service, $service->distance);
-
-        // Auto-aceitação tem de respeitar o DIA DA SEMANA do agendamento: um
-        // técnico com auto-accept à segunda não pode aceitar sozinho um serviço
-        // marcado para domingo (ou um dia que tem desligado). Antes olhava-se só
-        // para o primeiro bloco, ignorando dia e is_enabled — o defeito do
-        // incidente 13/08. autoAcceptsOn() faz a verificação por dia.
-        if ($service->schedule && $vendor->autoAcceptsOn(Carbon::parse($service->schedule->scheduled_day))) {
-            $service->loadMissing('schedule.serviceType');
-            $schedule = $service->schedule;
-
-            ServiceScheduledEvent::dispatch($vendorUserId, ['id' => $schedule->id, 'service_id' => $service->id]);
-            $vendor->user->notifyNow(new NewScheduledServiceNotification($schedule));
-
-            return;
-        }
 
         if (! $service->schedule) {
             CreateServiceEvent::dispatch($vendorUserId, $serviceData);

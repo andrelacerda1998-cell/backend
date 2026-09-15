@@ -174,10 +174,10 @@ class MaterializePendingSchedule
     {
         // Quem já aceitou entra como confirmado, sem passar pelo caminho de
         // "novo serviço disponível" — que lhe perguntaria o que ele já
-        // respondeu.
-        // Auto-aceitação só se o técnico a tiver ligada NESTE dia da semana
-        // (autoAcceptsOn), não em qualquer dia — ver incidente 13/08.
-        if ($alreadyAccepted || $vendor->autoAcceptsOn(Carbon::parse($scheduledDay))) {
+        // respondeu. É agora a única forma de um serviço ficar confirmado sem
+        // nova resposta: a auto-aceitação saiu a 15/09/2026, porque aceitar
+        // sem ver o tipo de serviço é aceitar às cegas.
+        if ($alreadyAccepted) {
             $schedule->update(['is_pending' => false]);
             AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
             $this->acceptService->acceptSchedule($service);
