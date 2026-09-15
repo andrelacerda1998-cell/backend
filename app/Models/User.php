@@ -13,6 +13,7 @@ use App\Models\Schedule\Schedule;
 use App\Models\User\UserBillingInfo;
 use App\Notifications\Auth\PasswordReset;
 use App\Observers\UserObserver;
+use App\Services\Common\PhoneLoginSmsService;
 use App\Support\Locale;
 use Bavix\Wallet\Interfaces\Customer;
 use Bavix\Wallet\Interfaces\Wallet;
@@ -49,7 +50,7 @@ use Storage;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
 #[ObservedBy(UserObserver::class)]
-class User extends Authenticatable implements Auditable, ContractCanResetPassword,Wallet, Customer, FilamentUser, HasAvatar, HasLocalePreference, HasMedia, JWTSubject, WalletFloat
+class User extends Authenticatable implements Auditable, ContractCanResetPassword, Customer, FilamentUser, HasAvatar, HasLocalePreference, HasMedia, JWTSubject, Wallet, WalletFloat
 {
     use CanPay, HasWallet, HasWalletFloat, PayShopCustomer;
     use CanResetPassword, HasFactory, HasRoles, InteractsWithMedia, Notifiable,
@@ -81,6 +82,7 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
         'gender_id',
         'phone_number',
         'phone_number_verified_at',
+        'marketing_consent_at',
         'date_birthday',
         'language',
         // 'avatar_url',
@@ -111,6 +113,7 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_test' => 'boolean',
+            'marketing_consent_at' => 'datetime',
         ];
     }
 
@@ -403,7 +406,7 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
         return Attribute::make(
             set: fn (?string $value) => $value === null
                 ? null
-                : \App\Services\Common\PhoneLoginSmsService::normalizePhoneNumber($value),
+                : PhoneLoginSmsService::normalizePhoneNumber($value),
         );
     }
 

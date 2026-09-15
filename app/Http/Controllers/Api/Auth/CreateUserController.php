@@ -30,6 +30,11 @@ class CreateUserController extends Controller
 
             $data['password'] = Hash::make($data['password']);
             $data['language'] = Locale::normalize($data['language'] ?? null);
+            // Comunicacoes de marketing ligadas de origem, por decisao do
+            // negocio (14/09/2026). Fica sempre a data, mesmo quando nao houve
+            // um "sim" explicito, para se saber DESDE QUANDO se pode enviar — e
+            // o cliente desliga num interruptor nas Definicoes.
+            $data['marketing_consent_at'] = now();
             $user = User::create($data);
 
             // try {
@@ -42,7 +47,7 @@ class CreateUserController extends Controller
 
             $user->sendEmailVerificationNotification();
 
-            event (new UserRegistered($user));
+            event(new UserRegistered($user));
 
             return new LoginApiResponse($token, ['message' => 'Account created successfully']);
         } catch (Exception $exception) {
