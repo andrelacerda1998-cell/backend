@@ -8,8 +8,9 @@ use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
 use App\Models\Auth\ImpersonationCode;
-use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\AllowedZone;
+use App\Models\GeneralSettings\City;
+use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\OperationArea;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\GeneralSettings\SurveyCity;
@@ -19,8 +20,11 @@ use App\Models\Schedule\ScheduleAvailable;
 use App\Models\Vendor\Location;
 use App\Models\Vendor\Ratings;
 use App\Models\Vendor\VendorDocuments;
+use App\Models\Vendor\VendorUnavailableDay;
 use App\Observers\VendorObserver;
 use Bavix\Wallet\Models\Transaction;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -38,7 +42,7 @@ use OwenIt\Auditing\Contracts\Auditable;
 #[ObservedBy(VendorObserver::class)]
 class Vendor extends Model implements Auditable
 {
-    use \OwenIt\Auditing\Auditable, HasFactory, Searchable, SoftDeletes;
+    use HasFactory, \OwenIt\Auditing\Auditable, Searchable, SoftDeletes;
 
     protected $fillable = ['user_id', 'status', 'price_rate', 'username', 'invoice_workspace', 'auth_token', 'company_name', 'invoice_account_id', 'at_user', 'at_password', 'iban', 'notification_preferences'];
 
@@ -256,7 +260,7 @@ class Vendor extends Model implements Auditable
     /** Dias de indisponibilidade pontual (folga, doença, férias). */
     public function unavailableDays(): HasMany
     {
-        return $this->hasMany(\App\Models\Vendor\VendorUnavailableDay::class);
+        return $this->hasMany(VendorUnavailableDay::class);
     }
 
     /**
@@ -276,19 +280,19 @@ class Vendor extends Model implements Auditable
      * marcações confirmadas: um agendamento ainda pendente não deve reservar
      * tempo de deslocação que talvez nunca seja preciso.
      */
-    public function hasFreeSlot(\Carbon\CarbonInterface $start, \Carbon\CarbonInterface $end): bool
+    public function hasFreeSlot(CarbonInterface $start, CarbonInterface $end): bool
     {
         if ($this->isUnavailableOn($start)) {
             return false;
         }
 
         $dayName = match ($start->dayOfWeek) {
-            \Carbon\Carbon::MONDAY => ScheduleDay::MONDAY->value,
-            \Carbon\Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
-            \Carbon\Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
-            \Carbon\Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
-            \Carbon\Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
-            \Carbon\Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
+            Carbon::MONDAY => ScheduleDay::MONDAY->value,
+            Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
+            Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
+            Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
+            Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
+            Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
             default => ScheduleDay::SUNDAY->value,
         };
 
@@ -315,8 +319,8 @@ class Vendor extends Model implements Auditable
             ->whereDate('scheduled_day', $start->toDateString())
             ->get()
             ->contains(function ($schedule) use ($start, $end, $margin) {
-                $busyStart = \Carbon\Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start);
-                $busyEnd = \Carbon\Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_end);
+                $busyStart = Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start);
+                $busyEnd = Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_end);
 
                 if (! $schedule->is_pending) {
                     $busyEnd = $busyEnd->copy()->addMinutes($margin);
@@ -335,7 +339,7 @@ class Vendor extends Model implements Auditable
      * é um interruptor único — mas o modelo suporta granularidade por dia e não
      * há razão para a deitar fora.
      */
-    public function autoAcceptsOn(?\Carbon\CarbonInterface $date = null): bool
+    public function autoAcceptsOn(?CarbonInterface $date = null): bool
     {
         $query = $this->scheduleAvailable()->where('auto_accept', true)->where('is_enabled', true);
 
@@ -344,12 +348,12 @@ class Vendor extends Model implements Auditable
         }
 
         $dayName = match ($date->dayOfWeek) {
-            \Carbon\Carbon::MONDAY => ScheduleDay::MONDAY->value,
-            \Carbon\Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
-            \Carbon\Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
-            \Carbon\Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
-            \Carbon\Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
-            \Carbon\Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
+            Carbon::MONDAY => ScheduleDay::MONDAY->value,
+            Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
+            Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
+            Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
+            Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
+            Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
             default => ScheduleDay::SUNDAY->value,
         };
 
@@ -357,9 +361,9 @@ class Vendor extends Model implements Auditable
     }
 
     /** Está indisponível neste dia concreto, apesar da disponibilidade semanal? */
-    public function isUnavailableOn(\Carbon\CarbonInterface|string $day): bool
+    public function isUnavailableOn(CarbonInterface|string $day): bool
     {
-        $date = $day instanceof \Carbon\CarbonInterface ? $day->toDateString() : (string) $day;
+        $date = $day instanceof CarbonInterface ? $day->toDateString() : (string) $day;
 
         return $this->unavailableDays()->whereDate('day', $date)->exists();
     }
@@ -372,13 +376,13 @@ class Vendor extends Model implements Auditable
     /** Cidades onde o tecnico aceita prestar servico (todas). */
     public function availableCities(): BelongsToMany
     {
-        return $this->belongsToMany(\App\Models\GeneralSettings\City::class, 'vendor_available_cities')->withTimestamps();
+        return $this->belongsToMany(City::class, 'vendor_available_cities')->withTimestamps();
     }
 
     /** Top 3 de cidades de maior interesse do tecnico (subconjunto das available). */
     public function preferredCities(): BelongsToMany
     {
-        return $this->belongsToMany(\App\Models\GeneralSettings\City::class, 'vendor_preferred_cities')
+        return $this->belongsToMany(City::class, 'vendor_preferred_cities')
             ->withPivot('position')
             ->orderByPivot('position')
             ->withTimestamps();
@@ -620,6 +624,56 @@ class Vendor extends Model implements Auditable
                 });
 
             return $pendingFiles;
+        });
+    }
+
+    /**
+     * Dias de antecedencia com que se avisa que um documento vai expirar.
+     *
+     * O mesmo numero que o ecra de Documentos usa em `is_expiring_soon`
+     * (DocumentController@index): duas leituras diferentes da mesma regra
+     * davam um aviso na Home que o ecra de Documentos nao confirmava.
+     */
+    public const DOCUMENT_EXPIRY_WARNING_DAYS = 30;
+
+    /**
+     * Documentos aprovados a chegar ao fim da validade — ou ja fora dela.
+     *
+     * A app tem o aviso desde sempre, mas lia um campo que ninguem enviava:
+     * o tecnico so descobria o problema quando deixava de receber trabalho.
+     * Vai no /me, e nao num pedido proprio, porque e a mesma informacao que
+     * ja decide se ele pode aceitar servicos.
+     *
+     * Inclui os expirados (dias negativos) para o aviso poder mudar de tom
+     * sem precisar de outra fonte.
+     */
+    public function expiringDocuments(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $limite = now()->startOfDay()->addDays(self::DOCUMENT_EXPIRY_WARNING_DAYS);
+
+            return $this->documents()
+                ->where('status', 'approved')
+                ->whereNotNull('expiration_date')
+                ->whereDate('expiration_date', '<=', $limite->toDateString())
+                ->with('type')
+                ->get()
+                ->map(function (VendorDocuments $documento) {
+                    $validade = Carbon::parse($documento->expiration_date)->startOfDay();
+                    $dias = (int) now()->startOfDay()->diffInDays($validade, false);
+
+                    return [
+                        'id' => $documento->document_id,
+                        'name' => $documento->type?->name,
+                        'days_to_expire' => $dias,
+                        // Expirado so a partir do dia SEGUINTE ao ultimo dia de
+                        // validade — espelho de allDocumentsVerified().
+                        'is_expired' => $dias < 0,
+                    ];
+                })
+                ->filter(fn (array $documento) => $documento['name'] !== null)
+                ->sortBy('days_to_expire')
+                ->values();
         });
     }
 

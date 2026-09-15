@@ -4,16 +4,17 @@ namespace App\Http\Controllers\Api\Vendor;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Vendor\CreateVendorDocumentRequest;
-use App\Http\Requests\Api\Vendor\GetDocumentTypesRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\Document;
 use App\Models\User;
+use App\Models\Vendor;
 use App\Models\Vendor\VendorDocuments;
 use Exception;
 use Filament\Notifications\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
@@ -25,7 +26,7 @@ class DocumentController extends Controller
             ->with('document')
             ->get()
             ->map(function (VendorDocuments $d) {
-                $expiration = $d->expiration_date ? \Illuminate\Support\Carbon::parse($d->expiration_date) : null;
+                $expiration = $d->expiration_date ? Carbon::parse($d->expiration_date) : null;
                 $daysToExpire = $expiration ? (int) now()->startOfDay()->diffInDays($expiration->startOfDay(), false) : null;
 
                 return [
@@ -37,8 +38,9 @@ class DocumentController extends Controller
                     'expiration_date' => $expiration?->toDateString(),
                     'days_to_expire' => $daysToExpire,
                     'is_expired' => $daysToExpire !== null && $daysToExpire < 0,
-                    // avisa com 30 dias de antecedência
-                    'is_expiring_soon' => $daysToExpire !== null && $daysToExpire >= 0 && $daysToExpire <= 30,
+                    // Mesma antecedência do aviso da Home — uma regra só.
+                    'is_expiring_soon' => $daysToExpire !== null && $daysToExpire >= 0
+                        && $daysToExpire <= Vendor::DOCUMENT_EXPIRY_WARNING_DAYS,
                 ];
             });
 
