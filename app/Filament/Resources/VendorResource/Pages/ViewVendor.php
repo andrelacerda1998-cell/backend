@@ -5,7 +5,6 @@ namespace App\Filament\Resources\VendorResource\Pages;
 use App\Filament\Actions\Infolist\GenerateImpersonationCodeAction;
 use App\Filament\Actions\Infolist\PasswordResetAction;
 use App\Filament\Actions\Infolist\TestNotification;
-use App\Filament\Actions\Infolist\ToggleVendorAutoAcceptAction;
 use App\Filament\Actions\Infolist\ToggleVendorStatusAction;
 use App\Filament\Actions\Infolist\ValidateAtCredentialsAction;
 use App\Filament\Resources\VendorResource;
@@ -22,7 +21,6 @@ class ViewVendor extends ViewRecord
         return [
             EditAction::make(),
             ToggleVendorStatusAction::make('toggleVendorStatus'),
-            ToggleVendorAutoAcceptAction::make('toggleVendorAutoAccept'),
             ValidateAtCredentialsAction::make('validateAtCredentials'),
             ActionGroup::make([
                 PasswordResetAction::make('passwordReset')->color('gray')->icon(null),

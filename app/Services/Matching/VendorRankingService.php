@@ -2,11 +2,12 @@
 
 namespace App\Services\Matching;
 
+use App\DTO\Services\AddressCoordinatesDTO;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
-use App\DTO\Services\AddressCoordinatesDTO;
-use App\Models\Service;
+use App\Models\Address;
 use App\Models\GeneralSettings\ServicesType;
+use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Settings\MatchingSettings;
@@ -31,9 +32,7 @@ class VendorRankingService
 
     use CalculateServicePriceForCustomer;
 
-    public function __construct(private MatchingSettings $settings)
-    {
-    }
+    public function __construct(private MatchingSettings $settings) {}
 
     /**
      * @param  bool  $immediate  Imediato exige estar online e livre agora; agendado
@@ -42,7 +41,7 @@ class VendorRankingService
      */
     public function rank(
         ServicesType $serviceType,
-        AddressCoordinatesDTO|\App\Models\Address $address,
+        AddressCoordinatesDTO|Address $address,
         User $customer,
         bool $immediate,
         ?CarbonInterface $scheduledFor = null,
@@ -119,13 +118,13 @@ class VendorRankingService
             // o findVendor() já aplicava ao pedido direto.
             ->whereHas('user', fn ($q) => $q->where('is_test', $isCustomerTest));
 
-        if ($immediate) {
-            // No imediato o profissional só entra na lista se estiver mesmo
-            // disponível agora: a lista é mostrada ao cliente ANTES de alguém
-            // ser notificado, por isso tem de ser uma boa previsão de quem vai
-            // responder.
-            $query->where('status', StatusVendor::ONLINE);
-        }
+        // Online é agora o unico interruptor: o profissional diz na Home da
+        // app se quer receber trabalho, e isso vale para os dois modos. Antes
+        // so contava no imediato — no agendado quem mandava era o horario
+        // declarado no registo, que o profissional nao voltava a abrir. Tinha o
+        // efeito ao contrario do esperado: estar Offline nao impedia convites
+        // agendados, e estar Online nao chegava para os receber.
+        $query->where('status', StatusVendor::ONLINE);
 
         $vendors = $query->get();
 
@@ -134,10 +133,11 @@ class VendorRankingService
         }
 
         if ($scheduledFor) {
-            // Não basta o dia estar livre: o BLOCO tem de estar. Convidar
-            // alguém para uma hora que não tem disponível é pior do que não o
-            // convidar — ou recusa, e aprende que os convites não são de fiar,
-            // ou aceita por distração e falta.
+            // O que se verifica aqui e se o profissional pode MESMO estar la:
+            // ferias marcadas e sobreposicao com outro servico (ver
+            // Vendor::hasFreeSlot). O horario semanal declarado deixou de
+            // contar — quem nao quiser aquele trabalho recusa o convite, que
+            // ja lhe diz o servico, o valor, a morada e a hora.
             $slotEnd = $scheduledFor->copy()->addMinutes($this->slotMinutes($serviceType, $quantity));
 
             $vendors = $vendors->filter(fn (Vendor $v) => $v->hasFreeSlot($scheduledFor, $slotEnd));
@@ -264,7 +264,7 @@ class VendorRankingService
     private function describe(
         Vendor $vendor,
         ServicesType $serviceType,
-        AddressCoordinatesDTO|\App\Models\Address $address,
+        AddressCoordinatesDTO|Address $address,
         array $ratings,
         bool $immediate,
         int $quantity,

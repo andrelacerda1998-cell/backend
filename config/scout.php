@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\Vendor;
+use App\Models\VendorScheduleSearch;
+
 return [
 
     /*
@@ -134,11 +137,11 @@ return [
         'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
         'key' => env('MEILISEARCH_KEY'),
         'index-settings' => [
-            \App\Models\Vendor::class => [
+            Vendor::class => [
                 'filterableAttributes' => ['id', 'user.name', 'user.email', '_geo', 'services_types', 'geoTime', 'status', 'ratings', 'is_test', 'at_valid'],
                 'sortableAttributes' => ['_geo', 'ratings.average_rating'],
             ],
-            \App\Models\VendorScheduleSearch::class => [
+            VendorScheduleSearch::class => [
                 'filterableAttributes' => [
                     'id',
                     '_geo',
@@ -147,7 +150,6 @@ return [
                     'services_types.operation_area_id',
                     'status',
                     'is_online',
-                    'has_auto_accept',
                     'has_availability_next_week',
                     'has_schedule_address',
                     'schedule_availability',
@@ -160,7 +162,6 @@ return [
                 'sortableAttributes' => [
                     '_geo',
                     'average_rating',
-                    'has_auto_accept',
                     'is_online',
                 ],
                 'rankingRules' => [
