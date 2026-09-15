@@ -2,8 +2,9 @@
 
 namespace Tests\Feature\Services;
 
-use App\Models\Schedule\ScheduleAvailable;
 use App\Models\Schedule\Schedule;
+use App\Models\Schedule\ScheduleAvailable;
+use App\Models\Service;
 use App\Models\Vendor;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -11,11 +12,16 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * O convite só sai a quem tem o bloco livre.
+ * O convite só sai a quem pode MESMO lá estar.
  *
- * Convidar alguém para uma hora que não tem disponível é pior do que não o
- * convidar: ou recusa — e aprende que os convites não são de fiar — ou aceita
- * por distração e falta, o que custa ao cliente e à reputação da Piquet.
+ * Duas coisas vetam: férias marcadas, e já ter outro serviço à mesma hora.
+ * Ninguém está em dois sítios ao mesmo tempo — isso não é preferência.
+ *
+ * O horário semanal declarado deixou de vetar a 15/09/2026: era uma previsão
+ * feita uma vez no registo a decidir por cima de um convite concreto, que traz
+ * serviço, valor, morada e hora. Quem não quiser aquele trabalho recusa. Os
+ * quatro testes que provavam o veto do horário mudaram de casa, e de sinal,
+ * para DisponibilidadeNaoVetaConvitesTest.
  */
 class VendorSlotAvailabilityTest extends TestCase
 {
@@ -55,7 +61,7 @@ class VendorSlotAvailabilityTest extends TestCase
 
         // schedule.service_id é NOT NULL: uma marcação existe sempre por causa
         // de um serviço.
-        $service = \App\Models\Service::factory()->create(['vendor_id' => $this->vendor->id]);
+        $service = Service::factory()->create(['vendor_id' => $this->vendor->id]);
 
         return Schedule::create([
             'vendor_id' => $this->vendor->id,
@@ -76,22 +82,6 @@ class VendorSlotAvailabilityTest extends TestCase
         $this->assertTrue($this->vendor->hasFreeSlot($start, $end));
     }
 
-    public function test_slot_before_working_hours_is_refused(): void
-    {
-        [$start, $end] = $this->slot('07:00');
-
-        $this->assertFalse($this->vendor->hasFreeSlot($start, $end));
-    }
-
-    public function test_slot_that_spills_past_closing_time_is_refused(): void
-    {
-        // Começa dentro do horário mas acaba depois: o bloco tem de caber
-        // INTEIRO, senão o serviço arrasta-se para lá do que ele definiu.
-        [$start, $end] = $this->slot('17:30', 60);
-
-        $this->assertFalse($this->vendor->hasFreeSlot($start, $end));
-    }
-
     public function test_day_off_beats_weekly_availability(): void
     {
         DB::table('vendor_unavailable_days')->insert([
@@ -104,15 +94,6 @@ class VendorSlotAvailabilityTest extends TestCase
         [$start, $end] = $this->slot('10:00');
 
         $this->assertFalse($this->vendor->fresh()->hasFreeSlot($start, $end));
-    }
-
-    public function test_a_day_he_does_not_work_is_refused(): void
-    {
-        // Domingo: o observer cria-o desativado por omissão, que é exatamente
-        // o caso de "não trabalho neste dia".
-        $sunday = $this->tuesday->copy()->next(\Carbon\Carbon::SUNDAY)->setTimeFromTimeString('10:00');
-
-        $this->assertFalse($this->vendor->hasFreeSlot($sunday, $sunday->copy()->addHour()));
     }
 
     public function test_overlapping_booking_blocks_the_slot(): void
@@ -151,15 +132,5 @@ class VendorSlotAvailabilityTest extends TestCase
         $nextTuesday = $this->tuesday->copy()->addWeek()->setTimeFromTimeString('10:00');
 
         $this->assertTrue($this->vendor->fresh()->hasFreeSlot($nextTuesday, $nextTuesday->copy()->addHour()));
-    }
-
-    public function test_disabled_weekly_availability_is_refused(): void
-    {
-        ScheduleAvailable::where('vendor_id', $this->vendor->id)
-            ->where('day_id', 2)
-            ->update(['is_enabled' => false]);
-        [$start, $end] = $this->slot('10:00');
-
-        $this->assertFalse($this->vendor->fresh()->hasFreeSlot($start, $end));
     }
 }
