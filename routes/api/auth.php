@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Auth\PhoneLoginVerifyController;
 use App\Http\Controllers\Api\Auth\ValidatePhoneNumberController;
 use App\Http\Controllers\Api\Auth\ValidationPhoneNumberController;
 use App\Http\Controllers\Api\Auth\VerificationController;
+use App\Http\Controllers\Api\User\MarketingConsentController;
 use App\Http\Controllers\Api\User\UserController;
 use App\Http\Controllers\Api\Vendor\CreateVendorController;
 use App\Http\Controllers\Api\Vendor\DocumentController;
@@ -62,6 +63,7 @@ Route::group(['prefix' => 'auth', 'middleware' => 'locale'], function () {
         Route::get('/me', [UserController::class, 'me']);
         Route::post('/device', DeviceNotificationsController::class);
         Route::put('/profile/update', [UserController::class, 'update']);
+        Route::put('/profile/marketing-consent', MarketingConsentController::class);
         Route::group(['prefix' => 'email'], function () {
             Route::post('/send-confirmation', [VerificationController::class, 'send'])
                 ->middleware(['throttle:6,1'])
