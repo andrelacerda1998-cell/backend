@@ -62,6 +62,8 @@ class GuestRegisterController extends Controller
                     'email' => null,
                     'password' => null,
                     'language' => normalizeAcceptLanguage($request->header('Accept-Language')),
+                    // Ver CreateUserController: ligado de origem, com data.
+                    'marketing_consent_at' => now(),
                 ]);
 
                 $this->storeMainAddress($user, $data['address']);

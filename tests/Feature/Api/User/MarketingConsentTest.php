@@ -61,6 +61,21 @@ class MarketingConsentTest extends TestCase
             ->assertUnauthorized();
     }
 
+    public function test_quem_se_regista_fica_com_o_consentimento_ligado(): void
+    {
+        $this->postJson('/api/v1/auth/registration/customer', [
+            'name' => 'Maria Teste',
+            'email' => 'maria.'.uniqid().'@exemplo.pt',
+            'phone_number' => '+351912000111',
+            'password' => 'PiquetTeste!2026',
+            'password_confirmation' => 'PiquetTeste!2026',
+        ])->assertSuccessful();
+
+        // Decisao do negocio: ligado de origem. Guarda-se a data na mesma, para
+        // se saber desde quando se pode enviar.
+        $this->assertNotNull(User::latest('id')->first()->marketing_consent_at);
+    }
+
     public function test_o_campo_accepted_e_obrigatorio(): void
     {
         $this->actingAs($this->utilizador(), 'api')
