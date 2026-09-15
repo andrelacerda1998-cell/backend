@@ -73,7 +73,8 @@ class ScheduleController extends Controller
             $vendor->scheduleAvailable()->updateOrCreate(
                 ['day_id' => $scheduleDays[$dayOfWeek]],
                 [
-                    'auto_accept' => $dayInformation['auto_accept'],
+                    // Sempre falso: a auto-aceitacao saiu a 15/09/2026.
+                    'auto_accept' => false,
                     'time_start' => $dayInformation['time_start'],
                     'time_end' => $dayInformation['time_end'],
                     'is_enabled' => $dayInformation['is_enabled'],

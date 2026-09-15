@@ -3,10 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Services\AddressType;
-use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
-use App\Models\GeneralSettings\ServicesType;
-use App\Models\Schedule\ScheduleAvailable;
 use App\Models\Vendor\Ratings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
@@ -40,7 +37,7 @@ class VendorScheduleSearch extends Model
             'averageRating',
         ])->find($this->id);
 
-        if (!$vendor) {
+        if (! $vendor) {
             return [];
         }
 
@@ -90,7 +87,6 @@ class VendorScheduleSearch extends Model
         // Schedule availability
         $availability = $this->buildScheduleAvailability($vendor);
         $attributes['schedule_availability'] = $availability['days'];
-        $attributes['has_auto_accept'] = $availability['has_auto_accept'];
         $attributes['has_availability_next_week'] = $availability['has_availability_next_week'];
 
         // Online status
@@ -113,19 +109,18 @@ class VendorScheduleSearch extends Model
     {
         $scheduleAvailable = $vendor->scheduleAvailable;
         $days = [];
-        $hasAutoAccept = false;
         $hasAvailabilityNextWeek = false;
 
         $today = Carbon::now();
         $endOfNextWeek = $today->copy()->addWeek()->endOfWeek();
 
         foreach ($scheduleAvailable as $schedule) {
-            if (!$schedule->is_enabled) {
+            if (! $schedule->is_enabled) {
                 continue;
             }
 
             $dayName = $schedule->scheduleDay?->day_name;
-            if (!$dayName) {
+            if (! $dayName) {
                 continue;
             }
 
@@ -134,13 +129,8 @@ class VendorScheduleSearch extends Model
                 'day_id' => $schedule->day_id,
                 'time_start' => $schedule->time_start,
                 'time_end' => $schedule->time_end,
-                'auto_accept' => $schedule->auto_accept,
                 'is_enabled' => $schedule->is_enabled,
             ];
-
-            if ($schedule->auto_accept) {
-                $hasAutoAccept = true;
-            }
 
             // Check if this day falls within next week
             $hasAvailabilityNextWeek = true;
@@ -148,7 +138,6 @@ class VendorScheduleSearch extends Model
 
         return [
             'days' => $days,
-            'has_auto_accept' => $hasAutoAccept,
             'has_availability_next_week' => $hasAvailabilityNextWeek,
         ];
     }
@@ -159,7 +148,7 @@ class VendorScheduleSearch extends Model
     public function shouldBeSearchable(): bool
     {
         $vendor = Vendor::find($this->id);
-        if (!$vendor) {
+        if (! $vendor) {
             return false;
         }
 

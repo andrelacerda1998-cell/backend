@@ -3,9 +3,7 @@
 namespace App\Http\Controllers\Api\Customer\Schedule;
 
 use App\DTO\Schedule\ScheduleEventData;
-use App\Events\Customer\Schedule\AcceptScheduleEvent;
 use App\Events\Vendor\Schedule\CreateScheduleEvent;
-use App\Events\Vendor\Schedule\ServiceScheduledEvent;
 use App\Exceptions\Api\Vendor\Service\ServiceIsNotPending;
 use App\Http\Controllers\Api\Customer\Services\traits\NotifyVendor;
 use App\Http\Requests\Api\Customer\Schedule\StoreScheduleRequest;
@@ -15,7 +13,6 @@ use App\Models\Schedule\Schedule;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
-use App\Notifications\Vendor\NewScheduledServiceNotification;
 use App\Repository\Schedule\ScheduleRepository;
 use App\Services\Common\Services\AcceptService;
 use Illuminate\Support\Carbon;
@@ -109,18 +106,10 @@ class ScheduleController
             $service->update(['nif' => $request->input('nif')]);
         }
 
-        // Auto-aceitação respeita o dia da semana do agendamento (autoAcceptsOn),
-        // não basta ter auto-accept nalgum dia — ver incidente 13/08.
-        if ($vendor->autoAcceptsOn(Carbon::parse($schedule->scheduled_day))) {
-            $schedule->update(['is_pending' => false]);
-            AcceptScheduleEvent::dispatch($customer->id, ['schedule_id' => $schedule->id, 'service_id' => $serviceId]);
-            $this->acceptService->acceptSchedule($service);
-
-            ServiceScheduledEvent::dispatch($schedule->vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
-            $vendor->user->notifyNow(new NewScheduledServiceNotification($schedule));
-        } else {
-            CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
-        }
+        // A marcação fica sempre pendente à espera da resposta do profissional.
+        // A auto-aceitação saiu a 15/09/2026: ninguém aceita um serviço sem ver
+        // que serviço é.
+        CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
 
         return new ApiSuccessResponse([
             'schedule_id' => $schedule->id,

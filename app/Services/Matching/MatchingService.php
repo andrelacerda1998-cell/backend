@@ -2,18 +2,21 @@
 
 namespace App\Services\Matching;
 
+use App\DTO\Services\AddressCoordinatesDTO;
 use App\Enums\Services\CandidateStatus;
+use App\Enums\Services\ServiceStatus;
 use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
 use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
-use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
 use App\Notifications\Customer\MatchingCandidatesReadyNotification;
 use App\Notifications\Customer\MatchingFailedNotification;
 use App\Notifications\Vendor\MatchingInvitationNotification;
 use App\Settings\MatchingSettings;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -51,8 +54,7 @@ class MatchingService
     public function __construct(
         private VendorRankingService $ranking,
         private MatchingSettings $settings,
-    ) {
-    }
+    ) {}
 
     /**
      * Onda seguinte de convites, nos dois modos.
@@ -96,7 +98,6 @@ class MatchingService
             // Quem tem auto-aceitação ligada responde já, como no convite
             // individual. Sem isto, a unificação teria desligado a funcionalidade
             // em silêncio para os pedidos imediatos.
-            $this->autoAcceptIfEnabled($candidate);
         }
 
         return $candidates;
@@ -407,35 +408,6 @@ class MatchingService
         ]);
 
         $this->notifyVendor($candidate->refresh(), MatchingInvitationEvent::class);
-        $this->autoAcceptIfEnabled($candidate);
-    }
-
-    /**
-     * Responde por ele quando tem a auto-aceitação ligada.
-     *
-     * Aceitar um convite não reserva a agenda nem garante o trabalho, por isso
-     * responder automaticamente é barato para o profissional: entra em mais
-     * seleções sem custo. E ele já só é convidado para blocos que tem livres
-     * (Vendor::hasFreeSlot).
-     *
-     * O que NÃO fica garantido é que continue livre até o cliente decidir —
-     * dois clientes podem pedir a mesma hora e ambos convidá-lo. É por isso que
-     * o `select()` volta a verificar a agenda antes de o atribuir.
-     */
-    private function autoAcceptIfEnabled(ServiceCandidate $candidate): void
-    {
-        $vendor = $candidate->vendor;
-        $service = $candidate->service;
-
-        if (! $vendor || ! $service) {
-            return;
-        }
-
-        if (! $vendor->autoAcceptsOn($this->scheduledStartAt($service))) {
-            return;
-        }
-
-        $this->accept($candidate);
     }
 
     private function notifyVendor(ServiceCandidate $candidate, string $event): void
@@ -513,12 +485,12 @@ class MatchingService
      * 15h avaliado à meia-noite cai sempre fora — o que rejeitava toda a gente
      * em silêncio.
      */
-    public function scheduledStartAt(Service $service): ?\Carbon\CarbonInterface
+    public function scheduledStartAt(Service $service): ?CarbonInterface
     {
         $schedule = $service->schedule;
 
         if ($schedule) {
-            return \Carbon\Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start);
+            return Carbon::parse($schedule->scheduled_day.' '.$schedule->scheduled_time_start);
         }
 
         $pending = $service->pending_schedule_data['schedule'] ?? null;
@@ -530,8 +502,8 @@ class MatchingService
         $start = $pending['scheduled_time_start'] ?? null;
 
         return $start
-            ? \Carbon\Carbon::parse($start)
-            : (($pending['scheduled_day'] ?? null) ? \Carbon\Carbon::parse($pending['scheduled_day']) : null);
+            ? Carbon::parse($start)
+            : (($pending['scheduled_day'] ?? null) ? Carbon::parse($pending['scheduled_day']) : null);
     }
 
     public function hasEnoughAcceptances(Service $service): bool
@@ -576,7 +548,7 @@ class MatchingService
 
         return $this->ranking->rank(
             serviceType: $service->serviceType,
-            address: new \App\DTO\Services\AddressCoordinatesDTO(
+            address: new AddressCoordinatesDTO(
                 (float) ($service->address['latitude'] ?? 0),
                 (float) ($service->address['longitude'] ?? 0),
             ),

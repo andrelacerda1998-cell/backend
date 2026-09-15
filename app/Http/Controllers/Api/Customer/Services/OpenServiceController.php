@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Api\Customer\Services;
 
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
-use App\Events\Customer\Schedule\AcceptScheduleEvent;
 use App\Events\Vendor\Schedule\CreateScheduleEvent;
-use App\Events\Vendor\Schedule\ServiceScheduledEvent;
 use App\Exceptions\Api\Common\Service\ServiceNotFound;
 use App\Exceptions\Api\Customer\PaymentMethodDisabled;
 use App\Exceptions\Api\Customer\PaymentNotComplete;
@@ -30,17 +28,15 @@ use App\Services\Common\Services\MaterializePendingSchedule;
 use App\Services\Common\Services\MbwayPaymentResolver;
 use App\Trait\GeoAddress;
 use App\Trait\Services\CalculateServicePriceForCustomer;
+use App\Trait\Services\ProcessesServicePayment;
 use Exception;
 use Illuminate\Support\Carbon;
-use RwInteractive\PayshopSdk\Enums\Payment\OperationType;
 use RwInteractive\PayshopSdk\Enums\Payment\Status;
-use RwInteractive\PayshopSdk\Exceptions\Api\CreditCardValidationRequired;
-use RwInteractive\PayshopSdk\Models\PaymentMethod;
 
 class OpenServiceController extends Controller
 {
-    use \App\Trait\Services\ProcessesServicePayment;
     use CalculateServicePriceForCustomer, GeoAddress, NotifyVendor, ProcessPendingScheduleAfterPayment;
+    use ProcessesServicePayment;
 
     public function __construct(
         private readonly AcceptService $acceptService,
@@ -390,17 +386,8 @@ class OpenServiceController extends Controller
             'is_pending' => true,
         ]);
 
-        // Auto-aceitação respeita o dia da semana do agendamento (autoAcceptsOn),
-        // não basta ter auto-accept nalgum dia — ver incidente 13/08.
-        if ($vendor->autoAcceptsOn(Carbon::parse($scheduledDay))) {
-            $schedule->update(['is_pending' => false]);
-            AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
-            \App\Events\Vendor\Schedule\AcceptScheduleEvent::dispatch($service->customer_id, ['schedule_id' => $schedule->id, 'service_id' => $service->id]);
-            $this->acceptService->acceptSchedule($service);
-            ServiceScheduledEvent::dispatch($schedule->vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
-        } else {
-            CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
-        }
+        // Pendente até o profissional responder — ver ScheduleController.
+        CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
     }
 
     public function checkPaymentStatus(Service $service)

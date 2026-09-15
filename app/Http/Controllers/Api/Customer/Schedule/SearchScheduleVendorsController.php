@@ -63,24 +63,18 @@ class SearchScheduleVendorsController extends Controller
                 return null;
             }
 
-            if (!($vendor->user?->hasVerifiedPhoneNumber() &&
+            if (! ($vendor->user?->hasVerifiedPhoneNumber() &&
                 $vendor->user?->hasVerifiedEmail() &&
                 $vendor->all_documents_verified &&
                 $vendor->iban != null &&
                 $vendor->invoice_workspace != null &&
-                str_contains($vendor->at_user ?? '', '/'))){
+                str_contains($vendor->at_user ?? '', '/'))) {
                 return null;
             }
 
             $distance = $this->calculateDistance($scheduleAddress, $userAddress);
             $price = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
             $original_price = $rateService->calculateForCustomerForOldPrice($hourlyRate, $timeService, $distance);
-
-            // Check if vendor has auto-accept on any day
-            $hasAutoAccept = $vendor->scheduleAvailable()
-                ->where('is_enabled', true)
-                ->where('auto_accept', true)
-                ->exists();
 
             return [
                 'id' => $vendor->id,
@@ -97,7 +91,6 @@ class SearchScheduleVendorsController extends Controller
                     ?->average_rating,
                 'avatar' => $vendorUser->avatar,
                 'is_online' => $vendor->status->value === 'Online',
-                'has_auto_accept' => $hasAutoAccept,
             ];
         })->take(3);
     }

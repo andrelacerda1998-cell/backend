@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\Schedule\ScheduleDay;
 use App\Enums\Services\AddressType;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
@@ -266,15 +265,24 @@ class Vendor extends Model implements Auditable
     /**
      * Tem este bloco livre na agenda?
      *
-     * Três perguntas, por ordem de força:
+     * Duas perguntas:
      *  1. marcou este dia como indisponível? (folga pontual manda sobre tudo)
-     *  2. trabalha a esta hora, neste dia da semana? (schedule_available)
-     *  3. já tem alguma coisa marcada que se sobreponha?
+     *  2. já tem alguma coisa marcada que se sobreponha?
      *
-     * Existe porque convidar alguém para uma hora que ele não tem livre é pior
-     * do que não o convidar: ou recusa — e aprende que os convites não são de
-     * fiar — ou aceita por distração e falta, o que custa ao cliente e à
-     * reputação da Piquet.
+     * Havia uma terceira — "trabalha a esta hora, neste dia da semana?", lida
+     * do `schedule_available` — e saiu a 15/09/2026. O horário declarado é uma
+     * PREVISÃO feita uma vez, no registo; o convite que o profissional recebe
+     * traz o serviço, o valor, a morada e a hora, e o "Aceitar" é uma DECISÃO
+     * sobre esse trabalho concreto. A previsão estava a vetar a decisão: quem
+     * tivesse o sábado desligado em julho não era sequer convidado em setembro,
+     * mesmo estando em casa sem nada para fazer. Quem não quer, recusa.
+     *
+     * O que continua a vetar é o que é facto e não palpite: férias marcadas, e
+     * estar noutro sítio à mesma hora. Ninguém pode estar em dois sítios ao
+     * mesmo tempo — isso não é preferência.
+     *
+     * Quem decide agora se recebe convites é o botão Online/Offline da Home da
+     * app do profissional, que ele controla em dois toques.
      *
      * A margem de segurança (schedule_safety_margin_minutes) só se aplica a
      * marcações confirmadas: um agendamento ainda pendente não deve reservar
@@ -283,33 +291,6 @@ class Vendor extends Model implements Auditable
     public function hasFreeSlot(CarbonInterface $start, CarbonInterface $end): bool
     {
         if ($this->isUnavailableOn($start)) {
-            return false;
-        }
-
-        $dayName = match ($start->dayOfWeek) {
-            Carbon::MONDAY => ScheduleDay::MONDAY->value,
-            Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
-            Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
-            Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
-            Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
-            Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
-            default => ScheduleDay::SUNDAY->value,
-        };
-
-        $availability = $this->scheduleAvailable()
-            ->where('is_enabled', true)
-            ->whereHas('scheduleDay', fn ($q) => $q->where('day_name', $dayName))
-            ->first();
-
-        if (! $availability) {
-            return false;
-        }
-
-        // O bloco tem de caber inteiro dentro do horário de trabalho do dia.
-        $dayStart = $start->copy()->setTimeFromTimeString($availability->time_start);
-        $dayEnd = $start->copy()->setTimeFromTimeString($availability->time_end);
-
-        if ($start->lt($dayStart) || $end->gt($dayEnd)) {
             return false;
         }
 
@@ -328,36 +309,6 @@ class Vendor extends Model implements Auditable
 
                 return $start->lt($busyEnd) && $end->gt($busyStart);
             });
-    }
-
-    /**
-     * Aceita convites automaticamente?
-     *
-     * Quando há data, olha-se para o bloco desse dia da semana; sem data, basta
-     * ter a auto-aceitação ligada nalgum bloco. O backoffice altera as sete
-     * linhas ao mesmo tempo (ToggleVendorAutoAcceptAction), por isso na prática
-     * é um interruptor único — mas o modelo suporta granularidade por dia e não
-     * há razão para a deitar fora.
-     */
-    public function autoAcceptsOn(?CarbonInterface $date = null): bool
-    {
-        $query = $this->scheduleAvailable()->where('auto_accept', true)->where('is_enabled', true);
-
-        if (! $date) {
-            return $query->exists();
-        }
-
-        $dayName = match ($date->dayOfWeek) {
-            Carbon::MONDAY => ScheduleDay::MONDAY->value,
-            Carbon::TUESDAY => ScheduleDay::TUESDAY->value,
-            Carbon::WEDNESDAY => ScheduleDay::WEDNESDAY->value,
-            Carbon::THURSDAY => ScheduleDay::THURSDAY->value,
-            Carbon::FRIDAY => ScheduleDay::FRIDAY->value,
-            Carbon::SATURDAY => ScheduleDay::SATURDAY->value,
-            default => ScheduleDay::SUNDAY->value,
-        };
-
-        return $query->whereHas('scheduleDay', fn ($q) => $q->where('day_name', $dayName))->exists();
     }
 
     /** Está indisponível neste dia concreto, apesar da disponibilidade semanal? */
