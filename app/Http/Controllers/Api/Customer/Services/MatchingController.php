@@ -330,6 +330,11 @@ class MatchingController extends Controller
                 (int) $selected->quoted_amount_for_vendor,
                 (float) $selected->quoted_distance,
                 $voucher,
+                false,
+                // Da distancia congelada, nao de um recalculo: a parcela dos
+                // quilometros nao depende da hora, por isso sai igual a que o
+                // cliente viu no cartao do profissional que escolheu.
+                $this->travelAmountForCustomer((float) $selected->quoted_distance, $this->matching->isScheduled($service)),
             );
 
             $service->amount = $total['amount'];
@@ -467,6 +472,9 @@ class MatchingController extends Controller
     private function payload(Service $service): array
     {
         $candidates = $this->matching->selectableFor($service)->load('vendor.user');
+        // O modo e do servico, nao do candidato: a deslocacao sobe de forma
+        // diferente num imediato e num agendado.
+        $isScheduled = $this->matching->isScheduled($service);
 
         return [
             'service' => [
@@ -498,6 +506,11 @@ class MatchingController extends Controller
                 'rating' => $c->rating_average === null ? null : round($c->rating_average / 100, 2),
                 'rating_count' => $c->rating_count,
                 'amount' => $c->quoted_amount,
+                // Quanto do preco e estrada. Cada profissional parte de um
+                // sitio diferente, por isso a deslocacao e uma das razoes pelas
+                // quais os tres precos nao sao iguais — e o cliente so pode
+                // pesar isso se a vir.
+                'travel_amount' => $this->travelAmountForCustomer((float) $c->quoted_distance, $isScheduled),
                 'distance' => (float) $c->quoted_distance,
                 'is_new_vendor' => $c->is_new_vendor_slot,
             ])->values(),

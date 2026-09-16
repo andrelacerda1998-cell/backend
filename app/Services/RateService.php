@@ -78,6 +78,29 @@ class RateService
         return $this->calculateForCustomerForOldPrice($hourRate, $timeService, $distance, $round, $addVat);
     }
 
+    /**
+     * A parcela da deslocacao dentro do que o CLIENTE paga.
+     *
+     * O preco e uma soma — tempo + quilometros — que depois sobe pela comissao
+     * da plataforma e pelo IVA. Mostrar so `kilometer_price x km` ao cliente
+     * seria mentir-lhe por defeito: esse e o valor que chega ao profissional,
+     * nao o que sai da carteira de quem paga.
+     *
+     * Por isso nao se repete a formula aqui. Corre-se a MESMA, com a tarifa e
+     * o tempo a zero: sobra a parcela dos quilometros, ja com a comissao e o
+     * IVA por cima. Se a formula mudar um dia, este numero acompanha sozinho e
+     * continua a ser exatamente a fatia que esta dentro do total.
+     *
+     * A comissao horaria nao entra de proposito — multiplica o tempo de
+     * trabalho, nunca a estrada.
+     */
+    public function calculateTravelForCustomer($distance, bool $isScheduled = false, $round = true, $addVat = true): float
+    {
+        return $isScheduled
+            ? $this->calculateForCustomerForSchedule(0, 0, $distance, $round, $addVat)
+            : $this->calculateForCustomerInstantService(0, 0, $distance, $round, $addVat);
+    }
+
     public function calculateForVendor($hourRate, $timeService, $distance, $round = true, $addVat = true): float
     {
         $distanceRate = $this->calculateDistanceRate($distance);

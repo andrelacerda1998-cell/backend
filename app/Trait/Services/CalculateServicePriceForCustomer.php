@@ -76,7 +76,7 @@ trait CalculateServicePriceForCustomer
      * Both `customer_amount` and `vendor_amount` are integer cents, VAT included.
      * `distance` is the single measurement used for both, so display/pricing stay in sync.
      *
-     * @return array{customer_amount: int, vendor_amount: int, distance: float|int}
+     * @return array{customer_amount: int, vendor_amount: int, travel_amount: int, distance: float|int}
      */
     protected function calculatePrices(
         ServicesType $serviceType,
@@ -128,8 +128,26 @@ trait CalculateServicePriceForCustomer
         return [
             'customer_amount' => (int) round($customerAmount),
             'vendor_amount' => (int) round($vendorAmount),
+            // Quanto do preco acima e estrada. Sai daqui e nao de uma conta
+            // feita na app: a app nao sabe o preco/km, a comissao nem o IVA, e
+            // um valor que nao bata certo com o total e pior do que nenhum.
+            'travel_amount' => $this->travelAmountForCustomer($distance, $isScheduled),
             'distance' => $distance,
         ];
+    }
+
+    /**
+     * A fatia da deslocacao dentro do preco do cliente, em centimos.
+     *
+     * So precisa da distancia e do modo: a parcela dos quilometros nao depende
+     * da tarifa do profissional nem da duracao. E o que permite mostrar a
+     * deslocacao de um preco JA CONGELADO (o candidato escolhido) sem ter de o
+     * recalcular — recalcular daria outro numero, porque a comissao horaria
+     * muda com a hora do dia.
+     */
+    protected function travelAmountForCustomer(float|int $distance, bool $isScheduled = false): int
+    {
+        return (int) round(app(RateService::class)->calculateTravelForCustomer($distance, $isScheduled));
     }
 
     protected function calculateGuestPrice(Vendor $vendor, ServicesType $serviceType, float $latitude, float $longitude, int $quantity = 1): array
@@ -141,9 +159,13 @@ trait CalculateServicePriceForCustomer
         $timeService = $this->effectiveMinutes($serviceType, $quantity);
         $distance = $this->calculateVendorDistanceInstantService($vendor, $guestAddress);
         $amount = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
+        $travelAmount = $this->travelAmountForCustomer($distance);
 
         return [
             'amount' => $amount,
+            'travel_amount' => $travelAmount,
+            'travel_amount_formated' => number_format($travelAmount / 100, 2, '.', ' '),
+            'distance' => $distance,
             'amount_formated' => number_format($amount / 100, 2, '.', ' '),
             'original_amount' => $amount,
             'original_amount_formated' => number_format($amount / 100, 2, '.', ' '),
@@ -273,6 +295,7 @@ trait CalculateServicePriceForCustomer
             $prices['distance'],
             $voucher,
             $isGuest,
+            $prices['travel_amount'],
         );
     }
 
@@ -294,6 +317,7 @@ trait CalculateServicePriceForCustomer
         float|int $distance,
         ?Voucher $voucher = null,
         bool $isGuest = false,
+        int $travelAmount = 0,
     ): array {
         $amount = $originalAmount;
         $discountAmount = 0;
@@ -336,6 +360,11 @@ trait CalculateServicePriceForCustomer
             'amount_for_vendor' => $vendorAmount,
             'amount_for_vendor_formated' => number_format($vendorAmount / 100, 2, '.', ' '),
             'distance' => $distance,
+            // Vai ao lado do total e nao no lugar dele: e uma parcela JA
+            // incluida no `original_amount`, para o checkout poder dizer de
+            // onde vem o valor em vez de o apresentar como um bloco fechado.
+            'travel_amount' => $travelAmount,
+            'travel_amount_formated' => number_format($travelAmount / 100, 2, '.', ' '),
             'original_amount' => $originalAmount,
             'original_amount_formated' => number_format($originalAmount / 100, 2, '.', ' '),
             'discount_amount' => $discountAmount,
