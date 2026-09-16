@@ -54,45 +54,42 @@ class AdvanceMatchingCommand extends Command
             $expired += $matching->expireStale($service);
             $service->load('candidates');
 
-            // PRAZO GLOBAL — antes de tudo o resto.
-            //
-            // O pedido tem um fim conhecido desde que e criado: passado esse
-            // tempo sem estar resolvido, morre. Vale para imediato e agendado,
-            // e vale mesmo que haja aceites a espera de escolha: um cliente
-            // que nao escolheu em tres minutos nao esta a olhar para o ecra, e
-            // os profissionais que disseram que sim nao podem ficar presos a
-            // isso indefinidamente.
-            //
-            // Vem ANTES da janela de escolha de proposito: aquela conta a
-            // partir do primeiro aceite e podia empurrar o desfecho para muito
-            // depois deste prazo.
-            $deadline = $service->matchingStartedAt()?->copy()->addSeconds($settings->request_deadline_seconds);
+            $customerDeadline = $matching->customerDeadline($service);
 
-            if ($deadline && $deadline->isPast()) {
-                $matching->fail($service);
-                $failed++;
+            // PRAZO GLOBAL — o pedido tem um fim conhecido desde que e criado.
+            //
+            // Continua a cortar por cima de tudo, INCLUSIVE da janela de
+            // escolha, no imediato e no agendado: ali o cliente esta a olhar
+            // para o ecra, e quem disse que sim nao pode ficar preso a uma
+            // decisao que nao chega.
+            //
+            // A excepcao e o PERSONALIZADO depois do primeiro aceite. Ali
+            // podem passar horas entre pedir e haver profissionais — o
+            // backoffice tem de definir a duracao e as categorias antes de
+            // alguem ser chamado — e este tecto conta da criacao. A
+            // notificacao chegava ao telemovel com o pedido ja morto. Um prazo
+            // que comeca a contar antes de haver alguma coisa para decidir nao
+            // e um prazo de decisao: a partir dai manda o relogio do cliente,
+            // que e o mesmo que ele ve a contar no ecra.
+            $customerClockRules = $service->is_custom && $customerDeadline !== null;
 
-                continue;
+            if (! $customerClockRules) {
+                $deadline = $service->matchingStartedAt()?->copy()->addSeconds($settings->request_deadline_seconds);
+
+                if ($deadline && $deadline->isPast()) {
+                    $matching->fail($service);
+                    $failed++;
+
+                    continue;
+                }
             }
 
             // Alguém já aceitou: a decisão é do cliente. Mas não pode ficar
             // pendente para sempre — se ele fechou a app ou desistiu, os
             // profissionais que responderam ficariam presos a um pedido que
             // nunca resolve, com a janela deles fechada e sem desfecho.
-            $firstAcceptedAt = $service->candidates()->accepted()->min('responded_at');
-
-            if ($firstAcceptedAt) {
-                // Janela por modo. No imediato o cliente está a olhar para o
-                // ecrã e uns minutos chegam; no agendado marcou para outro dia
-                // e fechou a app — dar-lhe o mesmo tempo era matar o pedido
-                // enquanto os convites ainda estavam abertos.
-                $choiceWindow = $matching->isScheduled($service)
-                    ? $settings->customer_choice_seconds_scheduled
-                    : $settings->customer_choice_seconds;
-
-                if (Carbon::parse($firstAcceptedAt)
-                    ->addSeconds($choiceWindow)
-                    ->isFuture()) {
+            if ($customerDeadline) {
+                if ($customerDeadline->isFuture()) {
                     continue;
                 }
 
@@ -149,23 +146,36 @@ class AdvanceMatchingCommand extends Command
     /**
      * Serviços escolhidos que nunca chegaram a ser pagos.
      *
-     * O prazo conta a partir da escolha (`updated_at` do serviço, gravado no
+     * Duas contas, porque sao duas promessas diferentes.
+     *
+     * Num pedido personalizado dissemos ao cliente que tem UMA HORA para
+     * escolher e pagar, e o relogio esta a andar no ecra dele desde o primeiro
+     * aceite. Um prazo proprio a comecar na escolha davas-lhe mais tempo do que
+     * o contador mostra — e um contador que chega a zero sem nada acontecer
+     * ensina o cliente a nao acreditar nele.
+     *
+     * Nos outros, o prazo conta da escolha (`updated_at` do serviço, gravado no
      * momento em que passou a AwaitingPayment). Não há coluna própria para isso
      * e não vale a pena acrescentar uma: o serviço não muda por mais nenhuma
      * razão enquanto está neste estado.
      */
     private function expireAbandonedCheckouts(MatchingService $matching, MatchingSettings $settings): int
     {
-        $cutoff = now()->subSeconds($settings->checkout_seconds);
-
         $stuck = Service::query()
             ->where('status', ServiceStatus::AWAITING_PAYMENT)
-            ->where('updated_at', '<=', $cutoff)
             ->get();
 
         $count = 0;
 
         foreach ($stuck as $service) {
+            $deadline = $service->is_custom
+                ? $matching->customerDeadline($service)
+                : $service->updated_at?->copy()->addSeconds($settings->checkout_seconds);
+
+            if (! $deadline || $deadline->isFuture()) {
+                continue;
+            }
+
             if ($matching->expireCheckout($service)) {
                 $count++;
             }

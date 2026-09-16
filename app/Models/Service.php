@@ -61,6 +61,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'custom_description',
         'custom_duration_minutes',
         'custom_dispatched_at',
+        'candidates_ready_at',
     ];
 
     protected $hidden = [
@@ -79,6 +80,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
     protected $casts = [
         'is_custom' => 'boolean',
         'custom_dispatched_at' => 'datetime',
+        'candidates_ready_at' => 'datetime',
         'status' => ServiceStatus::class,
         'payment_status' => PaymentStatus::class,
         'rsa' => 'encrypted',

@@ -146,7 +146,12 @@ class MatchingCustomerNotificationsTest extends TestCase
         app(MatchingService::class)->accept($candidate);
 
         // 200 s é a janela do imediato; aos 201 já não há decisão a esperar.
+        // O relogio do cliente arranca no servico (`candidates_ready_at`,
+        // carimbado no primeiro aceite) e nao no candidato: quando o cliente
+        // escolhe, o aceite passa a SELECTED e o conjunto esvaziava-se. Recuar
+        // os dois mantem o cenario coerente com o que a producao grava.
         $candidate->refresh()->update(['responded_at' => now()->subSeconds(201)]);
+        $service->forceFill(['candidates_ready_at' => now()->subSeconds(201)])->saveQuietly();
 
         $this->artisan('matching:advance')->assertSuccessful();
 
@@ -162,7 +167,12 @@ class MatchingCustomerNotificationsTest extends TestCase
         // O mesmo atraso que mata um pedido imediato. Aqui não pode matar: o
         // cliente marcou para outro dia e fechou a app, e os convites continuam
         // abertos durante meia hora.
+        // O relogio do cliente arranca no servico (`candidates_ready_at`,
+        // carimbado no primeiro aceite) e nao no candidato: quando o cliente
+        // escolhe, o aceite passa a SELECTED e o conjunto esvaziava-se. Recuar
+        // os dois mantem o cenario coerente com o que a producao grava.
         $candidate->refresh()->update(['responded_at' => now()->subSeconds(201)]);
+        $service->forceFill(['candidates_ready_at' => now()->subSeconds(201)])->saveQuietly();
 
         $this->artisan('matching:advance')->assertSuccessful();
 

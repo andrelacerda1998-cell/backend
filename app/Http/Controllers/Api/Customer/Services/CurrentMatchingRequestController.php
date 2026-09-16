@@ -65,6 +65,15 @@ class CurrentMatchingRequestController extends Controller
             // Num pedido imediato nao ha hora escolhida; o que responde a
             // "quando e que eu pedi isto?" e a hora a que foi feito.
             'requested_at' => $service->created_at?->toIso8601String(),
+            // Ate quando pode escolher e pagar. null enquanto nao ha ninguem
+            // para escolher — nao ha relogio do cliente antes de haver decisao.
+            // Sai do MESMO metodo que o `matching:advance` usa para matar o
+            // pedido: se fossem duas contas, a contagem no ecra chegava a zero
+            // com o pedido vivo, ou o pedido morria com o relogio a andar.
+            'expires_at' => $this->matching->customerDeadline($service)?->toIso8601String(),
+            // O relogio do telemovel pode estar errado. A app conta a partir da
+            // diferenca entre estes dois, e nao do seu proprio Date.now().
+            'server_time' => now()->toIso8601String(),
             // Escolheu e nao pagou. Sem isto o separador dizia-lhe que ainda
             // andavamos "a procura de profissionais" — quando ja tinha um
             // escolhido a espera dele. O preco vai congelado (o mesmo que viu

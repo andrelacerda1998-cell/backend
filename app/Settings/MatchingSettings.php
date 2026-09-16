@@ -59,6 +59,16 @@ class MatchingSettings extends Settings
      */
     public int $customer_choice_seconds_scheduled;
 
+    /**
+     * O mesmo, num pedido personalizado — e a cobrir escolher E pagar.
+     *
+     * Nem imediato nem agendado: o cliente descreve o problema, o backoffice
+     * define a duracao e so depois os profissionais sao chamados. Quando a
+     * notificacao chega ele ja fechou a app, e os minutos do imediato matavam
+     * o pedido antes de lhe chegar as maos.
+     */
+    public int $customer_choice_seconds_custom;
+
     /** Quanto tempo tem para pagar depois de escolher. */
     public int $checkout_seconds;
 

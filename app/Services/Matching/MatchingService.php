@@ -150,6 +150,11 @@ class MatchingService
             // decisão. A contagem é feita aqui dentro, com o serviço trancado,
             // porque duas aceitações simultâneas veriam ambas "sou a primeira".
             if ($service->candidates()->where('status', CandidateStatus::ACCEPTED)->count() === 1) {
+                // Arranca aqui o relogio do cliente. Carimbado com o servico
+                // trancado, na mesma verificacao do "primeiro sim", para duas
+                // aceitacoes simultaneas nao darem dois inicios diferentes.
+                $service->forceFill(['candidates_ready_at' => now()])->save();
+
                 $this->pushCandidatesReady($service);
             }
 
@@ -458,6 +463,59 @@ class MatchingService
             'amount' => $candidate->quoted_amount,
             'rank' => $candidate->rank,
         ]);
+    }
+
+    /**
+     * O prazo do CLIENTE: ate quando pode escolher e pagar.
+     *
+     * `null` enquanto ninguem aceitou — nao ha nada para escolher, e por isso
+     * nao ha relogio do cliente a correr. Ate la quem manda e o prazo global
+     * do pedido.
+     *
+     * Conta do PRIMEIRO aceite, e nao da criacao: e esse o momento em que o
+     * cliente passa a ter alguma coisa para decidir. Num personalizado pode
+     * haver muito tempo entre uma coisa e outra — o backoffice tem de definir
+     * a duracao e as categorias antes de alguem ser chamado.
+     *
+     * Um so metodo para os tres modos porque este valor e lido em tres sitios
+     * — o `matching:advance` a decidir se mata o pedido, o mesmo comando a
+     * decidir se mata um checkout abandonado, e o endpoint que alimenta a
+     * contagem no ecra do cliente. Se divergissem, o cliente veria um relogio
+     * a chegar a zero e o pedido vivo, ou pior: o pedido a morrer com o
+     * relogio ainda a andar.
+     */
+    public function customerDeadline(Service $service): ?CarbonInterface
+    {
+        $readyAt = $service->candidates_ready_at
+            // Pedidos que ja existiam antes da coluna. Serve durante a
+            // transicao e nao substitui o carimbo: assim que o cliente
+            // escolhe, os aceites passam a SELECTED/LOST e este conjunto
+            // esvazia-se — e por isso e que a coluna existe.
+            ?? $service->candidates()
+                ->whereIn('status', [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED])
+                ->min('responded_at');
+
+        if (! $readyAt) {
+            return null;
+        }
+
+        return Carbon::parse($readyAt)->addSeconds($this->customerWindowSeconds($service));
+    }
+
+    /**
+     * Janela por modo. No imediato o cliente esta a olhar para o ecra e uns
+     * minutos chegam; no agendado marcou para outro dia e fechou a app; no
+     * personalizado a notificacao chega quando ja nao esta a espera dela.
+     */
+    private function customerWindowSeconds(Service $service): int
+    {
+        if ($service->is_custom) {
+            return $this->settings->customer_choice_seconds_custom;
+        }
+
+        return $this->isScheduled($service)
+            ? $this->settings->customer_choice_seconds_scheduled
+            : $this->settings->customer_choice_seconds;
     }
 
     /**
