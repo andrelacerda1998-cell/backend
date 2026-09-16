@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\Customer\Services;
 use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
+use App\Enums\Services\CandidateStatus;
 use App\Models\Service;
 use App\Services\Matching\MatchingService;
+use App\Trait\Services\CalculateServicePriceForCustomer;
 
 /**
  * O pedido que está à espera do cliente, para a Home poder mostrá-lo.
@@ -23,6 +25,8 @@ use App\Services\Matching\MatchingService;
  */
 class CurrentMatchingRequestController extends Controller
 {
+    use CalculateServicePriceForCustomer;
+
     public function __construct(private readonly MatchingService $matching) {}
 
     public function __invoke()
@@ -54,7 +58,48 @@ class CurrentMatchingRequestController extends Controller
             // Quantos já se disponibilizaram. Zero é informação legítima: em
             // análise, ou ainda à espera da primeira resposta.
             'candidates_ready' => $this->countReady($service),
+            // Escolheu e nao pagou. Sem isto o separador dizia-lhe que ainda
+            // andavamos "a procura de profissionais" — quando ja tinha um
+            // escolhido a espera dele. O preco vai congelado (o mesmo que viu
+            // ao escolher) para o checkout se poder retomar sem recalcular.
+            'selected' => $this->selectedQuote($service),
         ]]);
+    }
+
+    private function selectedQuote(Service $service): ?array
+    {
+        if ($service->status !== ServiceStatus::AWAITING_PAYMENT) {
+            return null;
+        }
+
+        $selected = $service->candidates()
+            ->with('vendor.user')
+            ->where('status', CandidateStatus::SELECTED)
+            ->first();
+
+        if (! $selected) {
+            return null;
+        }
+
+        return [
+            'amount' => (int) $selected->quoted_amount,
+            'travel_amount' => $this->travelAmountForCustomer(
+                (float) $selected->quoted_distance,
+                $this->matching->isScheduled($service),
+            ),
+            'distance' => (float) $selected->quoted_distance,
+            // O checkout desenha-se a partir do tecnico e recusa-se a avancar
+            // sem ele. Quem retoma o pagamento pelo separador nao passou pelo
+            // ecra de escolha, por isso o tecnico tem de vir por aqui.
+            'vendor' => [
+                'id' => $selected->vendor_id,
+                'name' => $selected->vendor?->user?->name,
+                // null = sem avaliacoes. Nao se inventa nota.
+                'rating' => $selected->rating_average === null
+                    ? null
+                    : round($selected->rating_average / 100, 2),
+            ],
+        ];
     }
 
     private function countReady(Service $service): int
