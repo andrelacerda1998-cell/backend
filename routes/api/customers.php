@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Common\GetServiceRouteController;
+use App\Http\Controllers\Api\Customer\Address\AddressesController;
 use App\Http\Controllers\Api\Customer\Address\GetCurrentAddressController;
 use App\Http\Controllers\Api\Customer\Address\UpdateAddressController;
 use App\Http\Controllers\Api\Customer\BillingInfoController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Api\Customer\Services\CancelServiceController;
 use App\Http\Controllers\Api\Customer\Services\CheckHasAnyServiceOpenController;
 use App\Http\Controllers\Api\Customer\Services\CheckHasAnyServicePendingController;
 use App\Http\Controllers\Api\Customer\Services\CloseServiceController;
+use App\Http\Controllers\Api\Customer\Services\CurrentMatchingRequestController;
 use App\Http\Controllers\Api\Customer\Services\CustomerRateServiceController;
 use App\Http\Controllers\Api\Customer\Services\CustomerServicePhotosController;
 use App\Http\Controllers\Api\Customer\Services\GetServiceDetailsController;
@@ -60,6 +62,9 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
             // Pedido personalizado: abre em analise, sem convites; e o backoffice
             // que o envia aos profissionais (ver docs/matching.md).
             Route::post('/custom', [MatchingController::class, 'startCustom']);
+            // ANTES do /{service}: 'current' é um segmento literal e seria
+            // apanhado pelo binding do modelo.
+            Route::get('/current', CurrentMatchingRequestController::class)->middleware('throttle:60,1');
             Route::get('/{service}', [MatchingController::class, 'show'])->middleware('throttle:30,1');
             Route::post('/{service}/select/{candidate}', [MatchingController::class, 'select']);
             Route::post('/{service}/checkout', [MatchingController::class, 'checkout']);
@@ -95,11 +100,11 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
 
     // Multi-morada: um proprietário de vários alojamentos gere as moradas de cada casa.
     Route::group(['prefix' => 'addresses'], function () {
-        Route::get('/', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'index']);
-        Route::post('/', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'store'])->middleware('throttle:geocode');
-        Route::put('/{address}', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'update'])->middleware('throttle:geocode');
-        Route::delete('/{address}', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'destroy']);
-        Route::put('/{address}/main', [App\Http\Controllers\Api\Customer\Address\AddressesController::class, 'setMain']);
+        Route::get('/', [AddressesController::class, 'index']);
+        Route::post('/', [AddressesController::class, 'store'])->middleware('throttle:geocode');
+        Route::put('/{address}', [AddressesController::class, 'update'])->middleware('throttle:geocode');
+        Route::delete('/{address}', [AddressesController::class, 'destroy']);
+        Route::put('/{address}/main', [AddressesController::class, 'setMain']);
     });
 
     Route::group(['prefix' => 'payment-methods'], function () {
