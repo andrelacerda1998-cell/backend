@@ -4,6 +4,7 @@ namespace App\Notifications\Vendor;
 
 use App\Models\ServiceCandidate;
 use App\Notifications\Concerns\RespectsVendorPreference;
+use App\Notifications\Concerns\RoutesExpoToPushQueue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -22,8 +23,8 @@ use NotificationChannels\Expo\ExpoMessage;
  */
 class MatchingInvitationNotification extends Notification implements ShouldQueue
 {
-    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable, RespectsVendorPreference;
+    use RoutesExpoToPushQueue;
 
     public function __construct(private readonly ServiceCandidate $candidate) {}
 
@@ -46,11 +47,21 @@ class MatchingInvitationNotification extends Notification implements ShouldQueue
             ->playSound()
             // Canal Android dedicado: um convite silencioso é um convite perdido.
             ->channelId('requests')
-            // 'request' abre a lista de convites na app do profissional.
+            // `matching_invitation` abre o ecra do convite, com a decisao la
+            // dentro. Era 'request', que na app abre o ecra da adjudicacao
+            // direta — esse procura o pedido na lista de PENDENTES, onde um
+            // convite de selecao nunca esta, e fechava-se sozinho. Quem tocava
+            // na notificacao via o ecra abrir e fechar, sem nada.
+            //
+            // O `open_id` passa a ser o CANDIDATO e nao o servico: e o
+            // candidato que identifica o convite deste profissional (o mesmo
+            // servico tem varios). `candidate_id` fica por compatibilidade com
+            // versoes da app ja publicadas.
             ->data([
-                'open_type' => 'request',
-                'open_id' => $this->candidate->service_id,
+                'open_type' => 'matching_invitation',
+                'open_id' => $this->candidate->id,
                 'candidate_id' => $this->candidate->id,
+                'service_id' => $this->candidate->service_id,
             ]);
     }
 }

@@ -557,11 +557,39 @@ class MatchingService
             return null;
         }
 
+        $day = $pending['scheduled_day'] ?? null;
         $start = $pending['scheduled_time_start'] ?? null;
 
-        return $start
+        if (! $day) {
+            return null;
+        }
+
+        // O DIA e a HORA juntos.
+        //
+        // Isto fazia `Carbon::parse('15:00')`, que devolve HOJE as 15:00 e
+        // deita fora o `scheduled_day`. Enquanto o agendamento ainda vive em
+        // `pending_schedule_data` — ou seja, durante toda a selecao, antes de
+        // haver pagamento — a disponibilidade era verificada no dia errado.
+        //
+        // O efeito era este: um profissional livre no dia do servico, mas
+        // ocupado a essa hora HOJE, ficava de fora. Com poucos candidatos, o
+        // pedido ia direto a MatchingFailed e o cliente nao recebia proposta
+        // nenhuma — sem nada no log que explicasse porque.
+        //
+        // Sem hora, fica o dia as 00:00: melhor verificar o dia certo a uma
+        // hora aproximada do que o dia errado a hora certa.
+        if (! $start) {
+            return Carbon::parse($day);
+        }
+
+        // `scheduled_time_start` nao tem formato unico: a app do cliente manda
+        // so a hora ("15:00"), mas ha caminhos que gravam o datetime inteiro
+        // ("2026-09-17 10:00:00"). Concatenar as cegas dava
+        // "2026-09-17 2026-09-17 10:00:00", que o Carbon recusa. Se ja traz
+        // data, usa-se como esta.
+        return str_contains($start, '-')
             ? Carbon::parse($start)
-            : (($pending['scheduled_day'] ?? null) ? Carbon::parse($pending['scheduled_day']) : null);
+            : Carbon::parse($day.' '.$start);
     }
 
     public function hasEnoughAcceptances(Service $service): bool
