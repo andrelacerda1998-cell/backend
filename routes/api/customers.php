@@ -57,6 +57,9 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
         // porque abrem o pedido, quando ainda não há serviço.
         Route::group(['prefix' => 'matching'], function () {
             Route::post('/', [MatchingController::class, 'start']);
+            // Pedido personalizado: abre em analise, sem convites; e o backoffice
+            // que o envia aos profissionais (ver docs/matching.md).
+            Route::post('/custom', [MatchingController::class, 'startCustom']);
             Route::get('/{service}', [MatchingController::class, 'show'])->middleware('throttle:30,1');
             Route::post('/{service}/select/{candidate}', [MatchingController::class, 'select']);
             Route::post('/{service}/checkout', [MatchingController::class, 'checkout']);

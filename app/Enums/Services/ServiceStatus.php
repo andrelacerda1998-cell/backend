@@ -9,6 +9,9 @@ enum ServiceStatus: string
     // pagamento. Fora do conjunto de "serviço aberto" — um pedido por atribuir
     // não pode bloquear um profissional de aceitar outros (ver docs/matching.md).
     case MATCHING = 'Matching';
+    // Pedido personalizado a espera de o backoffice definir tempo e categorias.
+    // So depois passa a MATCHING e os convites saem.
+    case PENDING_REVIEW = 'PendingReview';
     // Um profissional aceitou e o cliente escolheu-o; falta o checkout. Também
     // fora do "serviço aberto": ainda não há dinheiro nem compromisso firme.
     case AWAITING_PAYMENT = 'AwaitingPayment';

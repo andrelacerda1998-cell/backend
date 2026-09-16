@@ -4,12 +4,14 @@ namespace App\Models;
 
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Models\GeneralSettings\OperationArea;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Schedule\Schedule;
 use App\Observers\ServiceObserver;
 use Bavix\Wallet\Interfaces\Customer;
 use Bavix\Wallet\Interfaces\ProductLimitedInterface;
 use Bavix\Wallet\Traits\HasWallet;
+use Carbon\CarbonInterface;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -54,6 +57,10 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'discount_amount',
         'is_test',
         'campaign_log_id',
+        'is_custom',
+        'custom_description',
+        'custom_duration_minutes',
+        'custom_dispatched_at',
     ];
 
     protected $hidden = [
@@ -70,6 +77,8 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
     ];
 
     protected $casts = [
+        'is_custom' => 'boolean',
+        'custom_dispatched_at' => 'datetime',
         'status' => ServiceStatus::class,
         'payment_status' => PaymentStatus::class,
         'rsa' => 'encrypted',
@@ -111,6 +120,44 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
      * Profissionais considerados para este serviço, incluindo os que perderam
      * — ver docs/matching.md.
      */
+    /**
+     * Categorias de um pedido personalizado, escolhidas pelo backoffice. Sao
+     * elas que decidem que profissionais sao convidados (ver MatchingScope).
+     */
+    public function operationAreas(): BelongsToMany
+    {
+        return $this->belongsToMany(OperationArea::class, 'service_operation_area');
+    }
+
+    /**
+     * Quando o pedido entrou mesmo em seleccao. Para um pedido normal e a
+     * criacao; para um personalizado e quando o backoffice o enviou — entre a
+     * criacao e o envio podem passar horas, e o prazo global nao as pode
+     * contar contra o cliente.
+     */
+    public function matchingStartedAt(): ?CarbonInterface
+    {
+        return $this->custom_dispatched_at ?? $this->created_at;
+    }
+
+    /** O bloco "personalizado" dos payloads. null quando nao e. */
+    public function customPayload(string $language = 'pt-pt'): ?array
+    {
+        if (! $this->is_custom) {
+            return null;
+        }
+
+        return [
+            'description' => $this->custom_description,
+            'duration_minutes' => $this->custom_duration_minutes,
+            'dispatched_at' => $this->custom_dispatched_at?->toIso8601String(),
+            'operation_areas' => $this->operationAreas->map(fn (OperationArea $a) => [
+                'id' => $a->id,
+                'name' => $a->getTranslation('name', $language),
+            ])->values()->all(),
+        ];
+    }
+
     public function candidates(): HasMany
     {
         return $this->hasMany(ServiceCandidate::class);
@@ -328,6 +375,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
                     'name' => $service->serviceType->operationArea->getTranslation('name', $language),
                 ],
             ] : null,
+            'custom' => $service->customPayload($language),
             'address' => $address,
             'updated_at' => $service->updated_at,
             'rating_by_vendor' => $service->rating_by_vendor,
@@ -504,6 +552,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
                     'name' => $service->serviceType->operationArea->getTranslation('name', $language),
                 ],
             ] : null,
+            'custom' => $service->customPayload($language),
             'address' => $service->address ? [
                 'name' => $service->address['name'] ?? null,
                 'additional_info' => $service->address['additional_info'] ?? null,

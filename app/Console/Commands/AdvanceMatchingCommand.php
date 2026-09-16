@@ -6,6 +6,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Services\Matching\MatchingService;
 use App\Settings\MatchingSettings;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 /**
@@ -53,6 +54,27 @@ class AdvanceMatchingCommand extends Command
             $expired += $matching->expireStale($service);
             $service->load('candidates');
 
+            // PRAZO GLOBAL — antes de tudo o resto.
+            //
+            // O pedido tem um fim conhecido desde que e criado: passado esse
+            // tempo sem estar resolvido, morre. Vale para imediato e agendado,
+            // e vale mesmo que haja aceites a espera de escolha: um cliente
+            // que nao escolheu em tres minutos nao esta a olhar para o ecra, e
+            // os profissionais que disseram que sim nao podem ficar presos a
+            // isso indefinidamente.
+            //
+            // Vem ANTES da janela de escolha de proposito: aquela conta a
+            // partir do primeiro aceite e podia empurrar o desfecho para muito
+            // depois deste prazo.
+            $deadline = $service->matchingStartedAt()?->copy()->addSeconds($settings->request_deadline_seconds);
+
+            if ($deadline && $deadline->isPast()) {
+                $matching->fail($service);
+                $failed++;
+
+                continue;
+            }
+
             // Alguém já aceitou: a decisão é do cliente. Mas não pode ficar
             // pendente para sempre — se ele fechou a app ou desistiu, os
             // profissionais que responderam ficariam presos a um pedido que
@@ -68,7 +90,7 @@ class AdvanceMatchingCommand extends Command
                     ? $settings->customer_choice_seconds_scheduled
                     : $settings->customer_choice_seconds;
 
-                if (\Carbon\Carbon::parse($firstAcceptedAt)
+                if (Carbon::parse($firstAcceptedAt)
                     ->addSeconds($choiceWindow)
                     ->isFuture()) {
                     continue;
@@ -97,7 +119,7 @@ class AdvanceMatchingCommand extends Command
             // diferença vem COM SINAL, por isso uma data no passado dava um
             // número negativo, sempre menor do que o intervalo — e a onda
             // seguinte nunca saía.
-            if ($lastNotifiedAt && \Carbon\Carbon::parse($lastNotifiedAt)
+            if ($lastNotifiedAt && Carbon::parse($lastNotifiedAt)
                 ->addSeconds($interval)
                 ->isFuture()) {
                 continue;

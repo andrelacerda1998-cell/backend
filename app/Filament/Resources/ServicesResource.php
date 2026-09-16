@@ -67,7 +67,10 @@ class ServicesResource extends Resource
                     ->formatStateUsing(fn (ServiceStatus $state) => __("$state->value"))
                     ->color(fn (ServiceStatus $state): string => match ($state) {
                         ServiceStatus::PENDING, ServiceStatus::CLOSED_PENDING_PAYMENT => 'warning',
-                        ServiceStatus::CANCELED, ServiceStatus::REFUSED, ServiceStatus::REFUSED_MBWAY => 'danger',
+                        // Em seleccao / em analise: a espera de alguem — do
+                        // profissional, do cliente ou do backoffice.
+                        ServiceStatus::PENDING_REVIEW, ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT => 'warning',
+                        ServiceStatus::CANCELED, ServiceStatus::REFUSED, ServiceStatus::REFUSED_MBWAY, ServiceStatus::MATCHING_FAILED => 'danger',
                         ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED, ServiceStatus::CLOSED, ServiceStatus::SCHEDULED => 'success',
                         ServiceStatus::PENDING_3DS, ServiceStatus::ARCHIVED, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::CANCELED_MBWAY => 'gray',
                     }),
@@ -224,6 +227,32 @@ class ServicesResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
+            // So aparece num pedido personalizado. E o que o backoffice le
+            // antes de definir a duracao e as categorias.
+            Section::make('Custom')
+                ->heading(__('backoffice/service.custom.heading'))
+                ->columns(3)
+                ->visible(fn (Service $record): bool => (bool) $record->is_custom)
+                ->schema([
+                    TextEntry::make('custom_description')
+                        ->label(__('backoffice/service.custom.description'))
+                        ->columnSpanFull(),
+                    TextEntry::make('custom_duration_minutes')
+                        ->label(__('backoffice/service.custom.duration'))
+                        ->formatStateUsing(fn ($state) => $state
+                            ? __('backoffice/service.custom.minutes', ['minutes' => $state])
+                            : __('backoffice/service.custom.not_set'))
+                        ->placeholder(__('backoffice/service.custom.not_set')),
+                    TextEntry::make('operation_areas_list')
+                        ->label(__('backoffice/service.custom.areas'))
+                        ->state(fn (Service $record): string => $record->operationAreas
+                            ->map(fn ($a) => $a->getTranslation('name', 'pt-pt'))
+                            ->join(', ') ?: __('backoffice/service.custom.not_set')),
+                    TextEntry::make('custom_dispatched_at')
+                        ->label('Enviado aos profissionais')
+                        ->dateTime('d/m/Y H:i')
+                        ->placeholder(__('backoffice/service.custom.not_set')),
+                ]),
             Section::make('Details')
                 ->heading(__('backoffice/service.infolist.details'))
                 ->columns(3)
@@ -239,8 +268,8 @@ class ServicesResource extends Resource
                         ->badge()
                         ->formatStateUsing(fn (ServiceStatus $state) => __("$state->value"))
                         ->color(fn (ServiceStatus $state): string => match ($state) {
-                            ServiceStatus::PENDING => 'warning',
-                            ServiceStatus::CANCELED, ServiceStatus::REFUSED, ServiceStatus::REFUSED_MBWAY => 'danger',
+                            ServiceStatus::PENDING, ServiceStatus::PENDING_REVIEW, ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT => 'warning',
+                            ServiceStatus::CANCELED, ServiceStatus::REFUSED, ServiceStatus::REFUSED_MBWAY, ServiceStatus::MATCHING_FAILED => 'danger',
                             ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED, ServiceStatus::CLOSED, ServiceStatus::SCHEDULED => 'success',
                             ServiceStatus::PENDING_3DS, ServiceStatus::ARCHIVED, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::CANCELED_MBWAY => 'gray',
                         }),

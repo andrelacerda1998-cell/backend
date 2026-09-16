@@ -29,5 +29,9 @@
     "This request is no longer awaiting a choice": "Este pedido já não está à espera de escolha.",
     "This request was already resolved": "Este pedido já foi resolvido.",
     "User not found": "Não encontrámos esta conta.",
-    "You have already rated this service": "Já avaliaste este serviço."
+    "You have already rated this service": "Já avaliaste este serviço.",
+    "PendingReview": "Em análise",
+    "Matching": "Em seleção",
+    "AwaitingPayment": "A aguardar pagamento",
+    "MatchingFailed": "Seleção falhou"
 }
