@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\Customer\Services;
 use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
+use App\Enums\Services\CandidateStatus;
 use App\Models\Service;
 use App\Services\Matching\MatchingService;
+use App\Trait\Services\CalculateServicePriceForCustomer;
 
 /**
  * O pedido que está à espera do cliente, para a Home poder mostrá-lo.
@@ -23,6 +25,8 @@ use App\Services\Matching\MatchingService;
  */
 class CurrentMatchingRequestController extends Controller
 {
+    use CalculateServicePriceForCustomer;
+
     public function __construct(private readonly MatchingService $matching) {}
 
     public function __invoke()
@@ -54,7 +58,64 @@ class CurrentMatchingRequestController extends Controller
             // Quantos já se disponibilizaram. Zero é informação legítima: em
             // análise, ou ainda à espera da primeira resposta.
             'candidates_ready' => $this->countReady($service),
+            // Quando: o dia e a hora pedidos, ou null se for para agora. A app
+            // formata — o dia da semana e o "hoje/amanha" dependem do fuso e do
+            // idioma de quem esta a olhar, nao do servidor.
+            'schedule' => $service->scheduleIntent(),
+            // Num pedido imediato nao ha hora escolhida; o que responde a
+            // "quando e que eu pedi isto?" e a hora a que foi feito.
+            'requested_at' => $service->created_at?->toIso8601String(),
+            // Ate quando pode escolher e pagar. null enquanto nao ha ninguem
+            // para escolher — nao ha relogio do cliente antes de haver decisao.
+            // Sai do MESMO metodo que o `matching:advance` usa para matar o
+            // pedido: se fossem duas contas, a contagem no ecra chegava a zero
+            // com o pedido vivo, ou o pedido morria com o relogio a andar.
+            'expires_at' => $this->matching->customerDeadline($service)?->toIso8601String(),
+            // O relogio do telemovel pode estar errado. A app conta a partir da
+            // diferenca entre estes dois, e nao do seu proprio Date.now().
+            'server_time' => now()->toIso8601String(),
+            // Escolheu e nao pagou. Sem isto o separador dizia-lhe que ainda
+            // andavamos "a procura de profissionais" — quando ja tinha um
+            // escolhido a espera dele. O preco vai congelado (o mesmo que viu
+            // ao escolher) para o checkout se poder retomar sem recalcular.
+            'selected' => $this->selectedQuote($service),
         ]]);
+    }
+
+    private function selectedQuote(Service $service): ?array
+    {
+        if ($service->status !== ServiceStatus::AWAITING_PAYMENT) {
+            return null;
+        }
+
+        $selected = $service->candidates()
+            ->with('vendor.user')
+            ->where('status', CandidateStatus::SELECTED)
+            ->first();
+
+        if (! $selected) {
+            return null;
+        }
+
+        return [
+            'amount' => (int) $selected->quoted_amount,
+            'travel_amount' => $this->travelAmountForCustomer(
+                (float) $selected->quoted_distance,
+                $this->matching->isScheduled($service),
+            ),
+            'distance' => (float) $selected->quoted_distance,
+            // O checkout desenha-se a partir do tecnico e recusa-se a avancar
+            // sem ele. Quem retoma o pagamento pelo separador nao passou pelo
+            // ecra de escolha, por isso o tecnico tem de vir por aqui.
+            'vendor' => [
+                'id' => $selected->vendor_id,
+                'name' => $selected->vendor?->user?->name,
+                // null = sem avaliacoes. Nao se inventa nota.
+                'rating' => $selected->rating_average === null
+                    ? null
+                    : round($selected->rating_average / 100, 2),
+            ],
+        ];
     }
 
     private function countReady(Service $service): int
