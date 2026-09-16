@@ -574,6 +574,18 @@ class MatchingService
                 : $this->settings->vendor_response_seconds_immediate
         );
 
+        // O prazo do convite nunca passa o PRAZO GLOBAL do pedido.
+        //
+        // Sem isto, um convite agendado ficava de pe 20 minutos sobre um
+        // pedido que morre aos 3 — o profissional via um contador a dizer que
+        // tinha tempo, respondia, e recebia um erro porque o pedido ja tinha
+        // fechado. Pior do que nao ter sido convidado.
+        $deadline = $service->created_at?->copy()->addSeconds($this->settings->request_deadline_seconds);
+
+        if ($deadline && $deadline->lt($window)) {
+            $window = $deadline;
+        }
+
         // O rank é contínuo ao longo das ondas. O ranking numera 1..N a cada
         // chamada, por isso sem este deslocamento a segunda onda voltava a ter
         // um rank 1 — e o cliente via dois "recomendados", ordenados ao acaso.

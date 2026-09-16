@@ -33,6 +33,19 @@ class MatchingSettings extends Settings
     public int $vendor_response_seconds_scheduled;
 
     /** Quanto tempo o cliente tem para escolher, num pedido imediato. */
+    /**
+     * Prazo GLOBAL do pedido, em segundos, a contar de quando o cliente o faz.
+     *
+     * Vale para imediato e agendado. E um tecto: as janelas por modo
+     * (`vendor_response_seconds_*`, `customer_choice_seconds*`) continuam a
+     * valer, mas nenhuma pode levar o pedido para alem disto.
+     *
+     * Existe porque o relogio do cliente so arrancava no primeiro aceite — ate
+     * la o pedido nao tinha fim conhecido, e no agendado podia ficar meia hora
+     * em silencio antes de a escolha sequer comecar.
+     */
+    public int $request_deadline_seconds;
+
     public int $customer_choice_seconds;
 
     /**
