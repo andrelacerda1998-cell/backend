@@ -120,6 +120,9 @@ return [
         // profissional sentir-se enganado quando perde — e deixar de responder.
         'description' => 'Diz se tens disponibilidade. O cliente escolhe entre quem responder.',
     ],
+    'customRequest' => [
+        'label' => 'o teu pedido personalizado',
+    ],
     'matchingCandidatesReady' => [
         'title' => 'Já há quem possa ir',
         // Diz o que falta FAZER, e não só o que aconteceu: quem recebe isto

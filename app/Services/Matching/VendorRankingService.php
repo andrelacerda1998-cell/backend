@@ -40,23 +40,22 @@ class VendorRankingService
      * @return Collection<int, RankedVendor>
      */
     public function rank(
-        ServicesType $serviceType,
+        MatchingScope $scope,
         AddressCoordinatesDTO|Address $address,
         User $customer,
         bool $immediate,
         ?CarbonInterface $scheduledFor = null,
-        int $quantity = 1,
     ): Collection {
-        $vendors = $this->eligibleVendors($serviceType, $customer, $immediate, $scheduledFor, $quantity);
+        $vendors = $this->eligibleVendors($scope, $customer, $immediate, $scheduledFor);
 
         if ($vendors->isEmpty()) {
             return collect();
         }
 
-        $ratings = $this->ratingsFor($vendors->pluck('id')->all(), $serviceType);
+        $ratings = $this->ratingsFor($vendors->pluck('id')->all(), $scope);
 
         $ranked = $vendors
-            ->map(fn (Vendor $vendor) => $this->describe($vendor, $serviceType, $address, $ratings, $immediate, $quantity))
+            ->map(fn (Vendor $vendor) => $this->describe($vendor, $scope, $address, $ratings, $immediate))
             ->filter()
             ->values();
 
@@ -104,16 +103,20 @@ class VendorRankingService
      * @return Collection<int, Vendor>
      */
     private function eligibleVendors(
-        ServicesType $serviceType,
+        MatchingScope $scope,
         User $customer,
         bool $immediate,
         ?CarbonInterface $scheduledFor,
-        int $quantity = 1,
     ): Collection {
         $isCustomerTest = (bool) ($customer->is_test ?? false);
 
+        // Num pedido de catalogo e elegivel quem faz AQUELE tipo. Num
+        // personalizado nao ha tipo: e elegivel quem faz qualquer tipo de
+        // uma das categorias que o backoffice escolheu.
         $query = Vendor::query()
-            ->whereHas('servicesTypes', fn ($q) => $q->where('services_types.id', $serviceType->id))
+            ->whereHas('servicesTypes', fn ($q) => $scope->isCustom()
+                ? $q->whereIn('services_types.operation_area_id', $scope->operationAreaIds)
+                : $q->where('services_types.id', $scope->serviceType->id))
             // Contas de teste e contas reais nunca se cruzam — mesma regra que
             // o findVendor() já aplicava ao pedido direto.
             ->whereHas('user', fn ($q) => $q->where('is_test', $isCustomerTest));
@@ -138,7 +141,7 @@ class VendorRankingService
             // Vendor::hasFreeSlot). O horario semanal declarado deixou de
             // contar — quem nao quiser aquele trabalho recusa o convite, que
             // ja lhe diz o servico, o valor, a morada e a hora.
-            $slotEnd = $scheduledFor->copy()->addMinutes($this->slotMinutes($serviceType, $quantity));
+            $slotEnd = $scheduledFor->copy()->addMinutes($this->slotMinutes($scope));
 
             $vendors = $vendors->filter(fn (Vendor $v) => $v->hasFreeSlot($scheduledFor, $slotEnd));
         }
@@ -154,11 +157,9 @@ class VendorRankingService
      * assume-se uma hora — não bloquear nada seria pior, porque deixaria passar
      * sobreposições reais.
      */
-    private function slotMinutes(ServicesType $serviceType, int $quantity): int
+    private function slotMinutes(MatchingScope $scope): int
     {
-        $minutes = $serviceType->time ? $this->effectiveMinutes($serviceType, $quantity) : 0;
-
-        return $minutes > 0 ? $minutes : 60;
+        return $scope->minutes > 0 ? $scope->minutes : 60;
     }
 
     /**
@@ -173,13 +174,19 @@ class VendorRankingService
      * @param  int[]  $vendorIds
      * @return array<int, array{avg: float, count: int, bad_start: bool}>
      */
-    public function ratingsFor(array $vendorIds, ServicesType $serviceType): array
+    public function ratingsFor(array $vendorIds, MatchingScope|ServicesType $scope): array
     {
         if (empty($vendorIds)) {
             return [];
         }
 
-        $typeIds = ServicesType::where('operation_area_id', $serviceType->operation_area_id)->pluck('id');
+        // Num personalizado as avaliacoes que contam sao as de todas as
+        // categorias escolhidas — e o trabalho que ele vai fazer.
+        $areaIds = $scope instanceof MatchingScope
+            ? $scope->operationAreaIds
+            : [(int) $scope->operation_area_id];
+
+        $typeIds = ServicesType::whereIn('operation_area_id', $areaIds)->pluck('id');
 
         $aggregate = Service::query()
             ->select('vendor_id', DB::raw('AVG(rating_by_customer) as avg_rating'), DB::raw('COUNT(rating_by_customer) as total'))
@@ -263,26 +270,17 @@ class VendorRankingService
 
     private function describe(
         Vendor $vendor,
-        ServicesType $serviceType,
+        MatchingScope $scope,
         AddressCoordinatesDTO|Address $address,
         array $ratings,
         bool $immediate,
-        int $quantity,
     ): ?RankedVendor {
         try {
-            $prices = $this->calculatePrices($serviceType, $address, $vendor, ! $immediate, $quantity);
+            $prices = $this->calculatePricesForMinutes($scope->minutes, $address, $vendor, ! $immediate);
         } catch (\Throwable $e) {
-            // Sem localização utilizável não há distância, logo não há preço.
-            // Fica de fora em vez de entrar com um orçamento inventado.
-            //
-            // Acontece a sério: para agendados a distância usa a morada de
-            // agenda (HasVendorDistance::calculateVendorDistance) e um
-            // profissional sem moradas rebenta ali. Registamos, porque um
-            // profissional que desaparece dos rankings sem deixar rasto é
-            // indistinguível de um que nunca foi elegível.
             \Log::warning('[matching] profissional excluído do ranking', [
                 'vendor_id' => $vendor->id,
-                'service_type_id' => $serviceType->id,
+                'scope' => $scope->label(),
                 'reason' => $e->getMessage(),
             ]);
 

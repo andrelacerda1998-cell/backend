@@ -4,15 +4,20 @@ namespace App\Filament\Resources\ServicesResource\Pages;
 
 use App\Enums\Services\ServiceStatus;
 use App\Filament\Resources\ServicesResource;
+use App\Models\GeneralSettings\OperationArea;
 use App\Notifications\Customer\ScheduleCanceledByVendorNotification;
 use App\Services\Common\Services\CancelService;
 use App\Services\Common\Services\CloseService;
+use App\Services\Matching\MatchingService;
 use Filament\Actions;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Support\Facades\DB;
 
 class ViewService extends ViewRecord
 {
@@ -31,6 +36,84 @@ class ViewService extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            // Pedido personalizado: e aqui que o backoffice faz a parte dele.
+            // Ate carregar nisto o pedido esta em analise e nenhum profissional
+            // sabe que existe. Ao confirmar, entra em seleccao e a primeira
+            // onda de convites sai — o mesmo caminho de um pedido de catalogo,
+            // com a duracao e as categorias daqui em vez das do tipo.
+            Actions\Action::make('dispatch_custom_request')
+                ->label(__('backoffice/service.custom.dispatch'))
+                ->color('warning')
+                ->icon('heroicon-o-paper-airplane')
+                ->modalHeading(__('backoffice/service.custom.dispatch'))
+                ->modalDescription(__('backoffice/service.custom.dispatch_description'))
+                ->modalSubmitActionLabel(__('backoffice/service.custom.dispatch_submit'))
+                ->visible(fn (): bool => (bool) $this->record->is_custom
+                    && $this->record->status === ServiceStatus::PENDING_REVIEW)
+                ->form([
+                    TextInput::make('custom_duration_minutes')
+                        ->label(__('backoffice/service.custom.dispatch_minutes'))
+                        ->helperText(__('backoffice/service.custom.dispatch_minutes_help'))
+                        ->numeric()
+                        ->integer()
+                        ->minValue(15)
+                        ->step(15)
+                        ->suffix('min')
+                        ->required()
+                        ->default(fn () => $this->record->custom_duration_minutes),
+                    Select::make('operation_areas')
+                        ->label(__('backoffice/service.custom.dispatch_areas'))
+                        ->multiple()
+                        ->required()
+                        ->options(fn () => OperationArea::query()->get()
+                            ->mapWithKeys(fn (OperationArea $a) => [$a->id => $a->getTranslation('name', 'pt-pt')])
+                            ->all())
+                        ->default(fn () => $this->record->operationAreas()->pluck('operation_areas.id')->all()),
+                ])
+                ->action(function (array $data): void {
+                    try {
+                        $count = DB::transaction(function () use ($data): int {
+                            $this->record->custom_duration_minutes = (int) $data['custom_duration_minutes'];
+                            $this->record->custom_dispatched_at = now();
+                            $this->record->status = ServiceStatus::MATCHING;
+                            $this->record->save();
+                            $this->record->operationAreas()->sync(array_map('intval', $data['operation_areas']));
+
+                            $candidates = app(MatchingService::class)->dispatchNextWave($this->record->refresh());
+
+                            // Ninguem elegivel: falha ja e avisa o cliente, como
+                            // o start() faz num pedido de catalogo. Deixa-lo em
+                            // seleccao seria uma espera que nunca resolve.
+                            if ($candidates->isEmpty()) {
+                                app(MatchingService::class)->fail($this->record);
+                            }
+
+                            return $candidates->count();
+                        });
+
+                        $this->refreshFormData(['status', 'custom_duration_minutes', 'custom_dispatched_at']);
+
+                        if ($count === 0) {
+                            Notification::make()
+                                ->title(__('backoffice/service.custom.dispatch_none'))
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title(__('backoffice/service.custom.dispatch_success', ['count' => $count]))
+                            ->success()
+                            ->send();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title(__('backoffice/service.custom.dispatch_error'))
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
             Actions\Action::make('close_service')
                 ->label('Fechar Serviço')
                 ->color('success')

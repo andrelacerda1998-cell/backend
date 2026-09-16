@@ -8,6 +8,7 @@ use App\Exceptions\Api\Customer\CustomerDontHaveMainAddress;
 use App\Exceptions\Api\Vendor\VendorCantAcceptServices;
 use App\Models\Address;
 use App\Models\GeneralSettings\ServicesType;
+use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Voucher;
 use App\Services\RateService;
@@ -84,10 +85,31 @@ trait CalculateServicePriceForCustomer
         bool $isScheduled = false,
         int $quantity = 1
     ): array {
+        return $this->calculatePricesForMinutes(
+            $this->effectiveMinutes($serviceType, $quantity),
+            $address,
+            $vendor,
+            $isScheduled,
+        );
+    }
+
+    /**
+     * A mesma conta, a partir da duracao em minutos em vez do tipo.
+     *
+     * E o que um pedido personalizado precisa: nao tem tipo de catalogo, tem
+     * a duracao que o backoffice definiu. A taxa horaria continua a ser a do
+     * profissional; a distancia continua a entrar como sempre.
+     */
+    protected function calculatePricesForMinutes(
+        int $minutes,
+        AddressCoordinatesDTO|Address $address,
+        Vendor $vendor,
+        bool $isScheduled = false,
+    ): array {
         $rateService = app(RateService::class);
 
         $hourlyRate = $vendor->getRawOriginal('price_rate');
-        $timeService = $this->effectiveMinutes($serviceType, $quantity);
+        $timeService = $minutes;
 
         if ($isScheduled) {
             $customerCoords = $address instanceof AddressCoordinatesDTO
@@ -263,7 +285,7 @@ trait CalculateServicePriceForCustomer
      * daria outro número, porque a comissão horária muda com a hora do dia
      * (ver docs/matching.md).
      *
-     * @param  \App\Models\User|null  $customer  null para convidado (sem saldo nem histórico de cupões)
+     * @param  User|null  $customer  null para convidado (sem saldo nem histórico de cupões)
      */
     protected function buildTransactionTotals(
         $customer,

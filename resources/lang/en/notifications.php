@@ -120,6 +120,9 @@ return [
         // feel cheated when they lose — and stop replying.
         'description' => 'Tell us if you are available. The customer picks from whoever replies.',
     ],
+    'customRequest' => [
+        'label' => 'your custom request',
+    ],
     'matchingCandidatesReady' => [
         'title' => 'Someone can come',
         // Say what to DO, not just what happened: whoever gets this has a

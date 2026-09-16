@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api\Customer\Services;
 use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Exceptions\MatchingCheckoutException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\MatchingCheckoutRequest;
-use App\Jobs\Services\MbwayPaymentCheckJob;
+use App\Http\Requests\Customer\StartCustomMatchingRequest;
 use App\Http\Requests\Customer\StartMatchingRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
+use App\Jobs\Services\MbwayPaymentCheckJob;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
@@ -20,7 +22,6 @@ use App\Services\Matching\MatchingService;
 use App\Settings\MatchingSettings;
 use App\Trait\Services\CalculateServicePriceForCustomer;
 use App\Trait\Services\ProcessesServicePayment;
-use App\Exceptions\MatchingCheckoutException;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
@@ -39,8 +40,7 @@ class MatchingController extends Controller
     public function __construct(
         private MatchingService $matching,
         private MatchingSettings $settings,
-    ) {
-    }
+    ) {}
 
     /**
      * Abre o pedido e convida a primeira onda.
@@ -142,6 +142,111 @@ class MatchingController extends Controller
             ]);
 
             return new ApiErrorResponse($e);
+        }
+    }
+
+    /**
+     * Abre um pedido personalizado.
+     *
+     * Ao contrario do start(): nao ha tipo de servico, nao ha preco e NAO
+     * saem convites. O pedido fica em PENDING_REVIEW ate o backoffice definir
+     * a duracao e as categorias — so ai entra em seleccao, pela accao do
+     * backoffice (ViewService). Para o cliente, a partir daqui e esperar por
+     * uma notificacao.
+     */
+    public function startCustom(StartCustomMatchingRequest $request): ApiSuccessResponse|ApiErrorResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            $customer = $this->fetchCustomer();
+            $address = $request->filled('address_id')
+                ? $this->fetchCustomerAddressById($customer, $request->integer('address_id'))
+                : $this->fetchCustomerMainAddress($customer);
+            $isScheduled = $request->boolean('scheduled');
+
+            // Um pedido de cada vez, como no start(). Inclui-se PENDING_REVIEW:
+            // um personalizado em analise conta como aberto.
+            $existing = Service::query()
+                ->where('customer_id', $customer->id)
+                ->whereIn('status', [ServiceStatus::PENDING_REVIEW, ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT])
+                ->latest('id')
+                ->first();
+
+            if ($existing) {
+                DB::commit();
+
+                return new ApiSuccessResponse($this->payload($existing));
+            }
+
+            $service = new Service([
+                'customer_id' => $customer->id,
+                'vendor_id' => null,
+                'services_type_id' => null,
+                'is_custom' => true,
+                'custom_description' => trim((string) $request->string('description')),
+                'quantity' => 1,
+                'status' => ServiceStatus::PENDING_REVIEW,
+                'is_test' => (bool) ($customer->is_test ?? false),
+                'address' => [
+                    'name' => $address->name,
+                    'street_name' => $address->street_name,
+                    'street_number' => $address->street_number,
+                    'additional_info' => $address->additional_info,
+                    'postal_code' => $address->postal_code,
+                    'city' => $address->city,
+                    'state' => $address->state,
+                    'country' => $address->country,
+                    'latitude' => $address->latitude,
+                    'longitude' => $address->longitude,
+                ],
+            ]);
+            $service->payment_status = PaymentStatus::PENDING;
+
+            if ($isScheduled) {
+                $service->pending_schedule_data = [
+                    'scheduled' => true,
+                    'schedule' => $request->input('schedule', []),
+                ];
+            }
+
+            $service->save();
+
+            // As fotos sao o que permite ao backoffice perceber o trabalho sem
+            // ligar ao cliente. Vem da coleccao pendente do utilizador, como no
+            // fluxo antigo (OpenServiceController).
+            $this->attachPendingPhotos($service, $customer, $request->input('photo_ids'));
+
+            DB::commit();
+
+            return new ApiSuccessResponse($this->payload($service->refresh()));
+        } catch (Exception $e) {
+            DB::rollBack();
+            \Log::error('[matching] falha ao abrir pedido personalizado', [
+                'customer_id' => auth('api')->id(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return new ApiErrorResponse($e);
+        }
+    }
+
+    private function attachPendingPhotos(Service $service, $customer, ?array $ids): void
+    {
+        try {
+            $pending = $customer->getMedia(CustomerServicePhotosController::PENDING_COLLECTION);
+            if ($ids) {
+                $pending = $pending->whereIn('id', $ids);
+            }
+            $pending
+                ->take(CustomerServicePhotosController::MAX_PHOTOS)
+                ->each(fn ($media) => $media->move($service, 'customer'));
+        } catch (Exception $e) {
+            // Uma foto que falhe nao pode impedir o pedido de existir.
+            \Log::warning('Falha a anexar fotos ao pedido personalizado', [
+                'service_id' => $service->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -375,6 +480,11 @@ class MatchingController extends Controller
                 // ficar; no agendado podem demorar meia hora, e mandar o cliente
                 // olhar para o ecrã todo esse tempo seria mentir-lhe.
                 'scheduled' => $this->matching->isScheduled($service),
+                // Pedido personalizado: a app precisa de saber que esta em
+                // analise (PENDING_REVIEW) e nao a procura — sao esperas
+                // diferentes, e so uma delas tem relogio.
+                'is_custom' => (bool) $service->is_custom,
+                'custom' => $service->customPayload(),
             ],
             'candidates' => $candidates->map(fn (ServiceCandidate $c) => [
                 'id' => $c->id,

@@ -547,7 +547,7 @@ class MatchingService
         $service->loadMissing('serviceType', 'customer');
 
         return $this->ranking->rank(
-            serviceType: $service->serviceType,
+            scope: MatchingScope::forService($service),
             address: new AddressCoordinatesDTO(
                 (float) ($service->address['latitude'] ?? 0),
                 (float) ($service->address['longitude'] ?? 0),
@@ -555,7 +555,6 @@ class MatchingService
             customer: $service->customer,
             immediate: $immediate,
             scheduledFor: $this->scheduledStartAt($service),
-            quantity: $service->quantity ?? 1,
         );
     }
 
@@ -580,7 +579,9 @@ class MatchingService
         // pedido que morre aos 3 — o profissional via um contador a dizer que
         // tinha tempo, respondia, e recebia um erro porque o pedido ja tinha
         // fechado. Pior do que nao ter sido convidado.
-        $deadline = $service->created_at?->copy()->addSeconds($this->settings->request_deadline_seconds);
+        // Do momento em que entrou em seleccao — num personalizado e o envio
+        // pelo backoffice, nao a criacao.
+        $deadline = $service->matchingStartedAt()?->copy()->addSeconds($this->settings->request_deadline_seconds);
 
         if ($deadline && $deadline->lt($window)) {
             $window = $deadline;

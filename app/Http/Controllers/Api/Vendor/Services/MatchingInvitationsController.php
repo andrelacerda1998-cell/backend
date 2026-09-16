@@ -27,9 +27,7 @@ class MatchingInvitationsController extends Controller
     /** A janela tem de concentrar pelo menos isto para valer a pena dizê-lo. */
     private const MIN_SHARE_FOR_INSIGHT = 0.35;
 
-    public function __construct(private MatchingService $matching)
-    {
-    }
+    public function __construct(private MatchingService $matching) {}
 
     /** Convites com a janela ainda aberta. */
     public function index(): ApiSuccessResponse
@@ -157,7 +155,7 @@ class MatchingInvitationsController extends Controller
      * Dia e hora pretendidos, venham da agenda já materializada ou da intenção
      * guardada enquanto ela não pode existir.
      */
-    private function scheduleFor(?\App\Models\Service $service): ?array
+    private function scheduleFor(?Service $service): ?array
     {
         if (! $service) {
             return null;
@@ -206,6 +204,13 @@ class MatchingInvitationsController extends Controller
                 'name' => $service->serviceType->getTranslation('name', auth()->user()->language ?? 'pt-pt'),
                 'time' => $service->serviceType->time,
             ] : null,
+            // Personalizado: sem tipo, e a descricao que diz o trabalho, e a
+            // duracao vem do backoffice. Vai sempre `duration_minutes` para a
+            // app nao ter de saber de onde veio.
+            'custom' => $service?->customPayload(auth()->user()->language ?? 'pt-pt'),
+            'duration_minutes' => $service?->is_custom
+                ? $service->custom_duration_minutes
+                : $service?->serviceType?->time,
             'address' => $service?->address ? [
                 'city' => $service->address['city'] ?? null,
                 'postal_code' => $service->address['postal_code'] ?? null,

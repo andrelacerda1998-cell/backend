@@ -66,7 +66,7 @@ class AdvanceMatchingCommand extends Command
             // Vem ANTES da janela de escolha de proposito: aquela conta a
             // partir do primeiro aceite e podia empurrar o desfecho para muito
             // depois deste prazo.
-            $deadline = $service->created_at?->copy()->addSeconds($settings->request_deadline_seconds);
+            $deadline = $service->matchingStartedAt()?->copy()->addSeconds($settings->request_deadline_seconds);
 
             if ($deadline && $deadline->isPast()) {
                 $matching->fail($service);

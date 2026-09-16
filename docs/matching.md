@@ -286,6 +286,34 @@ Nenhum destes números é inventado aqui; são pontos de calibração com dados 
 | `new_vendor_min_ratings` | 5 | abaixo disto conta como profissional novo |
 | `require_recent_activity_minutes` | 15 | para entrar na shortlist do imediato |
 
+## Pedido personalizado
+
+Um pedido sem tipo de catálogo. O cliente descreve o que precisa (e junta
+fotos); o backoffice define **quanto tempo leva** e **que categorias** o podem
+fazer; só então o matching arranca — pelo mesmo caminho de sempre.
+
+O que muda, e só isto:
+
+- `services.is_custom`, `custom_description`, `custom_duration_minutes`,
+  `custom_dispatched_at`; e a tabela `service_operation_area` com as categorias
+  escolhidas.
+- Um estado novo antes de `Matching`: **`PendingReview`**. Nenhum convite sai
+  enquanto está aqui. Sai dele pela acção *Definir e enviar aos profissionais*
+  na página do serviço no backoffice.
+- O ranking deixou de receber um `ServicesType` e passou a receber um
+  `MatchingScope` — o denominador comum entre "tipo de catálogo" e "categorias
+  + duração". Num personalizado: elegível é quem faz qualquer tipo das
+  categorias escolhidas; as avaliações que contam são as dessas categorias; a
+  duração cotada e reservada é a do backoffice (`calculatePricesForMinutes`,
+  a mesma conta do pricing com os minutos dados em vez de tirados do tipo).
+- O prazo global do pedido conta de `matchingStartedAt()`: no personalizado é
+  `custom_dispatched_at`, não `created_at` — entre um e outro podem passar
+  horas de análise, e não são do cliente.
+
+O que **não** muda: aceitar, escolher, o checkout e o pagamento. O cliente
+recebe a mesma `MatchingCandidatesReadyNotification` (com "o teu pedido
+personalizado" no lugar do tipo) e escolhe 1 dos 3 no mesmo ecrã.
+
 ## O que este documento NÃO decide
 
 - **Os valores acima.** São pontos de partida plausíveis, não regras de negócio.
