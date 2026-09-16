@@ -58,6 +58,13 @@ class CurrentMatchingRequestController extends Controller
             // Quantos já se disponibilizaram. Zero é informação legítima: em
             // análise, ou ainda à espera da primeira resposta.
             'candidates_ready' => $this->countReady($service),
+            // Quando: o dia e a hora pedidos, ou null se for para agora. A app
+            // formata — o dia da semana e o "hoje/amanha" dependem do fuso e do
+            // idioma de quem esta a olhar, nao do servidor.
+            'schedule' => $service->scheduleIntent(),
+            // Num pedido imediato nao ha hora escolhida; o que responde a
+            // "quando e que eu pedi isto?" e a hora a que foi feito.
+            'requested_at' => $service->created_at?->toIso8601String(),
             // Escolheu e nao pagou. Sem isto o separador dizia-lhe que ainda
             // andavamos "a procura de profissionais" — quando ja tinha um
             // escolhido a espera dele. O preco vai congelado (o mesmo que viu

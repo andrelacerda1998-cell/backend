@@ -158,6 +158,39 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         ];
     }
 
+    /**
+     * Dia e hora pretendidos, venham da agenda ja materializada ou da intencao
+     * guardada enquanto ela nao pode existir (`schedule.vendor_id` e NOT NULL,
+     * e antes da escolha ainda nao ha profissional).
+     *
+     * Vive aqui e nao num controlador porque ja sao dois a precisar dela — o
+     * convite do tecnico e o pedido em curso do cliente — e as duas leituras
+     * TEM de dar a mesma hora. Duplicada, divergia a primeira vez que alguem
+     * mexesse num dos lados.
+     *
+     * @return array{scheduled_day: ?string, scheduled_time_start: ?string}|null  null = imediato
+     */
+    public function scheduleIntent(): ?array
+    {
+        if ($this->schedule) {
+            return [
+                'scheduled_day' => $this->schedule->scheduled_day,
+                'scheduled_time_start' => $this->schedule->scheduled_time_start,
+            ];
+        }
+
+        $pending = $this->pending_schedule_data['schedule'] ?? null;
+
+        if (! ($this->pending_schedule_data['scheduled'] ?? false) || ! $pending) {
+            return null;
+        }
+
+        return [
+            'scheduled_day' => $pending['scheduled_day'] ?? null,
+            'scheduled_time_start' => $pending['scheduled_time_start'] ?? null,
+        ];
+    }
+
     public function candidates(): HasMany
     {
         return $this->hasMany(ServiceCandidate::class);

@@ -151,33 +151,10 @@ class MatchingInvitationsController extends Controller
         return $candidate->vendor_id === auth()->user()->vendor?->id;
     }
 
-    /**
-     * Dia e hora pretendidos, venham da agenda já materializada ou da intenção
-     * guardada enquanto ela não pode existir.
-     */
+    /** Dia e hora pretendidos. A conta e do modelo: ver `scheduleIntent`. */
     private function scheduleFor(?Service $service): ?array
     {
-        if (! $service) {
-            return null;
-        }
-
-        if ($service->schedule) {
-            return [
-                'scheduled_day' => $service->schedule->scheduled_day,
-                'scheduled_time_start' => $service->schedule->scheduled_time_start,
-            ];
-        }
-
-        $pending = $service->pending_schedule_data['schedule'] ?? null;
-
-        if (! ($service->pending_schedule_data['scheduled'] ?? false) || ! $pending) {
-            return null;
-        }
-
-        return [
-            'scheduled_day' => $pending['scheduled_day'] ?? null,
-            'scheduled_time_start' => $pending['scheduled_time_start'] ?? null,
-        ];
+        return $service?->scheduleIntent();
     }
 
     private function payload(ServiceCandidate $candidate): array
