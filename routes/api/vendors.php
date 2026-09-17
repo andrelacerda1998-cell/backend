@@ -153,6 +153,10 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
     Route::group(['prefix' => 'schedule'], function () {
         Route::get('/settings/{userId}', [ScheduleController::class, 'settings']);
         Route::post('/update', [ScheduleController::class, 'update']);
+        // So a morada de onde o tecnico sai para um agendado. O `/update`
+        // exige tambem os dias da semana; no "completar perfil" ha uma coisa a
+        // pedir, nao duas.
+        Route::post('/address', [ScheduleController::class, 'updateAddress']);
         Route::post('/update-availability', [ScheduleController::class, 'updateAvailability']);
         Route::get('/schedules', [ScheduleController::class, 'schedules']);
         Route::post('/accept', [ScheduleController::class, 'storeSchedule']);

@@ -8,7 +8,9 @@ use App\Enums\Services\ServiceStatus;
 use App\Events\Customer\Schedule\AcceptScheduleEvent;
 use App\Events\Vendor\Schedule\ServiceScheduledEvent;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Vendor\Schedule\UpdateScheduleAddress;
 use App\Http\Requests\Api\Vendor\Schedule\UpdateScheduleAvailability;
+use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Schedule\Schedule;
 use App\Models\Schedule\ScheduleDays;
@@ -41,6 +43,50 @@ class ScheduleController extends Controller
             ->toArray();
 
         return new ApiSuccessResponse($scheduleAvailability);
+    }
+
+    /**
+     * So a morada de onde o tecnico sai para um servico agendado.
+     *
+     * Existe a parte do `update()` porque aquele exige os dias da semana. No
+     * "completar perfil" ha uma coisa a pedir, nao duas: e desta que o
+     * matching precisa para calcular a distancia — e o preco — dos agendados.
+     *
+     * A escrita e chaveada pelo TIPO, como em toda a parte: com o array vazio
+     * o `updateOrCreate` reescrevia a morada fiscal.
+     *
+     * @throws Exception
+     */
+    public function updateAddress(UpdateScheduleAddress $request): ApiSuccessResponse|ApiErrorResponse
+    {
+        $data = $request->validated();
+        $geoCoordinates = $this->addressService->getCoordinates($data);
+
+        if (! is_array($geoCoordinates) || empty($geoCoordinates['address_components'] ?? null) || ! isset($geoCoordinates['lat'], $geoCoordinates['lng'])) {
+            return new ApiErrorResponse(new Exception('Could not geocode address.'), 'Address is invalid', 400);
+        }
+
+        // Derivar o vendor do token, nunca do corpo do pedido (IDOR de escrita).
+        $vendor = auth()->user()->vendor()->firstOrFail();
+
+        try {
+            $addressData = $this->addressService->transformAddress([
+                'address_name' => 'Schedule Address',
+                ...$data,
+            ], $geoCoordinates);
+        } catch (Exception $e) {
+            return new ApiErrorResponse($e, 'Address is invalid', 400);
+        }
+
+        $vendor->addresses()->updateOrCreate(
+            ['address_type' => AddressType::SCHEDULE_ADDRESS],
+            [
+                ...$addressData,
+                'user_id' => $vendor->user->id,
+            ],
+        );
+
+        return new ApiSuccessResponse(['address' => $addressData]);
     }
 
     /**

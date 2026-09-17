@@ -73,6 +73,9 @@ class MoradasDoTecnicoTest extends TestCase
             'user_id' => $vendor->user_id,
             'address_type' => $tipo,
             'address_name' => 'Morada '.$tipo->value,
+            // `name` e o campo que o perfil devolve (vem do formatted_address
+            // do geocoder nas moradas a serio).
+            'name' => 'Rua Antiga 1, Almada',
             'street_name' => 'Rua Antiga',
             'street_number' => '1',
             'postal_code' => '2800-000',
@@ -140,6 +143,48 @@ class MoradasDoTecnicoTest extends TestCase
             ->getJson('/api/v1/vendor/address')
             ->assertOk()
             ->assertJsonPath('data.id', $fiscal->id);
+    }
+
+    /**
+     * O endpoint que o "completar perfil" usa: grava SO a morada de
+     * agendamento, sem exigir os dias da semana, e sem tocar na fiscal.
+     */
+    public function test_o_completar_perfil_grava_a_morada_de_agendamento_sem_tocar_na_fiscal(): void
+    {
+        $vendor = Vendor::factory()->create();
+        $fiscal = $this->morada($vendor, AddressType::FISCAL_ADDRESS);
+
+        $this->actingAs($vendor->user, 'api')
+            ->postJson('/api/v1/vendor/schedule/address', $this->payload())
+            ->assertOk();
+
+        $moradas = $vendor->refresh()->addresses;
+
+        $this->assertNotNull($moradas->firstWhere('address_type', AddressType::SCHEDULE_ADDRESS));
+        $this->assertDatabaseHas('addresses', [
+            'id' => $fiscal->id,
+            'address_type' => AddressType::FISCAL_ADDRESS->value,
+        ]);
+    }
+
+    /** O perfil tem de dizer se ela ja existe — e o sinal que o passo usa. */
+    public function test_o_perfil_diz_se_a_morada_de_agendamento_ja_existe(): void
+    {
+        $vendor = Vendor::factory()->create();
+
+        $this->actingAs($vendor->user, 'api')
+            ->getJson("/api/v1/auth/me")
+            ->assertOk()
+            ->assertJsonPath('data.schedule_address', null);
+
+        $this->morada($vendor, AddressType::SCHEDULE_ADDRESS);
+
+        // Instancia fresca: o `actingAs` guarda o utilizador entre pedidos e a
+        // relacao `addresses` ficava em cache do pedido anterior. Em producao
+        // cada pedido carrega de novo; aqui e preciso dize-lo.
+        $resposta = $this->actingAs($vendor->user->fresh(), 'api')->getJson("/api/v1/auth/me")->assertOk();
+
+        $this->assertNotNull($resposta->json('data.schedule_address'));
     }
 
     /**
