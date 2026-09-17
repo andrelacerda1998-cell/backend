@@ -4,24 +4,18 @@ namespace App\Http\Controllers\Api\Vendor;
 
 use App\Enums\Services\AddressType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Customer\Address\UpdateRequest;
 use App\Http\Requests\Api\Vendor\Address\VerifyRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
-use App\Models\User;
 use App\Services\Common\AddressService;
 use Exception;
-use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
-use Spatie\Geocoder\Facades\Geocoder;
 use Illuminate\Contracts\Support\Responsable;
-use App\Http\Requests\Api\Customer\Address\UpdateRequest;
+use Illuminate\Support\Facades\Log;
 
 class AddressController extends Controller
 {
-    public function __construct(private readonly AddressService $addressService)
-    {
-    }
+    public function __construct(private readonly AddressService $addressService) {}
 
     public function get()
     {
@@ -45,9 +39,10 @@ class AddressController extends Controller
         $data = $request->validated();
         $geoAddress = $this->addressService->getCoordinates($data);
 
-        if (!is_array($geoAddress) || empty($geoAddress['address_components'] ?? null) || !isset($geoAddress['lat'], $geoAddress['lng'])) {
-            Log::info('address',$geoAddress);
-            return new ApiErrorResponse(new \Exception('Could not geocode address.'), 'Address is invalid', 400);
+        if (! is_array($geoAddress) || empty($geoAddress['address_components'] ?? null) || ! isset($geoAddress['lat'], $geoAddress['lng'])) {
+            Log::info('address', $geoAddress);
+
+            return new ApiErrorResponse(new Exception('Could not geocode address.'), 'Address is invalid', 400);
         }
 
         $vendor = auth()->user()->vendor;
@@ -57,8 +52,8 @@ class AddressController extends Controller
                 'address_name' => 'Fiscal Address',
                 ...$data,
             ], $geoAddress);
-        } catch (\Exception $e) {
-            return new ApiErrorResponse($e, "Address is invalid", 400);
+        } catch (Exception $e) {
+            return new ApiErrorResponse($e, 'Address is invalid', 400);
         }
 
         // A chave e o TIPO. Com o array vazio, o `updateOrCreate` agarrava a
@@ -97,6 +92,6 @@ class AddressController extends Controller
             }
         }
 
-        return new APISuccessResponse(['address' => $geoAddress]);
+        return new ApiSuccessResponse(['address' => $geoAddress]);
     }
 }

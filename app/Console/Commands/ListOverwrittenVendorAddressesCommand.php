@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\Services\AddressType;
 use App\Models\Address;
 use App\Models\Vendor;
 use Illuminate\Console\Command;

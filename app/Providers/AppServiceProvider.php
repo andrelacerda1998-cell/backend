@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Services\Common\PhoneLoginSmsService;
+use App\Services\Translation\DeeplTranslator;
+use App\Services\Translation\GoogleTranslator;
+use App\Services\Translation\NullTranslator;
+use App\Services\Translation\Translator;
 use BezhanSalleh\FilamentLanguageSwitch\LanguageSwitch;
-use Event;
 use GuzzleHttp\Client;
-use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -25,16 +27,16 @@ class AppServiceProvider extends ServiceProvider
     {
         // Tradutor para RASCUNHOS do backoffice. Sem chave fica o NullTranslator,
         // que nao traduz e diz porque — em vez de falhar a meio de um formulario.
-        $this->app->singleton(\App\Services\Translation\Translator::class, function () {
+        $this->app->singleton(Translator::class, function () {
             return match (config('services.translation.driver')) {
-                'deepl' => new \App\Services\Translation\DeeplTranslator(
+                'deepl' => new DeeplTranslator(
                     config('services.translation.deepl.key'),
                     rtrim((string) config('services.translation.deepl.host'), '/'),
                 ),
-                'google' => new \App\Services\Translation\GoogleTranslator(
+                'google' => new GoogleTranslator(
                     config('services.translation.google.key'),
                 ),
-                default => new \App\Services\Translation\NullTranslator,
+                default => new NullTranslator,
             };
         });
 
@@ -66,14 +68,12 @@ class AppServiceProvider extends ServiceProvider
 
         // POST /credit-card: não autenticado e ~30s/worker — a ponta afiada do DoS (forma
         // do incidente 504). Limite apertado por IP; adicionar cartão é raro mesmo partilhado.
-        RateLimiter::for('credit-card', fn (Request $request) =>
-            Limit::perMinute(6)->by('ip:'.$request->ip()));
+        RateLimiter::for('credit-card', fn (Request $request) => Limit::perMinute(6)->by('ip:'.$request->ip()));
 
         // OTP: chaveado por TELEMÓVEL (o IP roda-se trivialmente — é o que torna o abuso de
         // OTP explorável). Complementa o bloqueio de 5 min por número no controlador; o teto
         // de IP vem da base 'api'.
-        RateLimiter::for('otp', fn (Request $request) =>
-            Limit::perMinute(5)->by('phone:'.PhoneLoginSmsService::normalizePhoneNumber((string) $request->input('phone_number'))));
+        RateLimiter::for('otp', fn (Request $request) => Limit::perMinute(5)->by('phone:'.PhoneLoginSmsService::normalizePhoneNumber((string) $request->input('phone_number'))));
 
         // Rotas que chamam o geocoder Google (pago): cálculo de preço e pesquisa de zona.
         RateLimiter::for('geocode', fn (Request $request) => Limit::perMinute(30)

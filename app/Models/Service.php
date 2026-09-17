@@ -170,7 +170,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
      * TEM de dar a mesma hora. Duplicada, divergia a primeira vez que alguem
      * mexesse num dos lados.
      *
-     * @return array{scheduled_day: ?string, scheduled_time_start: ?string}|null  null = imediato
+     * @return array{scheduled_day: ?string, scheduled_time_start: ?string}|null null = imediato
      */
     public function scheduleIntent(): ?array
     {

@@ -173,7 +173,7 @@ class MoradasDoTecnicoTest extends TestCase
         $vendor = Vendor::factory()->create();
 
         $this->actingAs($vendor->user, 'api')
-            ->getJson("/api/v1/auth/me")
+            ->getJson('/api/v1/auth/me')
             ->assertOk()
             ->assertJsonPath('data.schedule_address', null);
 
@@ -182,7 +182,7 @@ class MoradasDoTecnicoTest extends TestCase
         // Instancia fresca: o `actingAs` guarda o utilizador entre pedidos e a
         // relacao `addresses` ficava em cache do pedido anterior. Em producao
         // cada pedido carrega de novo; aqui e preciso dize-lo.
-        $resposta = $this->actingAs($vendor->user->fresh(), 'api')->getJson("/api/v1/auth/me")->assertOk();
+        $resposta = $this->actingAs($vendor->user->fresh(), 'api')->getJson('/api/v1/auth/me')->assertOk();
 
         $this->assertNotNull($resposta->json('data.schedule_address'));
     }

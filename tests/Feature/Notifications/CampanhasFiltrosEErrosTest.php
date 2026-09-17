@@ -18,11 +18,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Support\Facades\Queue;
 use NotificationChannels\Expo\ExpoError;
+use NotificationChannels\Expo\ExpoErrorType;
+use NotificationChannels\Expo\ExpoPushToken;
 use NotificationChannels\Expo\Gateway\ExpoEnvelope;
 use NotificationChannels\Expo\Gateway\ExpoGateway;
 use NotificationChannels\Expo\Gateway\ExpoResponse;
-use NotificationChannels\Expo\ExpoErrorType;
-use NotificationChannels\Expo\ExpoPushToken;
 use ReflectionProperty;
 use Tests\TestCase;
 
