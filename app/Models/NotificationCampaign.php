@@ -169,6 +169,16 @@ class NotificationCampaign extends Model implements Auditable
             return false;
         }
 
+        // Traducao por rever trava a CAMPANHA, nao o idioma de cada um.
+        //
+        // A alternativa era mandar portugues a quem tem o telemovel em ingles
+        // enquanto ninguem revisse — e isso e esconder o problema no unico
+        // sitio onde ja nao tem conserto. Assim, ou sai bem para todos, ou nao
+        // sai; e quem faltava era uma pessoa a carregar num botao.
+        if ($this->englishIsDraft()) {
+            return false;
+        }
+
         $now = now();
 
         if ($this->starts_at && $now->lt($this->starts_at)) {

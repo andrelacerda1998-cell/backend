@@ -14,14 +14,18 @@ use NotificationChannels\Expo\ExpoPushToken;
 use Tests\TestCase;
 
 /**
- * O ingles e um RASCUNHO ate alguem o confirmar.
+ * Cada um recebe no SEU idioma — e nada sai por rever.
  *
- * A traducao automatica preenche o campo, mas nao autoriza o envio. Enquanto
- * ninguem a confirmar, quem tem o telemovel em ingles recebe o portugues — que
- * e exatamente o que recebia antes de haver ingles nenhum.
+ * Sao duas regras, e o sitio onde cada uma vive e que as torna compativeis:
  *
- * Sem isto, "rascunho" era uma etiqueta no backoffice e a traducao por rever
- * saia a toda a gente na mesma. E o que estes testes prendem.
+ *   - o IDIOMA decide-se por utilizador, sem excepcoes: app em portugues,
+ *     push em portugues; app em ingles, push em ingles;
+ *   - a traducao por rever trava a CAMPANHA inteira, nao o idioma de
+ *     ninguem.
+ *
+ * A alternativa — mandar portugues a quem tem o telemovel em ingles enquanto
+ * ninguem revia — escondia o problema no unico sitio onde ja nao tem conserto:
+ * no telemovel de quem o recebe. Assim, ou sai bem para todos, ou nao sai.
  */
 class TraducaoRascunhoTest extends TestCase
 {
@@ -40,9 +44,9 @@ class TraducaoRascunhoTest extends TestCase
         ]);
     }
 
-    private function utilizadorIngles(): User
+    private function utilizador(string $idioma): User
     {
-        $user = User::factory()->create(['language' => 'en']);
+        $user = User::factory()->create(['language' => $idioma]);
 
         Device::create([
             'user_id' => $user->id,
@@ -53,24 +57,53 @@ class TraducaoRascunhoTest extends TestCase
         return $user;
     }
 
-    public function test_um_ingles_por_rever_nao_sai_a_quem_tem_o_telemovel_em_ingles(): void
+    public function test_quem_tem_a_app_em_portugues_recebe_portugues(): void
     {
-        $campanha = $this->campanha(['english_reviewed_at' => null]);
+        $campanha = $this->campanha(['english_reviewed_at' => now()]);
 
-        $mensagem = (new CampaignNotification($campanha))->toExpo($this->utilizadorIngles())->toArray();
+        $mensagem = (new CampaignNotification($campanha))->toExpo($this->utilizador('pt-pt'))->toArray();
 
         $this->assertSame('Ola', $mensagem['title']);
         $this->assertSame('Corpo em portugues', $mensagem['body']);
     }
 
-    public function test_depois_de_revisto_o_ingles_sai(): void
+    public function test_quem_tem_a_app_em_ingles_recebe_ingles(): void
     {
         $campanha = $this->campanha(['english_reviewed_at' => now()]);
 
-        $mensagem = (new CampaignNotification($campanha))->toExpo($this->utilizadorIngles())->toArray();
+        $mensagem = (new CampaignNotification($campanha))->toExpo($this->utilizador('en'))->toArray();
 
         $this->assertSame('Hello', $mensagem['title']);
         $this->assertSame('English body', $mensagem['body']);
+    }
+
+    /**
+     * O rascunho nao muda o idioma de ninguem: trava a campanha toda. Quem tem
+     * a app em ingles nao passa a receber portugues — nao recebe nada, e nem o
+     * portugues sai, porque a campanha inteira fica a espera de revisao.
+     */
+    public function test_uma_traducao_por_rever_trava_a_campanha_inteira(): void
+    {
+        $campanha = $this->campanha(['english_reviewed_at' => null]);
+
+        $this->assertTrue($campanha->englishIsDraft());
+        $this->assertFalse($campanha->shouldSend());
+    }
+
+    public function test_depois_de_revista_a_campanha_sai(): void
+    {
+        $campanha = $this->campanha(['english_reviewed_at' => now()]);
+
+        $this->assertFalse($campanha->englishIsDraft());
+        $this->assertTrue($campanha->shouldSend());
+    }
+
+    /** So em portugues nao ha nada por rever: a campanha sai. */
+    public function test_uma_campanha_so_em_portugues_sai_sem_revisao_nenhuma(): void
+    {
+        $campanha = $this->campanha(['title' => ['pt-pt' => 'Ola'], 'body' => ['pt-pt' => 'Corpo']]);
+
+        $this->assertTrue($campanha->shouldSend());
     }
 
     /**
@@ -96,7 +129,7 @@ class TraducaoRascunhoTest extends TestCase
 
         $this->assertFalse($campanha->englishIsDraft());
 
-        $mensagem = (new CampaignNotification($campanha))->toExpo($this->utilizadorIngles())->toArray();
+        $mensagem = (new CampaignNotification($campanha))->toExpo($this->utilizador('en'))->toArray();
 
         $this->assertSame('Ola', $mensagem['title']);
     }

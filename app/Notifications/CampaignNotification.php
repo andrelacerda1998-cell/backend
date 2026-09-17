@@ -45,26 +45,19 @@ class CampaignNotification extends Notification implements ShouldQueue
 
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
 
-        // O ingles por rever NAO sai. A traducao automatica enche o campo como
-        // rascunho; enquanto ninguem a confirmar, quem tem o telemovel em ingles
-        // recebe o portugues — que e o que recebia antes de haver ingles nenhum.
+        // Cada um recebe no SEU idioma. Sem excepcoes: quem tem a app em
+        // portugues recebe portugues, quem a tem em ingles recebe ingles.
         //
-        // E aqui que o rascunho deixa de ser uma etiqueta no backoffice e passa
-        // a valer alguma coisa: sem este passo, a traducao por rever saia a toda
-        // a gente na mesma.
-        $ingles = $this->campaign->englishIsDraft() ? null : 'en';
-
+        // A traducao por rever nao se resolve aqui — resolve-se nao deixando a
+        // campanha sair enquanto for rascunho (ver `NotificationCampaign::
+        // shouldSend`). Mandar portugues a quem tem o telemovel em ingles seria
+        // esconder o problema no unico sitio onde ele ja nao tem conserto: no
+        // telemovel de quem o recebe.
+        //
         // Escolhe o primeiro valor preenchido (o Filament pode gravar '' na aba
         // não preenchida, e '??' não pula string vazia): locale -> pt-pt -> en.
-        $pick = function (array $m, $default) use ($language, $ingles) {
-            $candidatos = [$language === 'en' && ! $ingles ? null : ($m[$language] ?? null), $m['pt-pt'] ?? null];
-
-            if ($ingles) {
-                $candidatos[] = $m['en'] ?? null;
-            }
-
-            return collect($candidatos)->first(fn ($v) => filled($v)) ?? $default;
-        };
+        $pick = fn (array $m, $default) => collect([$m[$language] ?? null, $m['pt-pt'] ?? null, $m['en'] ?? null])
+            ->first(fn ($v) => filled($v)) ?? $default;
 
         $title = is_array($this->campaign->title)
             ? $pick($this->campaign->title, $this->campaign->name)

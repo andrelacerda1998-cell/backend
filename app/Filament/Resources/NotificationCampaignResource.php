@@ -118,11 +118,11 @@ class NotificationCampaignResource extends Resource
                             ->hiddenLabel()
                             ->columnSpanFull()
                             ->visible(fn () => ! app(Translator::class)->isConfigured())
-                            ->content('Tradução automática desligada: falta configurar o serviço (TRANSLATION_DRIVER e a chave). Escreve o inglês à mão, ou deixa vazio — nesse caso sai o português.'),
+                            ->content('Tradução automática desligada: falta configurar o serviço (TRANSLATION_DRIVER e a chave). Escreve o inglês à mão, ou deixa vazio — nesse caso quem tem a app em inglês recebe o português.'),
 
                         Toggle::make('english_reviewed')
                             ->label('Tradução inglesa revista')
-                            ->helperText('Enquanto não estiver marcada, quem tem o telemóvel em inglês recebe o português.')
+                            ->helperText('A campanha não é enviada a ninguém enquanto esta tradução não for revista.')
                             ->columnSpanFull()
                             ->dehydrated(false)
                             ->visible(fn (Get $get) => filled($get('title.en')) || filled($get('body.en')))
@@ -302,6 +302,18 @@ class NotificationCampaignResource extends Resource
                 IconColumn::make('is_active')
                     ->label('Ativo')
                     ->boolean(),
+                // Uma campanha activa que nao sai precisa de dizer porque na
+                // propria listagem: caso contrario procura-se a razao nos
+                // horarios, na frequencia, nos filtros — em tudo menos no sitio
+                // certo.
+                TextColumn::make('english_reviewed_at')
+                    ->label('Tradução')
+                    ->badge()
+                    ->state(fn (NotificationCampaign $record) => $record->englishIsDraft() ? 'Por rever' : 'Pronta')
+                    ->color(fn (NotificationCampaign $record) => $record->englishIsDraft() ? 'warning' : 'gray')
+                    ->tooltip(fn (NotificationCampaign $record) => $record->englishIsDraft()
+                        ? 'A campanha não é enviada enquanto a tradução inglesa não for revista.'
+                        : null),
                 TextColumn::make('last_sent_at')
                     ->label('Último Envio')
                     ->dateTime()
@@ -349,6 +361,20 @@ class NotificationCampaignResource extends Resource
                     ->modalHeading('Testar Campanha de Notificação')
                     ->modalDescription('Isto irá enviar a notificação a todos os utilizadores elegíveis imediatamente. Continuar?')
                     ->action(function (NotificationCampaign $record) {
+                        // O job recusaria em silencio (shouldSend) e o
+                        // backoffice dizia "em processamento". Melhor dizer ja
+                        // o que falta do que deixar alguem a espera de um push
+                        // que nunca vai sair.
+                        if ($record->englishIsDraft()) {
+                            FilamentNotification::make()
+                                ->title('Tradução por rever')
+                                ->warning()
+                                ->body('Revê a tradução inglesa e marca-a como revista. Até lá a campanha não é enviada a ninguém.')
+                                ->send();
+
+                            return;
+                        }
+
                         try {
                             // dispatch (não dispatchSync): dispatchSync enviava TODOS os pushes Expo
                             // sincronamente dentro do request Livewire (Guzzle sem timeout) e podia
