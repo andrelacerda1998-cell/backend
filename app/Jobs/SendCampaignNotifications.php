@@ -55,7 +55,18 @@ class SendCampaignNotifications implements ShouldQueue
 
             try {
                 $user->notifyNow(new CampaignNotification($this->campaign, $log->id));
-                $log->update(['success' => true]);
+
+                // O `notifyNow` retorna sem excepcao mesmo quando a Expo
+                // RECUSOU o push: o canal dispara `NotificationFailed` e segue.
+                // O `RecordExpoDeliveryFailure` ja marcou esta linha como
+                // falhada — escrever `success => true` por cima desfazia-o, e a
+                // recusa ficava no `error_message` com o sucesso a dizer que
+                // sim. Apanhado a simular um envio a serio.
+                $log->refresh();
+
+                if (blank($log->error_message)) {
+                    $log->update(['success' => true]);
+                }
             } catch (\Exception $e) {
                 Log::error('Failed to send campaign notification', [
                     'campaign_id' => $this->campaign->id,

@@ -18,6 +18,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Support\Facades\Queue;
 use NotificationChannels\Expo\ExpoError;
+use NotificationChannels\Expo\Gateway\ExpoEnvelope;
+use NotificationChannels\Expo\Gateway\ExpoGateway;
+use NotificationChannels\Expo\Gateway\ExpoResponse;
 use NotificationChannels\Expo\ExpoErrorType;
 use NotificationChannels\Expo\ExpoPushToken;
 use ReflectionProperty;
@@ -191,6 +194,64 @@ class CampanhasFiltrosEErrosTest extends TestCase
 
         $this->assertFalse($log->success);
         $this->assertStringContainsString('InvalidCredentials', $log->error_message);
+    }
+
+    /**
+     * O envio inteiro, com a Expo substituida por um duplo.
+     *
+     * Este e o teste que so apareceu ao simular um envio a serio, e apanhou um
+     * erro meu: o `notifyNow` NAO lanca excepcao quando a Expo recusa, por isso
+     * o `success => true` que vinha a seguir escrevia por cima da falha que o
+     * listener acabara de registar. Ficava a recusa no `error_message` e o
+     * sucesso a dizer que sim — o pior dos dois mundos, porque parece medido.
+     *
+     * O duplo do gateway e o que torna isto verificavel sem falar com a Expo:
+     * o pacote usa Guzzle proprio, e um `Http::fake` do Laravel NAO o intercepta.
+     */
+    public function test_uma_recusa_da_expo_no_envio_completo_nao_fica_marcada_como_sucesso(): void
+    {
+        $this->app->bind(ExpoGateway::class, fn () => new class implements ExpoGateway
+        {
+            public function sendPushNotifications(ExpoEnvelope $envelope): ExpoResponse
+            {
+                return ExpoResponse::failed(array_map(
+                    fn ($token) => ExpoError::make(ExpoErrorType::InvalidCredentials, $token, 'credenciais invalidas'),
+                    $envelope->recipients,
+                ));
+            }
+        });
+
+        $user = $this->comDispositivo(User::factory()->create(['language' => 'pt-pt']));
+        $campanha = $this->campanha(['target_type' => 'customer']);
+
+        (new SendCampaignNotifications($campanha, [$user->id]))->handle();
+
+        $log = $campanha->logs()->first();
+
+        $this->assertFalse((bool) $log->success);
+        $this->assertStringContainsString('InvalidCredentials', $log->error_message);
+    }
+
+    /** E um envio aceite continua a contar como sucesso. */
+    public function test_um_envio_aceite_fica_marcado_como_sucesso(): void
+    {
+        $this->app->bind(ExpoGateway::class, fn () => new class implements ExpoGateway
+        {
+            public function sendPushNotifications(ExpoEnvelope $envelope): ExpoResponse
+            {
+                return ExpoResponse::ok();
+            }
+        });
+
+        $user = $this->comDispositivo(User::factory()->create(['language' => 'pt-pt']));
+        $campanha = $this->campanha(['target_type' => 'customer']);
+
+        (new SendCampaignNotifications($campanha, [$user->id]))->handle();
+
+        $log = $campanha->logs()->first();
+
+        $this->assertTrue((bool) $log->success);
+        $this->assertNull($log->error_message);
     }
 
     /** Uma falha noutro canal nao tem nada a ver com isto. */
