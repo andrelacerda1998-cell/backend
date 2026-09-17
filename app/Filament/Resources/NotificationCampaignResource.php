@@ -11,6 +11,12 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Actions;
+use Filament\Forms\Components\Actions\Action as FormAction;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Set;
+use App\Services\Translation\Translator;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -58,6 +64,73 @@ class NotificationCampaignResource extends Resource
                         ])
                             ->columnSpanFull()
                             ->locales(['en', 'pt-pt']),
+
+                        // Escreve-se em portugues; o ingles preenche-se a partir
+                        // dele. E um RASCUNHO: enquanto nao for confirmado, quem
+                        // tem o telemovel em ingles recebe o portugues.
+                        Actions::make([
+                            FormAction::make('traduzir')
+                                ->label('Traduzir para inglês')
+                                ->icon('heroicon-o-language')
+                                ->color('gray')
+                                ->disabled(fn () => ! app(Translator::class)->isConfigured())
+                                ->action(function (Get $get, Set $set) {
+                                    $tradutor = app(Translator::class);
+                                    $falhou = false;
+
+                                    foreach (['title', 'body'] as $campo) {
+                                        $origem = $get($campo.'.pt-pt');
+
+                                        if (blank($origem)) {
+                                            continue;
+                                        }
+
+                                        $traduzido = $tradutor->translate($origem, 'pt-pt', 'en');
+
+                                        if ($traduzido === null) {
+                                            $falhou = true;
+
+                                            continue;
+                                        }
+
+                                        $set($campo.'.en', $traduzido);
+                                    }
+
+                                    // Preencher invalida qualquer revisao anterior:
+                                    // o que estava confirmado ja nao e este texto.
+                                    $set('english_reviewed_at', null);
+
+                                    $falhou
+                                        ? FilamentNotification::make()
+                                            ->title('Não foi possível traduzir')
+                                            ->body('O serviço de tradução não respondeu. Escreve o inglês à mão, ou deixa vazio: nesse caso sai o português.')
+                                            ->warning()
+                                            ->send()
+                                        : FilamentNotification::make()
+                                            ->title('Rascunho preenchido')
+                                            ->body('Revê o inglês e marca como revisto. Até lá, quem tem o telemóvel em inglês recebe o português.')
+                                            ->success()
+                                            ->send();
+                                }),
+                        ])->columnSpanFull(),
+
+                        Placeholder::make('traducao_desligada')
+                            ->hiddenLabel()
+                            ->columnSpanFull()
+                            ->visible(fn () => ! app(Translator::class)->isConfigured())
+                            ->content('Tradução automática desligada: falta configurar o serviço (TRANSLATION_DRIVER e a chave). Escreve o inglês à mão, ou deixa vazio — nesse caso quem tem a app em inglês recebe o português.'),
+
+                        Toggle::make('english_reviewed')
+                            ->label('Tradução inglesa revista')
+                            ->helperText('A campanha não é enviada a ninguém enquanto esta tradução não for revista.')
+                            ->columnSpanFull()
+                            ->dehydrated(false)
+                            ->visible(fn (Get $get) => filled($get('title.en')) || filled($get('body.en')))
+                            ->afterStateHydrated(fn (Toggle $component, $state, ?NotificationCampaign $record) => $component->state((bool) $record?->english_reviewed_at))
+                            ->live()
+                            ->afterStateUpdated(fn (bool $state, Set $set) => $set('english_reviewed_at', $state ? now() : null)),
+
+                        Hidden::make('english_reviewed_at'),
                         Fieldset::make('Abertura (apenas Customers)')
                             ->columnSpanFull()
                             ->visible(fn (Get $get) => in_array($get('target_type'), ['customer', 'both']))
@@ -97,12 +170,38 @@ class NotificationCampaignResource extends Resource
                             ->default('both')
                             ->reactive(),
                         Select::make('user_status')
-                            ->label('User Status')
+                            // O rotulo diz a quem se aplica: este filtro le o
+                            // estado do TECNICO, e numa campanha so de clientes
+                            // nao faz nada — o que antes nao estava escrito em
+                            // lado nenhum.
+                            ->label('Disponibilidade (só técnicos)')
                             ->options([
                                 'online' => 'Apenas Online',
                                 'offline' => 'Apenas Offline',
                                 'both' => 'Online e Offline',
                             ])
+                            ->nullable(),
+                        Select::make('vendor_eligibility')
+                            ->label('Registo do técnico (só técnicos)')
+                            ->helperText('Incompleto = não consegue aceitar serviços: documentos, IBAN, AT ou contactos por confirmar.')
+                            ->options([
+                                'ready' => 'Prontos a aceitar serviços',
+                                'incomplete' => 'Com o registo por acabar',
+                            ])
+                            ->nullable()
+                            ->visible(fn (Get $get) => in_array($get('target_type'), ['vendor', 'both'])),
+                        Toggle::make('vendor_missing_schedule_address')
+                            ->label('Sem morada de agendamento (só técnicos)')
+                            ->helperText('Sem ela, o preço dos serviços agendados é calculado a partir da morada fiscal.')
+                            ->visible(fn (Get $get) => in_array($get('target_type'), ['vendor', 'both'])),
+                        Toggle::make('customer_never_requested')
+                            ->label('Nunca pediu um serviço (só clientes)')
+                            ->visible(fn (Get $get) => in_array($get('target_type'), ['customer', 'both'])),
+                        TextInput::make('inactive_days')
+                            ->label('Sem serviços há (dias)')
+                            ->helperText('Conta os serviços pedidos, no cliente, e os executados, no técnico. Vazio = não filtra.')
+                            ->numeric()
+                            ->minValue(1)
                             ->nullable(),
                         Select::make('frequency_type')
                             ->label('Frequência')
@@ -203,6 +302,18 @@ class NotificationCampaignResource extends Resource
                 IconColumn::make('is_active')
                     ->label('Ativo')
                     ->boolean(),
+                // Uma campanha activa que nao sai precisa de dizer porque na
+                // propria listagem: caso contrario procura-se a razao nos
+                // horarios, na frequencia, nos filtros — em tudo menos no sitio
+                // certo.
+                TextColumn::make('english_reviewed_at')
+                    ->label('Tradução')
+                    ->badge()
+                    ->state(fn (NotificationCampaign $record) => $record->englishIsDraft() ? 'Por rever' : 'Pronta')
+                    ->color(fn (NotificationCampaign $record) => $record->englishIsDraft() ? 'warning' : 'gray')
+                    ->tooltip(fn (NotificationCampaign $record) => $record->englishIsDraft()
+                        ? 'A campanha não é enviada enquanto a tradução inglesa não for revista.'
+                        : null),
                 TextColumn::make('last_sent_at')
                     ->label('Último Envio')
                     ->dateTime()
@@ -250,6 +361,20 @@ class NotificationCampaignResource extends Resource
                     ->modalHeading('Testar Campanha de Notificação')
                     ->modalDescription('Isto irá enviar a notificação a todos os utilizadores elegíveis imediatamente. Continuar?')
                     ->action(function (NotificationCampaign $record) {
+                        // O job recusaria em silencio (shouldSend) e o
+                        // backoffice dizia "em processamento". Melhor dizer ja
+                        // o que falta do que deixar alguem a espera de um push
+                        // que nunca vai sair.
+                        if ($record->englishIsDraft()) {
+                            FilamentNotification::make()
+                                ->title('Tradução por rever')
+                                ->warning()
+                                ->body('Revê a tradução inglesa e marca-a como revista. Até lá a campanha não é enviada a ninguém.')
+                                ->send();
+
+                            return;
+                        }
+
                         try {
                             // dispatch (não dispatchSync): dispatchSync enviava TODOS os pushes Expo
                             // sincronamente dentro do request Livewire (Guzzle sem timeout) e podia

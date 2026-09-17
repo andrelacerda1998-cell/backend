@@ -57,4 +57,29 @@ return [
         'sandbox' => env('INVOICE_XPRESS_SANDBOX', false),
     ],
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Traducao
+    |--------------------------------------------------------------------------
+    |
+    | So serve para PREENCHER RASCUNHOS no backoffice — nunca para enviar
+    | traducao automatica a ninguem sem revisao humana. Sem chave, o botao de
+    | traduzir aparece desligado e explica porque; nada mais muda.
+    |
+    | O DeepL e o defeito por distinguir PT-PT de PT-BR. A chave do Google Maps
+    | NAO serve para o Google Translate: e outro produto.
+    |
+    */
+    'translation' => [
+        'driver' => env('TRANSLATION_DRIVER', 'deepl'),
+        'deepl' => [
+            'key' => env('DEEPL_API_KEY'),
+            'host' => env('DEEPL_HOST', 'https://api-free.deepl.com'),
+        ],
+        'google' => [
+            'key' => env('GOOGLE_TRANSLATE_API_KEY'),
+        ],
+    ],
+
 ];

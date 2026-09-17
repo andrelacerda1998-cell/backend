@@ -18,6 +18,18 @@ class CampaignNotification extends Notification implements ShouldQueue
         private readonly ?int $campaignLogId = null,
     ) {}
 
+    /**
+     * O log desta campanha para este utilizador.
+     *
+     * Exposto para o `RecordExpoDeliveryFailure` poder marcar a linha quando a
+     * Expo recusa o push — o canal nao lanca excepcao, dispara um evento, e sem
+     * isto a recusa nao chegava ao log.
+     */
+    public function campaignLogId(): ?int
+    {
+        return $this->campaignLogId;
+    }
+
     public function via($notifiable): array
     {
         return ['expo', 'database'];
@@ -33,6 +45,15 @@ class CampaignNotification extends Notification implements ShouldQueue
 
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
 
+        // Cada um recebe no SEU idioma. Sem excepcoes: quem tem a app em
+        // portugues recebe portugues, quem a tem em ingles recebe ingles.
+        //
+        // A traducao por rever nao se resolve aqui — resolve-se nao deixando a
+        // campanha sair enquanto for rascunho (ver `NotificationCampaign::
+        // shouldSend`). Mandar portugues a quem tem o telemovel em ingles seria
+        // esconder o problema no unico sitio onde ele ja nao tem conserto: no
+        // telemovel de quem o recebe.
+        //
         // Escolhe o primeiro valor preenchido (o Filament pode gravar '' na aba
         // não preenchida, e '??' não pula string vazia): locale -> pt-pt -> en.
         $pick = fn (array $m, $default) => collect([$m[$language] ?? null, $m['pt-pt'] ?? null, $m['en'] ?? null])

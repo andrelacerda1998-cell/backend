@@ -16,10 +16,16 @@ class NotificationCampaign extends Model implements Auditable
         'name',
         'title',
         'body',
+        'english_reviewed_at',
         'open_type',
         'open_id',
         'target_type', // 'vendor', 'customer', 'both'
-        'user_status', // 'online', 'offline', 'both', null
+        'user_status', // 'online', 'offline', 'both', null — SO se aplica a tecnicos
+        // Filtros de estado. Todos anulaveis: a null nao filtram.
+        'vendor_eligibility', // 'ready', 'incomplete', null
+        'vendor_missing_schedule_address',
+        'inactive_days',
+        'customer_never_requested',
         'frequency_type', // 'once', 'daily', 'weekly', 'custom'
         'frequency_value', // numeric value for custom frequency
         'frequency_unit', // 'minutes', 'hours', 'days' for custom frequency
@@ -38,7 +44,46 @@ class NotificationCampaign extends Model implements Auditable
         'next_send_at' => 'datetime',
         'title' => 'array',
         'body' => 'array',
+        'vendor_missing_schedule_address' => 'boolean',
+        'customer_never_requested' => 'boolean',
+        'inactive_days' => 'integer',
+        'english_reviewed_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        // Mexer no portugues invalida a revisao do ingles.
+        //
+        // Sem isto, alguem corrigia o texto original depois de a traducao estar
+        // aprovada e o ingles ficava a dizer outra coisa — aprovado, e errado.
+        // Um "revisto" que nao acompanha o que foi revisto e pior do que nao ter
+        // revisao nenhuma: da confianca sem a merecer.
+        // `updating` e nao `saving`: numa campanha NOVA nao ha revisao anterior
+        // para invalidar. E ha uma razao pratica por cima da semantica — no
+        // `saving`, o hook escrevia a coluna tambem no INSERT, e uma migracao
+        // antiga que cria campanhas pelo modelo passava a inserir uma coluna
+        // que, nesse ponto da historia, ainda nao existe. Modelos dentro de
+        // migracoes veem sempre o schema de HOJE; as migracoes repetem o de
+        // ontem.
+        static::updating(function (self $campanha) {
+            if ($campanha->isDirty(['title', 'body']) && ! $campanha->isDirty('english_reviewed_at')) {
+                $campanha->english_reviewed_at = null;
+            }
+        });
+    }
+
+    /**
+     * Ha ingles por rever?
+     *
+     * So conta como rascunho quando ha mesmo texto ingles: um campo vazio nao e
+     * um rascunho, e nada.
+     */
+    public function englishIsDraft(): bool
+    {
+        $temIngles = filled(data_get($this->title, 'en')) || filled(data_get($this->body, 'en'));
+
+        return $temIngles && $this->english_reviewed_at === null;
+    }
 
     public function logs(): HasMany
     {
@@ -121,6 +166,16 @@ class NotificationCampaign extends Model implements Auditable
     public function shouldSend(): bool
     {
         if (! $this->is_active) {
+            return false;
+        }
+
+        // Traducao por rever trava a CAMPANHA, nao o idioma de cada um.
+        //
+        // A alternativa era mandar portugues a quem tem o telemovel em ingles
+        // enquanto ninguem revisse — e isso e esconder o problema no unico
+        // sitio onde ja nao tem conserto. Assim, ou sai bem para todos, ou nao
+        // sai; e quem faltava era uma pessoa a carregar num botao.
+        if ($this->englishIsDraft()) {
             return false;
         }
 

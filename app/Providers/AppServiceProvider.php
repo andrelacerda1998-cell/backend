@@ -23,6 +23,21 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Tradutor para RASCUNHOS do backoffice. Sem chave fica o NullTranslator,
+        // que nao traduz e diz porque — em vez de falhar a meio de um formulario.
+        $this->app->singleton(\App\Services\Translation\Translator::class, function () {
+            return match (config('services.translation.driver')) {
+                'deepl' => new \App\Services\Translation\DeeplTranslator(
+                    config('services.translation.deepl.key'),
+                    rtrim((string) config('services.translation.deepl.host'), '/'),
+                ),
+                'google' => new \App\Services\Translation\GoogleTranslator(
+                    config('services.translation.google.key'),
+                ),
+                default => new \App\Services\Translation\NullTranslator,
+            };
+        });
+
         // O spatie/geocoder resolve o Client daqui sem timeout (default Guzzle = espera
         // infinita); com o Google inacessível cada geocode prendia um worker do FPM até
         // ao fatal de 30s. Falhar em segundos deixa os try/catch dos callers atuar.
