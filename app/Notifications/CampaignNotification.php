@@ -18,6 +18,18 @@ class CampaignNotification extends Notification implements ShouldQueue
         private readonly ?int $campaignLogId = null,
     ) {}
 
+    /**
+     * O log desta campanha para este utilizador.
+     *
+     * Exposto para o `RecordExpoDeliveryFailure` poder marcar a linha quando a
+     * Expo recusa o push — o canal nao lanca excepcao, dispara um evento, e sem
+     * isto a recusa nao chegava ao log.
+     */
+    public function campaignLogId(): ?int
+    {
+        return $this->campaignLogId;
+    }
+
     public function via($notifiable): array
     {
         return ['expo', 'database'];

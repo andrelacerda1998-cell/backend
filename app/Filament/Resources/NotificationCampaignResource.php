@@ -97,12 +97,38 @@ class NotificationCampaignResource extends Resource
                             ->default('both')
                             ->reactive(),
                         Select::make('user_status')
-                            ->label('User Status')
+                            // O rotulo diz a quem se aplica: este filtro le o
+                            // estado do TECNICO, e numa campanha so de clientes
+                            // nao faz nada — o que antes nao estava escrito em
+                            // lado nenhum.
+                            ->label('Disponibilidade (só técnicos)')
                             ->options([
                                 'online' => 'Apenas Online',
                                 'offline' => 'Apenas Offline',
                                 'both' => 'Online e Offline',
                             ])
+                            ->nullable(),
+                        Select::make('vendor_eligibility')
+                            ->label('Registo do técnico (só técnicos)')
+                            ->helperText('Incompleto = não consegue aceitar serviços: documentos, IBAN, AT ou contactos por confirmar.')
+                            ->options([
+                                'ready' => 'Prontos a aceitar serviços',
+                                'incomplete' => 'Com o registo por acabar',
+                            ])
+                            ->nullable()
+                            ->visible(fn (Get $get) => in_array($get('target_type'), ['vendor', 'both'])),
+                        Toggle::make('vendor_missing_schedule_address')
+                            ->label('Sem morada de agendamento (só técnicos)')
+                            ->helperText('Sem ela, o preço dos serviços agendados é calculado a partir da morada fiscal.')
+                            ->visible(fn (Get $get) => in_array($get('target_type'), ['vendor', 'both'])),
+                        Toggle::make('customer_never_requested')
+                            ->label('Nunca pediu um serviço (só clientes)')
+                            ->visible(fn (Get $get) => in_array($get('target_type'), ['customer', 'both'])),
+                        TextInput::make('inactive_days')
+                            ->label('Sem serviços há (dias)')
+                            ->helperText('Conta os serviços pedidos, no cliente, e os executados, no técnico. Vazio = não filtra.')
+                            ->numeric()
+                            ->minValue(1)
                             ->nullable(),
                         Select::make('frequency_type')
                             ->label('Frequência')

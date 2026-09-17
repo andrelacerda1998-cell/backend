@@ -19,7 +19,12 @@ class NotificationCampaign extends Model implements Auditable
         'open_type',
         'open_id',
         'target_type', // 'vendor', 'customer', 'both'
-        'user_status', // 'online', 'offline', 'both', null
+        'user_status', // 'online', 'offline', 'both', null — SO se aplica a tecnicos
+        // Filtros de estado. Todos anulaveis: a null nao filtram.
+        'vendor_eligibility', // 'ready', 'incomplete', null
+        'vendor_missing_schedule_address',
+        'inactive_days',
+        'customer_never_requested',
         'frequency_type', // 'once', 'daily', 'weekly', 'custom'
         'frequency_value', // numeric value for custom frequency
         'frequency_unit', // 'minutes', 'hours', 'days' for custom frequency
@@ -38,6 +43,9 @@ class NotificationCampaign extends Model implements Auditable
         'next_send_at' => 'datetime',
         'title' => 'array',
         'body' => 'array',
+        'vendor_missing_schedule_address' => 'boolean',
+        'customer_never_requested' => 'boolean',
+        'inactive_days' => 'integer',
     ];
 
     public function logs(): HasMany
