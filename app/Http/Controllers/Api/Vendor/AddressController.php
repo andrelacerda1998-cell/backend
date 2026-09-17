@@ -27,7 +27,17 @@ class AddressController extends Controller
     {
         $vendor = auth()->user()->vendor;
 
-        return ApiSuccessResponse::make($vendor->addresses->first());
+        // A morada da EMPRESA, e nao "a primeira que houver". Desde que a de
+        // agendamento passou a poder coexistir, a primeira tanto pode ser uma
+        // como outra — e o ecra da empresa mostrava a morada errada.
+        //
+        // Recurso a primeira para quem so tem uma linha sem tipo certo, de
+        // antes desta correccao: melhor mostrar o que la esta do que um ecra
+        // vazio a quem ja preencheu.
+        $address = $vendor->addresses->firstWhere('address_type', AddressType::FISCAL_ADDRESS)
+            ?? $vendor->addresses->first();
+
+        return ApiSuccessResponse::make($address);
     }
 
     public function update(UpdateRequest $request)
@@ -51,11 +61,21 @@ class AddressController extends Controller
             return new ApiErrorResponse($e, "Address is invalid", 400);
         }
 
-        $vendor->addresses()->updateOrCreate([], [
-            ...$addressData,
-            'user_id' => $vendor->user->id,
-            'address_type' => AddressType::FISCAL_ADDRESS,
-        ]);
+        // A chave e o TIPO. Com o array vazio, o `updateOrCreate` agarrava a
+        // primeira morada do tecnico fosse ela qual fosse e reescrevia-a,
+        // tipo incluido: gravar a morada da empresa apagava a de agendamento,
+        // e vice-versa. As duas nunca podiam existir ao mesmo tempo.
+        //
+        // Isso nao era so arrumacao: a fiscal sustenta a facturacao e a
+        // activacao do tecnico, e a de agendamento e de onde sai a distancia
+        // (e o preco) de todos os servicos agendados.
+        $vendor->addresses()->updateOrCreate(
+            ['address_type' => AddressType::FISCAL_ADDRESS],
+            [
+                ...$addressData,
+                'user_id' => $vendor->user->id,
+            ],
+        );
 
         return new ApiSuccessResponse(['address' => $addressData]);
     }

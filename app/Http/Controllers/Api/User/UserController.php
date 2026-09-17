@@ -64,6 +64,17 @@ class UserController extends Controller
                 'company_address' => $vendor->addresses->where('address_type', AddressType::FISCAL_ADDRESS)->first()?->name
                     ?? $vendor->addresses->first()?->name
                     ?? null,
+                // De onde o tecnico sai para um servico AGENDADO. E daqui que
+                // sai a distancia — e logo o preco — de todos os agendados; sem
+                // ela o calculo cai na morada fiscal, que pode ser um
+                // escritorio de contabilidade do outro lado do distrito.
+                //
+                // Vai no perfil para o "completar perfil" a poder pedir: sem
+                // sinal nenhum, so quem entrasse nas definicoes de agendamentos
+                // e que alguma vez a preenchia.
+                'schedule_address' => $vendor->addresses
+                    ->where('address_type', AddressType::SCHEDULE_ADDRESS)
+                    ->first()?->name,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;

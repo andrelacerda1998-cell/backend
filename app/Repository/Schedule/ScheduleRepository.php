@@ -3,6 +3,7 @@
 namespace App\Repository\Schedule;
 
 use App\Models\Schedule\Schedule;
+use App\Enums\Services\AddressType;
 use App\Models\User;
 use App\Models\Vendor;
 use Carbon\Carbon;
@@ -26,8 +27,15 @@ class ScheduleRepository
                         ->without(['user', 'servicesTypes', 'operationAreas', 'currentLocation'])
                         ->with('user:id,name');
                 },
+                // A app le `addresses[0]` para preencher a morada destas
+                // definicoes. Desde que a fiscal e a de agendamento coexistem,
+                // "a primeira" tanto pode ser uma como outra — e o tecnico via
+                // a morada da empresa no ecra dos agendamentos. A de
+                // agendamento vem primeiro, e o `address_type` vai junto para
+                // nao ser preciso adivinhar.
                 'vendor.addresses' => function($query) {
-                    $query->select('addresses.id', 'addresses.user_id', 'address_name', 'street_name', 'street_number', 'postal_code', 'city', 'state', 'country');
+                    $query->select('addresses.id', 'addresses.user_id', 'address_type', 'address_name', 'street_name', 'street_number', 'postal_code', 'city', 'state', 'country')
+                        ->orderByRaw("CASE WHEN address_type = ? THEN 0 ELSE 1 END", [AddressType::SCHEDULE_ADDRESS->value]);
                 },
             ])
             ->get();
