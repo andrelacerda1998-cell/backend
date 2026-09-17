@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\NotificationCampaign;
+use App\Notifications\Concerns\RoutesExpoToPushQueue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -10,8 +11,8 @@ use NotificationChannels\Expo\ExpoMessage;
 
 class CampaignNotification extends Notification implements ShouldQueue
 {
-    use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
+    use RoutesExpoToPushQueue;
 
     public function __construct(
         private readonly NotificationCampaign $campaign,

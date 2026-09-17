@@ -7,9 +7,7 @@ use Carbon\Carbon;
 
 class RateService
 {
-    public function __construct(private RateSettings $rateSettings)
-    {
-    }
+    public function __construct(private RateSettings $rateSettings) {}
 
     private function calculateDistanceRate($distance): int
     {
@@ -33,10 +31,11 @@ class RateService
             $total = $total * $this->getVat();
         }
 
-        if ($round)
+        if ($round) {
             return round($total);
-        else
+        } else {
             return $total;
+        }
     }
 
     public function calculateForCustomerForOldPrice($hourRate, $timeService, $distance, $round = true, $addVat = true): float
@@ -50,10 +49,11 @@ class RateService
             $total = $total * $this->getVat();
         }
 
-        if ($round)
+        if ($round) {
             return round($total);
-        else
+        } else {
             return $total;
+        }
     }
 
     public function calculateForCustomerWithoutDiscount($hourRate, $timeService, $distance, $round = true, $addVat = true): float
@@ -67,10 +67,11 @@ class RateService
             $total = $total * $this->getVat();
         }
 
-        if ($round)
+        if ($round) {
             return round($total);
-        else
+        } else {
             return $total;
+        }
     }
 
     public function calculateForCustomerInstantService($hourRate, $timeService, $distance, $round = true, $addVat = true): float
@@ -113,10 +114,11 @@ class RateService
             $total = $total * $this->getVat();
         }
 
-        if ($round)
+        if ($round) {
             return round($total);
-        else
+        } else {
             return $total;
+        }
     }
 
     public function calculateSystemFee($hourRate, $timeService, $distance): float
@@ -130,15 +132,15 @@ class RateService
         $now = Carbon::now();
         $hour = $now->hour;
         $commission = match (true) {
-            $hour >=  8 && $hour <= 17 => $this->rateSettings->daytime,
+            $hour >= 8 && $hour <= 17 => $this->rateSettings->daytime,
             $hour >= 18 && $hour <= 20 => $this->rateSettings->evening,
             $hour >= 21 && $hour <= 23 => $this->rateSettings->night,
-            $hour >=  0 && $hour <=  2 => $this->rateSettings->late_night,
-            $hour >=  3 && $hour <=  7 => $this->rateSettings->midnight,
+            $hour >= 0 && $hour <= 2 => $this->rateSettings->late_night,
+            $hour >= 3 && $hour <= 7 => $this->rateSettings->midnight,
             default => 1,
         };
 
-        return $commission/100;
+        return $commission / 100;
     }
 
     private function calculateSystemCommissionRate(): float
@@ -149,6 +151,7 @@ class RateService
     private function getVat()
     {
         $vat = config('services.invoiceExpress.vat');
-        return 1+($vat/100);
+
+        return 1 + ($vat / 100);
     }
 }

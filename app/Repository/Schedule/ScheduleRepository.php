@@ -2,8 +2,8 @@
 
 namespace App\Repository\Schedule;
 
-use App\Models\Schedule\Schedule;
 use App\Enums\Services\AddressType;
+use App\Models\Schedule\Schedule;
 use App\Models\User;
 use App\Models\Vendor;
 use Carbon\Carbon;
@@ -22,7 +22,7 @@ class ScheduleRepository
             ->select('schedule_available.id', 'schedule_available.vendor_id', 'day_id', 'auto_accept', 'time_start', 'time_end', 'is_enabled')
             ->with([
                 'scheduleDay:schedule_days.id,day_name',
-                'vendor' => function($query) {
+                'vendor' => function ($query) {
                     $query->select('vendors.id', 'vendors.user_id')
                         ->without(['user', 'servicesTypes', 'operationAreas', 'currentLocation'])
                         ->with('user:id,name');
@@ -33,9 +33,9 @@ class ScheduleRepository
                 // a morada da empresa no ecra dos agendamentos. A de
                 // agendamento vem primeiro, e o `address_type` vai junto para
                 // nao ser preciso adivinhar.
-                'vendor.addresses' => function($query) {
+                'vendor.addresses' => function ($query) {
                     $query->select('addresses.id', 'addresses.user_id', 'address_type', 'address_name', 'street_name', 'street_number', 'postal_code', 'city', 'state', 'country')
-                        ->orderByRaw("CASE WHEN address_type = ? THEN 0 ELSE 1 END", [AddressType::SCHEDULE_ADDRESS->value]);
+                        ->orderByRaw('CASE WHEN address_type = ? THEN 0 ELSE 1 END', [AddressType::SCHEDULE_ADDRESS->value]);
                 },
             ])
             ->get();
@@ -47,7 +47,7 @@ class ScheduleRepository
             ->with([
                 'serviceType:id,name',
                 'customer:users.id,name',
-                'customer.addresses' => function($query) {
+                'customer.addresses' => function ($query) {
                     $query->select('addresses.id', 'addresses.user_id', 'address_name', 'street_name', 'street_number', 'postal_code', 'city', 'state', 'country');
                 },
             ])
@@ -57,7 +57,7 @@ class ScheduleRepository
         $scheduleDate = Carbon::parse($scheduleToVendor->scheduled_day);
         $now = Carbon::now();
 
-        $scheduleToVendor->date_label = match(true) {
+        $scheduleToVendor->date_label = match (true) {
             $scheduleDate->isToday() => 'today',
             $scheduleDate->isTomorrow() => 'tomorrow',
             $scheduleDate->isSameWeek($now) => 'week',

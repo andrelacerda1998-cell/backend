@@ -57,7 +57,6 @@ return [
         'sandbox' => env('INVOICE_XPRESS_SANDBOX', false),
     ],
 
-
     /*
     |--------------------------------------------------------------------------
     | Traducao

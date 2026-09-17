@@ -6,8 +6,8 @@ use App\Events\Customer\ProfileCompletionNeeded;
 use App\Listeners\PruneUnregisteredExpoToken;
 use App\Listeners\RecordExpoDeliveryFailure;
 use App\Listeners\SendProfileCompletionPush;
-use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Illuminate\Notifications\Events\NotificationFailed;
 
 class EventServiceProvider extends ServiceProvider
 {
