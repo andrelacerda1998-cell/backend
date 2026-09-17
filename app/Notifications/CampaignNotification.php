@@ -45,10 +45,26 @@ class CampaignNotification extends Notification implements ShouldQueue
 
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
 
+        // O ingles por rever NAO sai. A traducao automatica enche o campo como
+        // rascunho; enquanto ninguem a confirmar, quem tem o telemovel em ingles
+        // recebe o portugues — que e o que recebia antes de haver ingles nenhum.
+        //
+        // E aqui que o rascunho deixa de ser uma etiqueta no backoffice e passa
+        // a valer alguma coisa: sem este passo, a traducao por rever saia a toda
+        // a gente na mesma.
+        $ingles = $this->campaign->englishIsDraft() ? null : 'en';
+
         // Escolhe o primeiro valor preenchido (o Filament pode gravar '' na aba
         // não preenchida, e '??' não pula string vazia): locale -> pt-pt -> en.
-        $pick = fn (array $m, $default) => collect([$m[$language] ?? null, $m['pt-pt'] ?? null, $m['en'] ?? null])
-            ->first(fn ($v) => filled($v)) ?? $default;
+        $pick = function (array $m, $default) use ($language, $ingles) {
+            $candidatos = [$language === 'en' && ! $ingles ? null : ($m[$language] ?? null), $m['pt-pt'] ?? null];
+
+            if ($ingles) {
+                $candidatos[] = $m['en'] ?? null;
+            }
+
+            return collect($candidatos)->first(fn ($v) => filled($v)) ?? $default;
+        };
 
         $title = is_array($this->campaign->title)
             ? $pick($this->campaign->title, $this->campaign->name)

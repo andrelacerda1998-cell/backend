@@ -11,6 +11,12 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Actions;
+use Filament\Forms\Components\Actions\Action as FormAction;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Set;
+use App\Services\Translation\Translator;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -58,6 +64,73 @@ class NotificationCampaignResource extends Resource
                         ])
                             ->columnSpanFull()
                             ->locales(['en', 'pt-pt']),
+
+                        // Escreve-se em portugues; o ingles preenche-se a partir
+                        // dele. E um RASCUNHO: enquanto nao for confirmado, quem
+                        // tem o telemovel em ingles recebe o portugues.
+                        Actions::make([
+                            FormAction::make('traduzir')
+                                ->label('Traduzir para inglês')
+                                ->icon('heroicon-o-language')
+                                ->color('gray')
+                                ->disabled(fn () => ! app(Translator::class)->isConfigured())
+                                ->action(function (Get $get, Set $set) {
+                                    $tradutor = app(Translator::class);
+                                    $falhou = false;
+
+                                    foreach (['title', 'body'] as $campo) {
+                                        $origem = $get($campo.'.pt-pt');
+
+                                        if (blank($origem)) {
+                                            continue;
+                                        }
+
+                                        $traduzido = $tradutor->translate($origem, 'pt-pt', 'en');
+
+                                        if ($traduzido === null) {
+                                            $falhou = true;
+
+                                            continue;
+                                        }
+
+                                        $set($campo.'.en', $traduzido);
+                                    }
+
+                                    // Preencher invalida qualquer revisao anterior:
+                                    // o que estava confirmado ja nao e este texto.
+                                    $set('english_reviewed_at', null);
+
+                                    $falhou
+                                        ? FilamentNotification::make()
+                                            ->title('Não foi possível traduzir')
+                                            ->body('O serviço de tradução não respondeu. Escreve o inglês à mão, ou deixa vazio: nesse caso sai o português.')
+                                            ->warning()
+                                            ->send()
+                                        : FilamentNotification::make()
+                                            ->title('Rascunho preenchido')
+                                            ->body('Revê o inglês e marca como revisto. Até lá, quem tem o telemóvel em inglês recebe o português.')
+                                            ->success()
+                                            ->send();
+                                }),
+                        ])->columnSpanFull(),
+
+                        Placeholder::make('traducao_desligada')
+                            ->hiddenLabel()
+                            ->columnSpanFull()
+                            ->visible(fn () => ! app(Translator::class)->isConfigured())
+                            ->content('Tradução automática desligada: falta configurar o serviço (TRANSLATION_DRIVER e a chave). Escreve o inglês à mão, ou deixa vazio — nesse caso sai o português.'),
+
+                        Toggle::make('english_reviewed')
+                            ->label('Tradução inglesa revista')
+                            ->helperText('Enquanto não estiver marcada, quem tem o telemóvel em inglês recebe o português.')
+                            ->columnSpanFull()
+                            ->dehydrated(false)
+                            ->visible(fn (Get $get) => filled($get('title.en')) || filled($get('body.en')))
+                            ->afterStateHydrated(fn (Toggle $component, $state, ?NotificationCampaign $record) => $component->state((bool) $record?->english_reviewed_at))
+                            ->live()
+                            ->afterStateUpdated(fn (bool $state, Set $set) => $set('english_reviewed_at', $state ? now() : null)),
+
+                        Hidden::make('english_reviewed_at'),
                         Fieldset::make('Abertura (apenas Customers)')
                             ->columnSpanFull()
                             ->visible(fn (Get $get) => in_array($get('target_type'), ['customer', 'both']))

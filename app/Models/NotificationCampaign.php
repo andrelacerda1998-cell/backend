@@ -16,6 +16,7 @@ class NotificationCampaign extends Model implements Auditable
         'name',
         'title',
         'body',
+        'english_reviewed_at',
         'open_type',
         'open_id',
         'target_type', // 'vendor', 'customer', 'both'
@@ -46,7 +47,43 @@ class NotificationCampaign extends Model implements Auditable
         'vendor_missing_schedule_address' => 'boolean',
         'customer_never_requested' => 'boolean',
         'inactive_days' => 'integer',
+        'english_reviewed_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        // Mexer no portugues invalida a revisao do ingles.
+        //
+        // Sem isto, alguem corrigia o texto original depois de a traducao estar
+        // aprovada e o ingles ficava a dizer outra coisa — aprovado, e errado.
+        // Um "revisto" que nao acompanha o que foi revisto e pior do que nao ter
+        // revisao nenhuma: da confianca sem a merecer.
+        // `updating` e nao `saving`: numa campanha NOVA nao ha revisao anterior
+        // para invalidar. E ha uma razao pratica por cima da semantica — no
+        // `saving`, o hook escrevia a coluna tambem no INSERT, e uma migracao
+        // antiga que cria campanhas pelo modelo passava a inserir uma coluna
+        // que, nesse ponto da historia, ainda nao existe. Modelos dentro de
+        // migracoes veem sempre o schema de HOJE; as migracoes repetem o de
+        // ontem.
+        static::updating(function (self $campanha) {
+            if ($campanha->isDirty(['title', 'body']) && ! $campanha->isDirty('english_reviewed_at')) {
+                $campanha->english_reviewed_at = null;
+            }
+        });
+    }
+
+    /**
+     * Ha ingles por rever?
+     *
+     * So conta como rascunho quando ha mesmo texto ingles: um campo vazio nao e
+     * um rascunho, e nada.
+     */
+    public function englishIsDraft(): bool
+    {
+        $temIngles = filled(data_get($this->title, 'en')) || filled(data_get($this->body, 'en'));
+
+        return $temIngles && $this->english_reviewed_at === null;
+    }
 
     public function logs(): HasMany
     {
