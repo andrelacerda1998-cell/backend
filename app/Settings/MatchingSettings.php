@@ -51,11 +51,16 @@ class MatchingSettings extends Settings
     /**
      * O mesmo, num pedido agendado.
      *
-     * Separado do imediato porque o cliente está noutra situação: marcou para
-     * quinta-feira e fechou a app. O relógio conta a partir da primeira
-     * aceitação, por isso com o valor do imediato o pedido morria minutos
-     * depois de ele o ter feito — com profissionais disponíveis do outro lado
-     * e a janela deles ainda aberta durante meia hora.
+     * ATENCAO: hoje este valor nao chega a morder, tal como o do imediato. A
+     * escolha conta do primeiro aceite, que e sempre DEPOIS da criacao, por
+     * isso qualquer valor >= `request_deadline_seconds` e cortado pelo tecto.
+     * Sao tectos por modo, nao prazos — mexer aqui so tem efeito depois de
+     * mexer no tecto.
+     *
+     * A razao de existir separado ja nao se aplica. Foi escrito a pensar num
+     * cliente que marcava para quinta-feira e fechava a app; mas no agendado
+     * ele espera pelo matching, escolhe e so fecha depois de pagar — a mesma
+     * situacao do imediato.
      */
     public int $customer_choice_seconds_scheduled;
 

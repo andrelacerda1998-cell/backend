@@ -157,6 +157,52 @@ class JanelaDoClienteTest extends TestCase
         $this->assertNotSame(ServiceStatus::AWAITING_PAYMENT, $service->refresh()->status);
     }
 
+    /**
+     * O prazo ANUNCIADO ao cliente tem de ser o prazo a serio.
+     *
+     * Num imediato ou agendado quem mata o pedido e o tecto global, que conta
+     * da criacao. A janela por modo conta do primeiro aceite — sempre mais
+     * tarde — por isso devolve-la sozinha anunciava tempo que nao existe: a
+     * contagem no ecra mostrava 200 s enquanto o cron fechava o pedido aos 180.
+     */
+    public function test_num_pedido_normal_o_prazo_anunciado_e_o_tecto_global(): void
+    {
+        $service = Service::factory()->create(['status' => ServiceStatus::MATCHING]);
+        $service->forceFill([
+            'created_at' => now()->subSeconds(60),
+            'candidates_ready_at' => now()->subSeconds(30),
+        ])->saveQuietly();
+
+        $this->aceite($service->refresh(), '30 seconds');
+
+        $deadline = app(MatchingService::class)->customerDeadline($service->refresh());
+
+        // Tecto: criacao + 180 s => faltam 120 s.
+        // Janela do imediato: aceite + 180 s => faltaria mais. Ganha o tecto.
+        $this->assertEqualsWithDelta(now()->addSeconds(120)->timestamp, $deadline->timestamp, 2);
+    }
+
+    /**
+     * E o pedido morre mesmo quando essa contagem chega a zero — o numero que
+     * se mostra e o numero que o cron usa.
+     */
+    public function test_o_pedido_normal_morre_no_prazo_que_foi_anunciado(): void
+    {
+        $service = Service::factory()->create(['status' => ServiceStatus::MATCHING]);
+        $service->forceFill([
+            'created_at' => now()->subSeconds(181),
+            'candidates_ready_at' => now()->subSeconds(60),
+        ])->saveQuietly();
+
+        $this->aceite($service->refresh(), '60 seconds');
+
+        $this->assertTrue(app(MatchingService::class)->customerDeadline($service->refresh())->isPast());
+
+        $this->artisan('matching:advance')->assertSuccessful();
+
+        $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
+    }
+
     public function test_sem_ninguem_aceite_nao_ha_relogio_do_cliente(): void
     {
         $service = $this->personalizado('1 minute');

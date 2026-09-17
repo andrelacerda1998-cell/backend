@@ -499,13 +499,33 @@ class MatchingService
             return null;
         }
 
-        return Carbon::parse($readyAt)->addSeconds($this->customerWindowSeconds($service));
+        $deadline = Carbon::parse($readyAt)->addSeconds($this->customerWindowSeconds($service));
+
+        // No personalizado a hora do cliente manda sobre o tecto global — e a
+        // excepcao, e esta escrita no `matching:advance`.
+        if ($service->is_custom) {
+            return $deadline;
+        }
+
+        // Nos outros dois, o tecto corta primeiro e e ele que mata o pedido.
+        // Devolver a janela por modo sem o tecto era anunciar tempo que o
+        // cliente nao tem: a contagem no ecra mostrava 200 s enquanto o cron
+        // fechava o pedido aos 180 s a contar da criacao. Um contador que
+        // promete mais do que existe e pior do que nao ter contador.
+        $ceiling = $service->matchingStartedAt()?->copy()->addSeconds($this->settings->request_deadline_seconds);
+
+        return $ceiling && $ceiling->lt($deadline) ? $ceiling : $deadline;
     }
 
     /**
-     * Janela por modo. No imediato o cliente esta a olhar para o ecra e uns
-     * minutos chegam; no agendado marcou para outro dia e fechou a app; no
-     * personalizado a notificacao chega quando ja nao esta a espera dela.
+     * Janela por modo — um TECTO por modo, nao o prazo real.
+     *
+     * No imediato e no agendado quem manda e o prazo global do pedido: em
+     * ambos o cliente fica a espera do matching, escolhe, e so sai depois de
+     * pagar. Sao a mesma situacao, e nenhum destes numeros chega a morder.
+     *
+     * O personalizado e o unico diferente: a notificacao chega quando o
+     * cliente ja nao esta a espera dela, por isso ali este valor E o prazo.
      */
     private function customerWindowSeconds(Service $service): int
     {
@@ -650,9 +670,11 @@ class MatchingService
      */
     private function persist(Service $service, Collection $ranked, CandidateStatus $status, int $wave): Collection
     {
-        // Janela por modo: num pedido para agora o profissional tem de responder
-        // depressa, senão o cliente está a olhar para um ecrã de espera; num
-        // agendado há tempo e a pressa só serve para o fazer recusar.
+        // Janela por modo — mas em qualquer dos dois o cliente esta a olhar para
+        // um ecra de espera: no agendado tambem espera pelo matching, escolhe e
+        // so fecha a app depois de pagar. O que muda e a pergunta que se faz ao
+        // profissional ("podes agora?" ou "podes quinta as 15h?"), nao o tempo
+        // que ha para responder.
         $window = now()->addSeconds(
             $this->isScheduled($service)
                 ? $this->settings->vendor_response_seconds_scheduled
