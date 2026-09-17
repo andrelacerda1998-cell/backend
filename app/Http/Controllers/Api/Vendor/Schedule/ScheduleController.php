@@ -62,11 +62,16 @@ class ScheduleController extends Controller
 
         /** @var Vendor $vendor */
         $vendor = $user->vendor()->firstOrFail();
-        $vendor->addresses()->updateOrCreate([], [
-            ...$addressData,
-            'user_id' => $vendor->user->id,
-            'address_type' => AddressType::SCHEDULE_ADDRESS,
-        ]);
+        // Chaveado pelo TIPO — ver AddressController::update. Sem isto, gravar
+        // aqui apagava a morada fiscal, de que dependem a facturacao e a
+        // activacao do tecnico.
+        $vendor->addresses()->updateOrCreate(
+            ['address_type' => AddressType::SCHEDULE_ADDRESS],
+            [
+                ...$addressData,
+                'user_id' => $vendor->user->id,
+            ],
+        );
 
         $scheduleDays = Cache::rememberForever('schedule_days', fn () => ScheduleDays::all()->pluck('id', 'day_name')->toArray());
         foreach ($request->input('available_days', []) as $dayOfWeek => $dayInformation) {
