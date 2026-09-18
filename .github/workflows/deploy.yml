@@ -258,5 +258,44 @@ jobs:
             docker compose exec -T laravel-prod php artisan scout:sync-index-settings || \
               echo "AVISO: scout:sync-index-settings falhou; verificar o Meilisearch" >&2
 
+            # Limpar imagens de deploys antigos, mantendo as MANTER mais recentes.
+            #
+            # Aqui estava so um `docker image prune -f`, que apaga apenas imagens
+            # PENDURADAS (sem tag). Cada deploy publica `piquet-laravel:<sha>` --
+            # com tag -- por isso o prune nunca lhe tocava. Nao foi falta de
+            # limpeza: acumularam-se 112 imagens (~72 GB) APESAR dela, e a 18/09
+            # encheram o disco do servidor (100%, 0 livres). O Redis deixou de
+            # conseguir gravar o snapshot, com stop-writes-on-bgsave-error passou
+            # a recusar escritas, e o Laravel pendurava em cada pedido -> 504 em
+            # toda a API.
+            #
+            # Deliberadamente NAO e um `docker image prune -af` global: o compose
+            # deste servidor fixa tags noutros servicos (ver o aviso do mysql
+            # acima), e um `-a` apagaria a imagem de qualquer servico parado no
+            # momento do deploy. Isto toca so no repositorio da app.
+            #
+            # MANTER=4 e nao 3 porque a imagem em producao ocupa DUAS linhas
+            # (`:latest` e `:<sha>` apontam para ela), portanto isto guarda a que
+            # esta a correr mais os dois deploys anteriores -- rollback sem
+            # depender do ghcr.
+            #
+            # Apaga-se por tag e nao por ID: `docker rmi <id>` recusa-se a apagar
+            # uma imagem com varias tags, e apagar a tag deixa o Docker remover a
+            # imagem sozinho quando cai a ultima. Sem `-f`: se por alguma razao a
+            # imagem estiver em uso, o Docker recusa, e e isso que queremos.
+            APP_REPO="${APP_IMAGE%:*}"
+            MANTER=4
+            docker images --filter=reference="${APP_REPO}:*" \
+              --format '{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}' \
+              | sort -r \
+              | tail -n +$((MANTER + 1)) \
+              | cut -f2 \
+              | xargs -r docker rmi 2>/dev/null || true
+
+            # As penduradas continuam a merecer limpeza: sao as camadas orfas que
+            # ficam para tras quando uma tag muda de imagem.
             docker image prune -f
+
+            echo "Espaco em disco depois da limpeza:"
+            df -h / | tail -1
             docker logout ghcr.io
