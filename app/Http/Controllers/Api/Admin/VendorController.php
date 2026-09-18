@@ -77,7 +77,7 @@ class VendorController extends Controller
         // Eager-load do que o present() lê: sem isto, cada linha da página
         // dispara uma query por relação (documentos e morada fiscal incluídos)
         // e uma listagem de 100 técnicos passava das 300 queries.
-        $vendors = $query->with(['user', 'operationAreas', 'addresses', 'documents'])
+        $vendors = $query->with(['user', 'operationAreas', 'servicesTypes', 'addresses', 'documents'])
             ->orderByDesc('created_at')->paginate($perPage);
 
         return ApiSuccessResponse::make([
@@ -545,6 +545,19 @@ class VendorController extends Controller
                 ? round(((int) $vendor->getRawOriginal('price_rate')) / 100, 2)
                 : null,
             'operation_areas' => $vendor->operationAreas->pluck('name')->all(),
+            /*
+             * O que o técnico faz, segundo o próprio matching.
+             *
+             * `operation_areas` já cá estava e contém nomes de ofícios, mas na
+             * prática está quase sempre vazio: numa leitura de 100 técnicos em
+             * 18/09/2026, um único tinha valor. Quem decide se um técnico serve
+             * para um pedido é o VendorRankingService, e esse filtra por
+             * `servicesTypes` -- é este o campo que diz mesmo o que ele faz.
+             *
+             * Sem ele exposto aqui, quem consome a API de admin não consegue
+             * responder a "quem faz canalização" sem ir à base de dados.
+             */
+            'services_types' => $vendor->servicesTypes->pluck('name')->all(),
             'can_accept_service' => (bool) $vendor->can_accept_service,
             'at_valid' => (bool) $vendor->at_valid,
             'at_validated_at' => $vendor->at_validated_at?->toIso8601String(),
