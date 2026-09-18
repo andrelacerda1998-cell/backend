@@ -73,6 +73,7 @@ class PedidoPersonalizadoTest extends TestCase
             'rating_bands' => [4.5, 4.0, 3.0],
             'new_vendor_min_ratings' => 5,
             'require_recent_activity_minutes' => 15,
+            'customer_choice_seconds_custom' => 3600,
         ]);
 
         Event::fake([
