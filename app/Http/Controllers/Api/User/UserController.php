@@ -113,6 +113,24 @@ class UserController extends Controller
         try {
             $token = auth('api')->refresh(true, true);
 
+            // O refresh do tymon trabalha só sobre as claims: reassina o `sub` sem
+            // nunca ir à base confirmar que ele ainda resolve para alguém. Um token
+            // de uma conta apagada, bloqueada ou desativada renovava-se para sempre,
+            // e cada token novo continuava a dar 401 em todo o resto — a app ficava
+            // presa a renovar e a falhar (medimos 989 pedidos num minuto, de um só
+            // telemóvel parado, até rebentar o rate limiter).
+            //
+            // Um 200 daqui é uma promessa: este token autentica. Se não autentica,
+            // a resposta honesta é 401 — e é esse 401 que deixa o cliente terminar
+            // a sessão em vez de tentar outra vez.
+            if (! auth('api')->setToken($token)->user()) {
+                return new ApiErrorResponse(
+                    null,
+                    'Token inválido ou expirado.',
+                    Response::HTTP_UNAUTHORIZED,
+                );
+            }
+
             return new LoginApiResponse($token, ['message' => 'refresh successfully']);
         } catch (JWTException) {
             return new ApiErrorResponse(
