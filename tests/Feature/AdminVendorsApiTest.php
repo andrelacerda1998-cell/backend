@@ -8,6 +8,7 @@ use App\Enums\Vendors\StatusVendor;
 use App\Models\GeneralSettings\AllowedZone;
 use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\OperationArea;
+use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
@@ -45,6 +46,9 @@ class AdminVendorsApiTest extends TestCase
     protected array $tablesToTruncate = [
         'users', 'vendors', 'wallets', 'schedule_available',
         'services', 'operation_areas', 'operation_area_vendors',
+        // services_types/services_type_vendor: o que o técnico faz segundo o
+        // matching -- ver test_it_presents_the_services_a_vendor_performs().
+        'services_types', 'services_type_vendor',
         'allowed_zone', 'vendor_allowed_zones',
         // Testes de createTestAccount() -- documentos obrigatórios.
         'documents', 'vendor_documents',
@@ -289,6 +293,40 @@ class AdminVendorsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.noServices', 0)
             ->assertJsonPath('data.avgTimeToFirstService', 3);
+    }
+
+    /**
+     * `services_types` é o que o técnico faz SEGUNDO O MATCHING.
+     *
+     * Não é o mesmo que `operation_areas`: esse também guarda nomes de ofícios
+     * mas está quase sempre vazio (numa leitura de 100 técnicos em produção a
+     * 18/09/2026, um único tinha valor), enquanto o VendorRankingService filtra
+     * candidatos por `servicesTypes`. Sem este campo na API, quem está fora da
+     * base de dados não consegue responder a "quem faz canalização".
+     */
+    public function test_it_presents_the_services_a_vendor_performs(): void
+    {
+        $area = OperationArea::create(['name' => 'Canalização']);
+
+        $tipo = new ServicesType();
+        $tipo->operation_area_id = $area->id;
+        $tipo->time = 60;
+        // `name` é traduzível: sem as duas traduções, pluck('name') devolve
+        // null na locale dos testes.
+        $tipo->setTranslations('name', ['en' => 'Desentupimento', 'pt-pt' => 'Desentupimento']);
+        $tipo->save();
+
+        $vendor = $this->makeVendor();
+        $vendor->servicesTypes()->attach($tipo->id);
+        $semNada = $this->makeVendor();
+
+        $res = $this->withAuth()->getJson('/api/v1/admin/vendors')->assertOk();
+        $porId = collect($res->json('data.items'))->keyBy('id');
+
+        $this->assertSame(['Desentupimento'], $porId[$vendor->id]['services_types']);
+        // Quem não tem nada atribuído vem com lista vazia, não com null: quem
+        // consome isto itera sempre, sem ter de testar o tipo primeiro.
+        $this->assertSame([], $porId[$semNada->id]['services_types']);
     }
 
     public function test_by_category_counts_vendors_per_operation_area(): void
