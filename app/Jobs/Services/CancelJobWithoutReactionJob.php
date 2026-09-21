@@ -45,6 +45,19 @@ class CancelJobWithoutReactionJob implements ShouldQueue
             $locked->status_justification = 'The vendor has not provided a timely response to the job request.';
             $locked->save();
 
+            // Libertar a agenda do técnico, como fazem todos os outros
+            // cancelamentos: RefuseService, os dois CancelScheduleController e o
+            // release das séries por pagar. Este caminho era o único que deixava
+            // a marcação viva — e o Vendor::hasFreeSlot conta as marcações do dia
+            // sem olhar ao estado do serviço, por isso a hora ficava bloqueada
+            // para sempre por um pedido que ninguém chegou a aceitar. O técnico
+            // deixava de receber convites para aquela hora, e a linha não
+            // aparecia em ecrã nenhum para alguém a poder limpar.
+            //
+            // É soft delete (Schedule usa SoftDeletes): a linha fica na base,
+            // só deixa de contar.
+            $locked->schedule?->delete();
+
             return true;
         });
 

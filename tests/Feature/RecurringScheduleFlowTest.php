@@ -280,9 +280,11 @@ class RecurringScheduleFlowTest extends TestCase
         [, $vendor, , $first] = $this->makeSeries();
         $next = app(CreateNextRecurrence::class)->forSchedule($first);
 
-        // A lista de pendentes do técnico tem um prazo de 20 minutos que marca
-        // como confirmado o que é mais antigo. Uma ocorrência de série nasce
-        // dias antes — sem esta salvaguarda, ficava confirmada sozinha.
+        // A lista de pendentes já não confirma nada ao ser aberta (o prazo dos
+        // 20 minutos saiu de ScheduleController::pendingSchedules). Este teste
+        // continua a valer como rede: uma ocorrência de série nasce dias antes,
+        // e é o caso que mais depressa voltaria a ficar confirmada sozinha se
+        // alguém reintroduzir uma escrita neste endpoint de leitura.
         $next->forceFill(['created_at' => Carbon::now()->subDays(2)])->save();
 
         $this->actingAs($vendor->user, 'api')
