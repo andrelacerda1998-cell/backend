@@ -6,12 +6,14 @@ use App\Enums\Services\ServiceStatus;
 use App\Events\Common\Services\ServiceTimeoutEvent as CommonServiceTimeoutEvent;
 use App\Events\Vendor\Services\ServiceTimeoutEvent as VendorServiceTimeoutEvent;
 use App\Models\Service;
+use App\Notifications\Customer\ServiceTimedOutNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class CancelJobWithoutReactionJob implements ShouldQueue
 {
@@ -99,6 +101,20 @@ class CancelJobWithoutReactionJob implements ShouldQueue
 
         VendorServiceTimeoutEvent::dispatch($this->service);
         CommonServiceTimeoutEvent::dispatch($serviceData);
+
+        // Os dois eventos acima são broadcast: só chegam a quem tem a app aberta
+        // no canal certo. Quem a fechou não sabia que o pedido tinha caído — e o
+        // prazo do agendado é de 20 minutos, que ninguém passa a olhar para um
+        // cronómetro. Ficava a acreditar que o pedido continuava vivo.
+        //
+        // A push nunca pode desfazer o cancelamento: já está commitado, e uma
+        // falha do Expo é para reportar, não para rebentar o job (que ao falhar
+        // seria repetido e voltaria a avisar).
+        try {
+            $this->service->customer?->notify(new ServiceTimedOutNotification($this->service));
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         //  Disabled by customer
         // $vendor = $this->service->vendor;
