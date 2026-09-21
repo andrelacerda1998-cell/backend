@@ -52,6 +52,8 @@ class AdminVendorsApiTest extends TestCase
         'allowed_zone', 'vendor_allowed_zones',
         // Testes de createTestAccount() -- documentos obrigatórios.
         'documents', 'vendor_documents',
+        // forceDestroy(): a tabela que BLOQUEIA o apagamento se lá houver linhas.
+        'schedule',
     ];
 
     protected function setUp(): void
@@ -327,6 +329,42 @@ class AdminVendorsApiTest extends TestCase
         // Quem não tem nada atribuído vem com lista vazia, não com null: quem
         // consome isto itera sempre, sem ter de testar o tipo primeiro.
         $this->assertSame([], $porId[$semNada->id]['services_types']);
+    }
+
+    /**
+     * Apagar de vez: o técnico sai, os serviços dele ficam SEM DONO.
+     *
+     * É o comportamento pedido (André, 21/09/2026) e o custo está declarado:
+     * `services.vendor_id` é SET NULL, por isso o serviço continua na base de
+     * dados mas deixa de se saber quem o fez. Este teste existe sobretudo para
+     * que ninguém "corrija" isso por engano sem perceber que foi deliberado.
+     */
+    public function test_it_force_deletes_a_vendor_and_orphans_their_services(): void
+    {
+        $vendor = $this->makeVendor();
+        $userId = $vendor->user_id;
+
+        $serviceId = $this->makeService($vendor, amount: 10000, amountForVendor: 7500);
+
+        $this->withAuth()
+            ->deleteJson("/api/v1/admin/vendors/{$vendor->id}/permanent")
+            ->assertOk()
+            ->assertJsonPath('data.deleted', true)
+            // O número vai na resposta para o backoffice o poder mostrar a
+            // quem carregou no botão, em vez de ficar só no log do servidor.
+            ->assertJsonPath('data.orphan_services', 1);
+
+        $this->assertDatabaseMissing('vendors', ['id' => $vendor->id]);
+        $this->assertDatabaseMissing('users', ['id' => $userId]);
+        // O serviço SOBREVIVE, sem dono.
+        $this->assertDatabaseHas('services', ['id' => $serviceId, 'vendor_id' => null]);
+    }
+
+    public function test_force_delete_returns_404_for_an_unknown_vendor(): void
+    {
+        $this->withAuth()
+            ->deleteJson('/api/v1/admin/vendors/999999/permanent')
+            ->assertStatus(404);
     }
 
     public function test_by_category_counts_vendors_per_operation_area(): void

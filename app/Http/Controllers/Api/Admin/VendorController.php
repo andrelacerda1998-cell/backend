@@ -19,6 +19,7 @@ use App\Models\Vendor;
 use App\Models\Vendor\VendorDocuments;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -123,6 +124,89 @@ class VendorController extends Controller
         $vendor->restore();
 
         return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
+    }
+
+    /**
+     * Apaga um técnico DE VEZ. Não é o `suspend` -- não há volta.
+     *
+     * O `suspend` faz soft delete e o técnico pode ser reposto. Isto remove o
+     * utilizador, e com ele o vendor (users→vendors é CASCADE) e tudo o que
+     * pende dele: avaliações, documentos, candidaturas a pedidos, zonas,
+     * cidades, tickets de suporte, localização, lembretes de onboarding.
+     *
+     * O QUE NÃO DESAPARECE, e é preciso saber: `services.vendor_id` é SET NULL
+     * (a coluna do cliente chama-se `customer_id` e não é tocada aqui). Os
+     * serviços que a pessoa executou ficam na base de dados sem dono. O GMV total continua certo; o GMV POR TÉCNICO
+     * deixa de fechar, e as faturas já emitidas passam a apontar para um
+     * técnico que não existe. Foi decisão do André a 21/09/2026, com este custo
+     * explicitado -- fica escrito aqui para quem vier a seguir não pensar que
+     * foi descuido.
+     *
+     * Há tabelas que BLOQUEIAM o apagamento (NO ACTION): `schedule`,
+     * `schedule_available`, `payshop_payment_methods`,
+     * `payshop_payments_orders`, `phone_number_validation_codes` e
+     * `impersonation_codes`. Sem as limpar antes, o DELETE rebenta com erro de
+     * chave estrangeira em vez de fazer o que se pediu. Vão todas dentro da
+     * mesma transação: ou sai tudo, ou não sai nada.
+     */
+    public function forceDestroy(int $id): ApiSuccessResponse|ApiErrorResponse
+    {
+        $vendor = Vendor::withTrashed()->with('user')->find($id);
+
+        if (! $vendor) {
+            return new ApiErrorResponse(null, 'Técnico não encontrado.', 404);
+        }
+
+        $user = $vendor->user;
+
+        if (! $user) {
+            // Vendor órfão (utilizador já removido): apaga só o vendor.
+            $vendor->forceDelete();
+
+            return ApiSuccessResponse::make(['id' => $id, 'deleted' => true, 'orphan_services' => 0]);
+        }
+
+        // Quantos serviços ficam sem dono -- contado ANTES, porque depois do
+        // SET NULL já não há como saber quais eram.
+        $orfaos = Service::where('vendor_id', $vendor->id)->count();
+
+        $nome = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
+
+        DB::transaction(function () use ($user, $vendor) {
+            /*
+              As tabelas NO ACTION, que bloqueiam o DELETE se lá houver linhas.
+              Os nomes das colunas NÃO são todos `user_id` -- `schedule` liga
+              pelo cliente em `customer_id` e pelo técnico em `vendor_id`, e
+              `impersonation_codes` usa `generated_by_id`. Confirmado contra o
+              information_schema; assumir `user_id` em todas dava erro de
+              coluna inexistente em três delas.
+            */
+            DB::table('schedule')->where('vendor_id', $vendor->id)->delete();
+            DB::table('schedule')->where('customer_id', $user->id)->delete();
+            DB::table('schedule_available')->where('vendor_id', $vendor->id)->delete();
+            DB::table('phone_number_validation_codes')->where('user_id', $user->id)->delete();
+            DB::table('impersonation_codes')->where('generated_by_id', $user->id)->delete();
+            DB::table('payshop_payments_orders')->where('user_id', $user->id)->delete();
+            DB::table('payshop_payment_methods')->where('user_id', $user->id)->delete();
+
+            // E o utilizador leva o resto atrás, por CASCADE (vendors incluído).
+            $user->forceDelete();
+        });
+
+        Log::warning('[admin] técnico apagado em definitivo', [
+            'vendor_id' => $id,
+            'nome' => $nome,
+            'servicos_orfaos' => $orfaos,
+            'admin_id' => auth()->id(),
+        ]);
+
+        return ApiSuccessResponse::make([
+            'id' => $id,
+            'deleted' => true,
+            // Quem chama mostra isto a quem carregou no botão: é o custo real
+            // da operação e não devia ficar só no log do servidor.
+            'orphan_services' => $orfaos,
+        ]);
     }
 
     /**
