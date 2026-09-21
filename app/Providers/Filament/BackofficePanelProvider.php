@@ -57,6 +57,13 @@ class BackofficePanelProvider extends PanelProvider
                     ->shouldShowAvatarForm()
 
                     ->shouldShowDeleteAccountForm(false),
+                // Este registo é inerte na v1.4.1 do pacote: o register() e o boot()
+                // do plugin estão vazios, e o Translate vai buscar os idiomas à
+                // fachada, nunca ao plugin. É por isso que cada resource repete
+                // ->locales(['en','pt-pt']) em vez de os herdar daqui.
+                // A configuração que conta está em FilamentServiceProvider, num
+                // Translate::configureUsing(). Fica registado na esperança de o
+                // pacote vir a ligar as duas pontas — mas hoje não liga.
                 FilamentTranslateFieldPlugin::make()
                     ->defaultLocales(['en', 'pt-pt']),
                 DebuggerPlugin::make()
