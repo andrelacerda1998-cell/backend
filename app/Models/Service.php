@@ -47,6 +47,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'address',
         'distance',
         'rating_by_customer',
+        // Faltava aqui, e por isso o `update()` do
+        // CustomerRateServiceController descartava-o em silencio: a estrela
+        // gravava, o texto nao. O `GET /vendor/reviews` le esta coluna para
+        // mostrar as avaliacoes ao tecnico, ou seja, a funcionalidade existia
+        // de ponta a ponta e devolvia sempre comentario vazio.
+        'rating_comment_by_customer',
         'rating_by_vendor',
         'customer_notes',
         'vendor_notes',

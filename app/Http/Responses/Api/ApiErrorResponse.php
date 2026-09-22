@@ -8,6 +8,7 @@ use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Laravel\Telescope\EntryType;
 use Laravel\Telescope\Storage\EntryModel;
 
@@ -43,10 +44,19 @@ class ApiErrorResponse implements Responsable
                 'trace' => $this->exception->getTrace(),
             ];
 
-            $response['telescope'] = route('telescope').'/requests/'.EntryModel::where('type', EntryType::EXCEPTION)
-                ->where('content->response_status', Response::HTTP_INTERNAL_SERVER_ERROR)
-                ->latest('created_at')
-                ->first()?->uuid;
+            // So quando o Telescope esta mesmo registado. Com APP_DEBUG=true e
+            // TELESCOPE_ENABLED=false — a configuracao normal de um staging, e
+            // a dos testes — o `route('telescope')` lancava
+            // RouteNotFoundException DE DENTRO do formatador de erros: o erro
+            // real desaparecia e a resposta virava um 500 a falar de uma rota
+            // que nada tem a ver com o pedido. Um link de diagnostico nao pode
+            // ser a razao pela qual o diagnostico se perde.
+            $response['telescope'] = Route::has('telescope')
+                ? route('telescope').'/requests/'.EntryModel::where('type', EntryType::EXCEPTION)
+                    ->where('content->response_status', Response::HTTP_INTERNAL_SERVER_ERROR)
+                    ->latest('created_at')
+                    ->first()?->uuid
+                : null;
         } elseif (! is_null($this->exception)) {
             if (app(ExceptionHandler::class)->shouldReport($this->exception)) {
                 Log::error($this->exception->getMessage());
