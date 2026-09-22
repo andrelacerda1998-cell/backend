@@ -444,8 +444,19 @@ class Vendor extends Model implements Auditable
 
     public function toSearchableArray(): array
     {
-        $this->updateRatting();
-        $this->refresh();
+        // NÃO se recalcula a nota aqui.
+        //
+        // Isto é uma serialização: responde a "como é que este profissional se
+        // representa no índice de pesquisa". Chamava o updateRatting(), ou
+        // seja, uma LEITURA que escrevia na base de dados — a mesma família do
+        // `pending-schedules`, que marcava pedidos como aceites por alguém ter
+        // aberto um ecrã.
+        //
+        // O efeito era duplo: uma reindexação (scout:import) disparava um
+        // recálculo por cada profissional, e a nota certa passava a depender de
+        // alguém, por acaso, reindexar — em vez de depender de haver uma
+        // avaliação nova. O recálculo vive agora no ServiceObserver, onde a
+        // nota muda de facto.
         $this->load('servicesTypes', 'averageRating');
 
         $attributes = $this->toArray();
@@ -464,10 +475,45 @@ class Vendor extends Model implements Auditable
 
     public function setServices(array $data): void
     {
-        $this->servicesTypes()->sync(collect($data)->pluck('services_type_id')->toArray());
-        $this->load('servicesTypes');
+        $tipos = collect($data)->pluck('services_type_id')->toArray();
+
+        $this->servicesTypes()->sync($tipos);
+
+        // As ÁREAS derivam dos tipos escolhidos.
+        //
+        // A tabela `vendor_ratings` guarda a nota por ÁREA, e o updateRatting()
+        // percorre esta relação para a calcular. Só que nenhuma das duas apps a
+        // escrevia — o registo e o ecrã de competências mandam apenas
+        // `services_types[]`, e só o backoffice a preenchia à mão. A relação
+        // ficava vazia, o ciclo não corria uma vez, e a tabela ficava vazia
+        // com ela: todos os profissionais apareciam como "Novo na Piquet" nos
+        // dois ecrãs onde o cliente decide.
+        //
+        // Os tipos são a única fonte que existe. Quem faz "Rotura de Cano"
+        // trabalha em Canalização — não é preciso perguntar-lho outra vez.
+        $areas = ServicesType::query()
+            ->whereIn('id', $tipos)
+            ->pluck('operation_area_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $this->operationAreas()->sync($areas);
+
+        $this->load('servicesTypes', 'operationAreas');
+        $this->updateRatting();
         $this->searchable();
     }
+
+    /**
+     * Quantas avaliações são precisas para a nota ser mostrada ao cliente.
+     *
+     * Decisão do André. Abaixo disto o profissional aparece como "Novo na
+     * Piquet" — a nota existe e conta-se, mas não se publica um número que
+     * ainda não significa nada.
+     */
+    public const MIN_AVALIACOES_PARA_MOSTRAR = 3;
 
     /**
      * Recalcula a avaliação deste profissional, por área de operação.
@@ -495,7 +541,14 @@ class Vendor extends Model implements Auditable
                 ->whereNotNull('rating_by_customer');
 
             $totalRatings = (clone $rated)->count();
-            $average = $totalRatings > 0 ? round((float) (clone $rated)->avg('rating_by_customer'), 2) : null;
+
+            // Abaixo do mínimo a nota fica NULL — e o cliente lê "Novo na
+            // Piquet", que é a verdade. Uma média de duas avaliações não diz
+            // nada sobre ninguém, e uma delas fraca condenava alguém antes de
+            // ter tido hipótese de mostrar trabalho.
+            $average = $totalRatings >= self::MIN_AVALIACOES_PARA_MOSTRAR
+                ? round((float) (clone $rated)->avg('rating_by_customer'), 2)
+                : null;
 
             Ratings::updateOrCreate([
                 'vendor_id' => $this->id,

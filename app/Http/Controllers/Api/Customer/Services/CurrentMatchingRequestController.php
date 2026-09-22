@@ -7,6 +7,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Service;
+use App\Models\Vendor;
 use App\Services\Matching\MatchingService;
 use App\Trait\Services\CalculateServicePriceForCustomer;
 
@@ -111,9 +112,11 @@ class CurrentMatchingRequestController extends Controller
                 'id' => $selected->vendor_id,
                 'name' => $selected->vendor?->user?->name,
                 // null = sem avaliacoes. Nao se inventa nota.
-                'rating' => $selected->rating_average === null
+                // Mesmo corte do MatchingController: abaixo do mínimo, sem número.
+                'rating' => ($selected->rating_average === null || (int) $selected->rating_count < Vendor::MIN_AVALIACOES_PARA_MOSTRAR)
                     ? null
                     : round($selected->rating_average / 100, 2),
+                'rating_count' => (int) $selected->rating_count,
             ],
         ];
     }

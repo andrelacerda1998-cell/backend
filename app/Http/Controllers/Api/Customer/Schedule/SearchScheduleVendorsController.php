@@ -53,6 +53,10 @@ class SearchScheduleVendorsController extends Controller
         return $vendors->transform(function (Vendor $vendor) use ($serviceType, $userAddress, $serviceAt) {
             $rateService = app(RateService::class);
 
+            $avaliacao = $vendor->averageRating()
+                ->where('operation_area_id', $serviceType->operation_area_id)
+                ->first();
+
             $vendorUser = $vendor->user;
             $hourlyRate = $vendor->getRawOriginal('price_rate');
             $timeService = $serviceType->time;
@@ -88,10 +92,11 @@ class SearchScheduleVendorsController extends Controller
                 // null = ainda sem avaliações. Não se inventa 5: a app do
                 // cliente já trata o null e esconde a nota em vez de mostrar
                 // uma classificação perfeita que ninguém deu.
-                'rating' => $vendor->averageRating()
-                    ->where('operation_area_id', $serviceType->operation_area_id)
-                    ->first()
-                    ?->average_rating,
+                // A nota E quantas a sustentam. Um "4,5" sozinho não diz se
+                // vem de três serviços ou de trinta, e é essa diferença que
+                // faz o cliente confiar no número.
+                'rating' => $avaliacao?->average_rating,
+                'ratings_count' => (int) ($avaliacao?->total_ratings ?? 0),
                 'avatar' => $vendorUser->avatar,
                 'is_online' => $vendor->status->value === 'Online',
             ];

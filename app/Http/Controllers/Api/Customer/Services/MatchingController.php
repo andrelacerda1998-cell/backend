@@ -17,6 +17,7 @@ use App\Jobs\Services\MbwayPaymentCheckJob;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
+use App\Models\Vendor;
 use App\Models\Voucher;
 use App\Notifications\Vendor\ServiceWonNotification;
 use App\Services\Common\Services\MaterializePendingSchedule;
@@ -521,7 +522,13 @@ class MatchingController extends Controller
                     'avatar' => $c->vendor?->user?->avatar,
                 ],
                 // null = ainda sem avaliações. Não se inventa nota.
-                'rating' => $c->rating_average === null ? null : round($c->rating_average / 100, 2),
+                // Abaixo do mínimo não se mostra número: o cliente lê "Novo
+                // na Piquet", que é a verdade. O mesmo corte que a tabela
+                // `vendor_ratings` aplica — sem isto, o ecrã da seleção dizia
+                // 4,6 a quem os outros dois ecrãs davam como sem avaliações.
+                'rating' => ($c->rating_average === null || (int) $c->rating_count < Vendor::MIN_AVALIACOES_PARA_MOSTRAR)
+                    ? null
+                    : round($c->rating_average / 100, 2),
                 'rating_count' => $c->rating_count,
                 'amount' => $c->quoted_amount,
                 // Quanto do preco e estrada. Cada profissional parte de um
