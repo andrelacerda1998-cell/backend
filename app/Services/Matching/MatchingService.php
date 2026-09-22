@@ -433,6 +433,9 @@ class MatchingService
             'candidate_id' => $candidate->id,
             'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
             'expires_at' => $candidate->expires_at?->toIso8601String(),
+            // O mesmo que vai no payload HTTP: o prazo é do servidor, por isso
+            // a referência de "agora" tem de vir com ele.
+            'server_time' => now()->toIso8601String(),
         ]);
 
         // Só o convite leva push. Os outros eventos (perdeu, pedido fechou) são

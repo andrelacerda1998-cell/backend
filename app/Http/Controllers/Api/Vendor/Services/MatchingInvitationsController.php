@@ -176,6 +176,11 @@ class MatchingInvitationsController extends Controller
             // relance do que o número sozinho.
             'notified_at' => $candidate->notified_at?->toIso8601String(),
             'expires_at' => $candidate->expires_at?->toIso8601String(),
+            // Sem isto o contador ficava a contar pelo relógio do TELEMÓVEL
+            // contra um prazo do SERVIDOR. Numa janela de 60 segundos, 30
+            // segundos de desvio comiam metade do tempo visível — e este era o
+            // único payload de serviço desta app que não levava `server_time`.
+            'server_time' => now()->toIso8601String(),
             'service_type' => $service?->serviceType ? [
                 'id' => $service->serviceType->id,
                 'name' => $service->serviceType->getTranslation('name', auth()->user()->language ?? 'pt-pt'),
