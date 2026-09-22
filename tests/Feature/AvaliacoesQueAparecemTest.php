@@ -146,6 +146,32 @@ class AvaliacoesQueAparecemTest extends TestCase
         $this->assertSame(2, (int) $linha->total_ratings, 'contam-se; só não se publicam');
     }
 
+    // --- o que o cliente lê -----------------------------------------------
+
+    /**
+     * O cartão do profissional mostra "⭐ 4,5 (4 avaliações)" — a nota E
+     * quantas a sustentam. Um "4,5" sozinho não diz se vem de três serviços ou
+     * de trinta, e é essa diferença que faz o cliente confiar no número.
+     *
+     * O componente já sabia desenhar as duas coisas; o que faltava era a
+     * contagem chegar-lhe. Dois payloads mandavam a nota sem ela.
+     */
+    public function test_a_contagem_vai_junto_com_a_nota(): void
+    {
+        [$vendor, $tipo] = $this->tecnicoCom(4, nota: 5);
+
+        $linha = $vendor->averageRating()
+            ->where('operation_area_id', $tipo->operation_area_id)
+            ->first();
+
+        $this->assertSame(5.0, (float) $linha->average_rating);
+        $this->assertSame(
+            4,
+            (int) $linha->total_ratings,
+            'a contagem é de AVALIAÇÕES, não de serviços fechados: quem tem 40 serviços e 4 notas tem 4',
+        );
+    }
+
     // --- a leitura que escrevia -------------------------------------------
 
     /**

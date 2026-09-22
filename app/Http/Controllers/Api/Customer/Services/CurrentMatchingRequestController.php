@@ -116,6 +116,7 @@ class CurrentMatchingRequestController extends Controller
                 'rating' => ($selected->rating_average === null || (int) $selected->rating_count < Vendor::MIN_AVALIACOES_PARA_MOSTRAR)
                     ? null
                     : round($selected->rating_average / 100, 2),
+                'rating_count' => (int) $selected->rating_count,
             ],
         ];
     }
