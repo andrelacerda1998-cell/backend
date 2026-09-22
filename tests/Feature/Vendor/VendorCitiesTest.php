@@ -48,7 +48,13 @@ class VendorCitiesTest extends TestCase
             ->getJson('/api/v1/vendor/cities')
             ->assertOk();
 
-        $response->assertJsonCount(4, 'data.cities');
+        // O catalogo inteiro, e nao so as 4 deste teste: desde que as cidades
+        // passaram a ser semeadas por migracao, a resposta traz as de Portugal
+        // tambem. O que interessa e que as criadas aqui la estao.
+        $catalogo = collect($response->json('data.cities'))->pluck('id');
+        foreach ($ids as $id) {
+            $this->assertContains($id, $catalogo->all());
+        }
         $response->assertJsonPath('data.selected.available_city_ids', [$ids[0], $ids[1], $ids[2]]);
         $response->assertJsonPath('data.selected.preferred_city_ids', [$ids[0]]);
     }
