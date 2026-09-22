@@ -24,7 +24,11 @@ trait NotifyVendor
         // nunca sobrescrever o valor consistente por uma medição posterior/divergente.
         if (is_null($service->amount_for_vendor)) {
             $gpsDistance = $vendor->calculateDistance($service->address);
-            $service->amount_for_vendor = $this->calculatePriceForVendor($rateService, $hourlyRate, $timeService, $gpsDistance, $service->scheduledAt());
+            $service->amount_for_vendor = $this->calculatePriceForVendor(
+                $rateService, $hourlyRate, $timeService, $gpsDistance,
+                $service->scheduledAt(),
+                agendado: $service->scheduleIntent() !== null,
+            );
             $service->save();
         }
 
@@ -51,9 +55,16 @@ trait NotifyVendor
         ];
     }
 
-    private function calculatePriceForVendor(RateService $rateService, float $hourlyRate, int $timeService, float $distance, ?CarbonInterface $serviceAt = null): float
+    /**
+     * O backfill tem de usar a MESMA regra do calculo original, senao um
+     * registo legado ficava com um valor que o fluxo normal nunca produziria:
+     * num imediato o premio entra no valor do trabalho.
+     */
+    private function calculatePriceForVendor(RateService $rateService, float $hourlyRate, int $timeService, float $distance, ?CarbonInterface $serviceAt = null, bool $agendado = true): float
     {
-        return $rateService->calculateForVendor($hourlyRate, $timeService, $distance, true, true, $serviceAt);
+        return $agendado
+            ? $rateService->calculateForVendor($hourlyRate, $timeService, $distance, true, true, $serviceAt)
+            : $rateService->calculateForVendorInstantService($hourlyRate, $timeService, $distance, true, true, $serviceAt);
     }
 
     private function prepareServiceData(Service $service, float $distance): array

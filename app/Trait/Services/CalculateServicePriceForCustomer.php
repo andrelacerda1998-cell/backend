@@ -128,7 +128,11 @@ trait CalculateServicePriceForCustomer
             $customerAmount = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance, true, true, $serviceAt);
         }
 
-        $vendorAmount = $rateService->calculateForVendor($hourlyRate, $timeService, $distance, true, true, $serviceAt);
+        // O pagamento segue o mesmo modo que o preco: num imediato o premio
+        // entra no valor do trabalho, e o profissional recebe sobre ele.
+        $vendorAmount = $isScheduled
+            ? $rateService->calculateForVendor($hourlyRate, $timeService, $distance, true, true, $serviceAt)
+            : $rateService->calculateForVendorInstantService($hourlyRate, $timeService, $distance, true, true, $serviceAt);
 
         return [
             'customer_amount' => (int) round($customerAmount),

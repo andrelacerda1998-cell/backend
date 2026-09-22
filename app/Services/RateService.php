@@ -20,6 +20,16 @@ class RateService
      */
     private const FUSO_DO_NEGOCIO = 'Europe/Lisbon';
 
+    /**
+     * O premio de um pedido imediato.
+     *
+     * Nao e a comissao — essa e configuravel em backoffice e aplica-se aos
+     * dois modos. Isto e o que um trabalho vale a mais por ser para agora, e
+     * entra no valor do TRABALHO: o profissional recebe sobre ele, e e sobre
+     * o total ja inflacionado que a plataforma tira a sua percentagem.
+     */
+    private const PREMIO_DE_IMEDIATISMO = 0.75;
+
     public function __construct(private RateSettings $rateSettings) {}
 
     private function calculateDistanceRate($distance): int
@@ -56,7 +66,7 @@ class RateService
         $systemCommission = $this->calculateSystemCommissionRate();
 
         $vendorSubtotal = $this->calculateForVendor($hourRate, $timeService, $distance, false, false, $serviceAt);
-        $total = (($vendorSubtotal) / 0.75) / (1 - $systemCommission);
+        $total = (($vendorSubtotal) / self::PREMIO_DE_IMEDIATISMO) / (1 - $systemCommission);
 
         if ($addVat) {
             $total = $total * $this->getVat();
@@ -126,6 +136,35 @@ class RateService
         $hourCommission = $this->calculateHourCommission($serviceAt);
 
         $total = (($timeRate * $hourCommission) + $distanceRate);
+
+        if ($addVat) {
+            $total = $total * $this->getVat();
+        }
+
+        if ($round) {
+            return round($total);
+        } else {
+            return $total;
+        }
+    }
+
+    /**
+     * O que o profissional recebe num pedido IMEDIATO.
+     *
+     * O premio de imediatismo nao e da plataforma. Entra no valor do trabalho,
+     * e e sobre esse valor ja inflacionado que a Piquet tira os seus 25% — com
+     * o efeito de ganhar mais em euros (+33%) sem subir a percentagem.
+     *
+     * Enquanto isto nao existia, o premio aparecia so na conta do cliente: o
+     * profissional recebia por um imediato exatamente o mesmo que por um
+     * agendado, e a margem da plataforma nesses pedidos era 43,7% em vez de
+     * 25%. Quem largava o que estava a fazer para ir agora nao via um centimo
+     * da diferenca.
+     */
+    public function calculateForVendorInstantService($hourRate, $timeService, $distance, $round = true, $addVat = true, ?CarbonInterface $serviceAt = null): float
+    {
+        $total = $this->calculateForVendor($hourRate, $timeService, $distance, false, false, $serviceAt)
+            / self::PREMIO_DE_IMEDIATISMO;
 
         if ($addVat) {
             $total = $total * $this->getVat();

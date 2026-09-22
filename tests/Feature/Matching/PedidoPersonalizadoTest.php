@@ -159,7 +159,13 @@ class PedidoPersonalizadoTest extends TestCase
         // catalogo (que nao existe). Mesma conta do pricing, minutos dados.
         $candidato = $candidates->firstWhere('vendor_id', $this->canalizador->id);
         $rate = app(RateService::class);
-        $esperadoParaVendor = (int) round($rate->calculateForVendor(
+
+        // Um personalizado e despachado como IMEDIATO, e num imediato o premio
+        // entra no valor do trabalho: o profissional recebe sobre ele. Este
+        // teste fixava `calculateForVendor` e por isso descrevia a regra
+        // antiga, em que o cliente pagava o premio e o profissional recebia o
+        // mesmo que receberia por um agendado.
+        $esperadoParaVendor = (int) round($rate->calculateForVendorInstantService(
             $this->canalizador->getRawOriginal('price_rate'),
             90,
             (float) $candidato->quoted_distance,
