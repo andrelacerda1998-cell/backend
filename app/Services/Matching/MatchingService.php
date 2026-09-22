@@ -269,7 +269,7 @@ class MatchingService
                 // caía sempre nos 60 inventados.
                 $minutes = $service->durationMinutes() ?? 60;
 
-                if (! $fresh->vendor->hasFreeSlot($startAt, $startAt->copy()->addMinutes($minutes))) {
+                if (! $fresh->vendor->hasFreeSlot($startAt, $startAt->copy()->addMinutes($minutes), $service->id)) {
                     $fresh->update(['status' => CandidateStatus::LOST]);
                     $this->notifyVendor($fresh, MatchingCandidateLostEvent::class);
 

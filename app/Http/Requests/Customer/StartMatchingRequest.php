@@ -15,7 +15,7 @@ class StartMatchingRequest extends FormRequest
             // pedido caía sempre na morada principal, mandando o técnico para a
             // casa errada de quem tem vários alojamentos.
             'address_id' => ['nullable', 'integer', 'exists:addresses,id'],
-            'quantity' => ['sometimes', 'integer', 'min:1'],
+            'quantity' => ['sometimes', 'integer', 'min:1', 'max:5'],
             'scheduled' => ['sometimes', 'boolean'],
 
             // Mesma forma que o fluxo antigo guarda em `pending_schedule_data`.
