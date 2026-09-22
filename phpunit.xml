@@ -22,7 +22,20 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_DATABASE" value="testing"/>
+        <!--
+            O MESMO nome que a CI usa (ver o servico mysql do deploy.yml).
+
+            Enquanto isto dizia `testing` e a CI criava `piquet_test`, qualquer
+            acesso a base fora do `RefreshDatabase` passava localmente e
+            falhava la com "Unknown database 'testing'" — um erro de
+            configuracao que se le como codigo partido. Custou treze testes
+            vermelhos e um deploy saltado a descobrir.
+
+            Continua a NAO ser a base de desenvolvimento (`piquet`): o
+            `RefreshDatabase` apaga tudo o que encontra, e apontar os testes
+            para os dados de trabalho seria trocar um problema por um pior.
+        -->
+        <env name="DB_DATABASE" value="piquet_test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
