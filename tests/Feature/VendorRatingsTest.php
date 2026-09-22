@@ -74,6 +74,10 @@ class VendorRatingsTest extends TestCase
     {
         // O profissional foi generoso com os clientes (5) e eles não foram com
         // ele (2). A nota que conta é a que ele recebeu.
+        // Três, e não duas: abaixo do mínimo a nota não se publica (ver
+        // Vendor::MIN_AVALIACOES_PARA_MOSTRAR). O que este teste prova é QUAL
+        // das duas notas conta, e isso não mudou.
+        $this->closedService(byCustomer: 2, byVendor: 5);
         $this->closedService(byCustomer: 2, byVendor: 5);
         $this->closedService(byCustomer: 2, byVendor: 5);
 
@@ -96,12 +100,14 @@ class VendorRatingsTest extends TestCase
         // 40 serviços fechados e duas notas são duas avaliações, não quarenta.
         $this->closedService(5);
         $this->closedService(4);
+        $this->closedService(5);
+        $this->closedService(4);
         $this->closedService(null);
         $this->closedService(null);
 
         $rating = $this->rating();
 
-        $this->assertSame(2, $rating->total_ratings);
+        $this->assertSame(4, $rating->total_ratings, 'seis fechados, quatro notas');
         $this->assertSame(4.5, $rating->average_rating);
     }
 
@@ -109,6 +115,8 @@ class VendorRatingsTest extends TestCase
     {
         // Era `round()` sobre um int: 4,5 virava 5. A app do cliente mostra uma
         // casa decimal, portanto a precisão perdia-se por nada.
+        $this->closedService(5);
+        $this->closedService(4);
         $this->closedService(5);
         $this->closedService(4);
 
@@ -120,6 +128,8 @@ class VendorRatingsTest extends TestCase
         $otherArea = OperationArea::factory()->create();
         $otherType = ServicesType::factory()->create(['operation_area_id' => $otherArea->id]);
 
+        $this->closedService(5);
+        $this->closedService(5);
         $this->closedService(5);
 
         Service::factory()->create([
@@ -134,6 +144,8 @@ class VendorRatingsTest extends TestCase
 
     public function test_unfinished_services_do_not_count(): void
     {
+        $this->closedService(5);
+        $this->closedService(5);
         $this->closedService(5);
 
         Service::factory()->create([

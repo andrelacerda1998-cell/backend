@@ -143,5 +143,24 @@ class ServiceObserver
                 }
             }
         }
+
+        // A nota do profissional recalcula-se quando ALGUÉM O AVALIA.
+        //
+        // Estava pendurada no `Vendor::toSearchableArray()` — uma serialização
+        // para o índice de pesquisa que escrevia na base de dados. Dava dois
+        // problemas ao mesmo tempo: uma reindexação disparava um recálculo por
+        // cada profissional, e a nota certa dependia de alguém, por acaso,
+        // reindexar — não de haver uma avaliação nova.
+        //
+        // Aqui apanha todos os caminhos: a app do cliente, o backoffice e o
+        // comando de atribuição. Falha em silêncio de propósito: uma média mal
+        // recalculada não pode impedir alguém de avaliar um serviço.
+        if ($service->wasChanged('rating_by_customer')) {
+            try {
+                $service->vendor?->updateRatting();
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
     }
 }
