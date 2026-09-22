@@ -38,6 +38,12 @@ class VendorRankingTest extends TestCase
             'require_recent_activity_minutes' => 15,
             'customer_choice_seconds_custom' => 3600,
             'request_deadline_seconds' => 180,
+            // Faltava, e o `fake()` do Spatie nao e parcial: sem esta, as
+            // definicoes caiam para a base de dados. Localmente passava (a
+            // base `testing` existe); na CI a base chama-se `piquet_test` e os
+            // onze testes desta classe rebentavam com "Unknown database
+            // 'testing'" — um erro que nada tem a ver com ranking.
+            'max_radius_km' => 50,
         ]);
 
         $this->ranking = app(VendorRankingService::class);

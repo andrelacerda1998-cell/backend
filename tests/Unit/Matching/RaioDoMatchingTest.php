@@ -29,7 +29,27 @@ class RaioDoMatchingTest extends TestCase
     {
         parent::setUp();
 
-        MatchingSettings::fake([
+        MatchingSettings::fake($this->definicoes());
+
+        $this->ranking = app(VendorRankingService::class);
+    }
+
+    /**
+     * TODAS as propriedades de `MatchingSettings`.
+     *
+     * O `fake()` do Spatie nao e parcial: uma propriedade que falte no array
+     * cai para a base de dados. Localmente isso passa despercebido, porque a
+     * base `testing` existe e tem a linha; na CI a base chama-se `piquet_test`
+     * e o teste rebenta com "Unknown database 'testing'" — um erro que nao
+     * tem nada a ver com o que se esta a testar.
+     *
+     * Por isso o array vive aqui inteiro e os testes so sobrepoem o que lhes
+     * interessa. Quando alguem acrescentar uma definicao nova, o sitio a mexer
+     * e este.
+     */
+    private function definicoes(array $sobrepor = []): array
+    {
+        return array_merge([
             'shortlist_size' => 3,
             'wave_size' => 6,
             'wave_interval_seconds' => 45,
@@ -45,9 +65,7 @@ class RaioDoMatchingTest extends TestCase
             'require_recent_activity_minutes' => 15,
             'request_deadline_seconds' => 180,
             'max_radius_km' => 50,
-        ]);
-
-        $this->ranking = app(VendorRankingService::class);
+        ], $sobrepor);
     }
 
     private function aKm(string $nome, float $km): RankedVendor
@@ -104,7 +122,7 @@ class RaioDoMatchingTest extends TestCase
 
     public function test_com_o_raio_a_zero_nao_se_filtra_nada(): void
     {
-        MatchingSettings::fake(['max_radius_km' => 0]);
+        MatchingSettings::fake($this->definicoes(['max_radius_km' => 0]));
         $ranking = app(VendorRankingService::class);
 
         $resultado = $ranking->dentroDoRaio(collect([$this->aKm('longe', 398.0)]));
