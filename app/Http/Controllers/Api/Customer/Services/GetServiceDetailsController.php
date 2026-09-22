@@ -31,6 +31,13 @@ class GetServiceDetailsController extends Controller
                     'user' => $service->vendor->user?->only('name', 'phone', 'email'),
                     'price_rate' => $service->vendor->price_rate,
                     'location' => $service->vendor->currentLocation?->only('latitude', 'longitude'),
+                    // O escudo "Técnico Verificado" era texto fixo no ecrã do
+                    // cliente, sem consultar campo nenhum — e não podia
+                    // consultar, porque não havia campo nenhum para consultar.
+                    // Passa a vir do mesmo `can_accept_service` que decide
+                    // quem é convidado: documentos válidos, IBAN, AT e
+                    // workspace. Se o portão cair, o selo cai com ele.
+                    'is_verified' => (bool) $service->vendor->can_accept_service,
                 ] : null,
                 // Quanto tempo o trabalho leva, JÁ com as unidades pedidas.
                 // Os ecrãs liam `service_type.time` — o tempo de UMA unidade — e
@@ -51,10 +58,17 @@ class GetServiceDetailsController extends Controller
                     'latitude' => $service->address['latitude'],
                     'longitude' => $service->address['longitude'],
                 ] : null,
+                // Sem estes dois, o ecrã de acompanhamento não tinha como saber
+                // se o técnico já saiu: decidia o texto só pelo estado e
+                // escrevia "está a caminho" três segundos depois do pagamento,
+                // quando ele ainda nem sabia que fora escolhido. Os componentes
+                // que já liam `on_the_way_at` recebiam-no vazio.
+                'on_the_way_at' => $service->on_the_way_at,
+                'arrived_at' => $service->arrived_at,
                 'rating_by_customer' => $service->rating_by_customer,
                 'created_at' => $service->created_at,
                 'updated_at' => $service->updated_at,
-                'invoice' => $service->getFirstTemporaryUrl(now()->addMinutes(30),'invoices'),
+                'invoice' => $service->getFirstTemporaryUrl(now()->addMinutes(30), 'invoices'),
                 'server_time' => now()->toIso8601String(),
                 'created_timestamp' => $service->created_at->timestamp,
                 'updated_timestamp' => $service->updated_at->timestamp,

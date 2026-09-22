@@ -59,7 +59,36 @@ class VendorRankingService
             ->filter()
             ->values();
 
-        return $this->sortAndNumber($ranked);
+        return $this->sortAndNumber($this->dentroDoRaio($ranked));
+    }
+
+    /**
+     * Quem está dentro do raio é convidado primeiro.
+     *
+     * Não é exclusão dura: se não sobrar ninguém dentro — porque não há
+     * cobertura, ou porque os de dentro já foram todos convidados em ondas
+     * anteriores — devolve-se a lista inteira e o raio abre-se. Em zonas com
+     * pouca cobertura o pedido continua a ter hipótese.
+     *
+     * Antes disto o motor não tinha predicado geográfico nenhum: a distância
+     * entrava só como terceiro critério de desempate, e para um serviço em
+     * Lisboa apareciam lado a lado uma proposta a 1 km por 34,11 € e outra a
+     * 398 km por 554,98 €.
+     *
+     * @param  Collection<int, RankedVendor>  $ranked
+     * @return Collection<int, RankedVendor>
+     */
+    public function dentroDoRaio(Collection $ranked): Collection
+    {
+        $raio = (int) ($this->settings->max_radius_km ?? 0);
+
+        if ($raio <= 0) {
+            return $ranked;
+        }
+
+        $perto = $ranked->filter(fn (RankedVendor $v) => $v->distance <= $raio)->values();
+
+        return $perto->isNotEmpty() ? $perto : $ranked;
     }
 
     /**
@@ -131,9 +160,20 @@ class VendorRankingService
 
         $vendors = $query->get();
 
-        if ($immediate) {
-            $vendors = $vendors->filter(fn (Vendor $v) => $v->can_accept_service);
-        }
+        // Quem desligou "Novos pedidos" sai da onda.
+        //
+        // Antes continuava no ranking e ocupava um dos lugares, sem receber
+        // push nenhum: o cliente ficava à espera de resposta de quem não fora
+        // avisado, e lia "Avisámos os técnicos da tua zona" quando, no limite,
+        // não fora avisado ninguém. O lugar passa a ir a quem pode mesmo ser
+        // chamado; o convite fica-lhe no histórico na mesma.
+        $vendors = $vendors->filter(fn (Vendor $v) => $v->shouldReceive('new_requests'));
+
+        // A verificação documental passa a valer nos DOIS. Corria só no
+        // imediato, e por isso um profissional com registo criminal caducado
+        // era excluído de um pedido para agora e convidado para um agendado —
+        // com o escudo "Técnico Verificado" ao lado do nome no ecrã do cliente.
+        $vendors = $vendors->filter(fn (Vendor $v) => $v->can_accept_service);
 
         if ($scheduledFor) {
             // O que se verifica aqui e se o profissional pode MESMO estar la:

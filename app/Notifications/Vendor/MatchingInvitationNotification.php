@@ -30,7 +30,29 @@ class MatchingInvitationNotification extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return $this->applyVendorPreference($notifiable, 'new_requests', ['expo']);
+        // `database` vai junto de propósito. O trait só silencia o push e diz
+        // que o histórico se mantém — mas aqui não havia histórico nenhum para
+        // manter: o único canal declarado era o `expo`. Quem desligasse "Novos
+        // pedidos" ficava sem aviso E sem registo, e não tinha como saber que
+        // tinha havido trabalho para ele.
+        return $this->applyVendorPreference($notifiable, 'new_requests', ['expo', 'database']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray($notifiable): array
+    {
+        $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
+        $serviceType = $this->candidate->service?->serviceType;
+
+        return [
+            'title' => __('notifications.matchingInvitation.title', [], $language)
+                .($serviceType?->getTranslation('name', $language) ?? ''),
+            'body' => __('notifications.matchingInvitation.description', [], $language),
+            'service_id' => $this->candidate->service_id,
+            'candidate_id' => $this->candidate->id,
+        ];
     }
 
     public function toExpo($notifiable): ExpoMessage

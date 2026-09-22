@@ -97,6 +97,15 @@ class MatchingSettings extends Settings
      */
     public int $require_recent_activity_minutes;
 
+    /**
+     * Raio máximo, em quilómetros, a partir da morada do serviço.
+     *
+     * Não é uma exclusão dura: quem está dentro é convidado primeiro, e o raio
+     * só se abre quando não sobra mais ninguém dentro. Ver a migração
+     * 2026_09_22_110000_raio_maximo_do_matching.
+     */
+    public int $max_radius_km;
+
     public static function group(): string
     {
         return 'matching';

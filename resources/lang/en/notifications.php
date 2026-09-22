@@ -129,6 +129,10 @@ return [
         // clock running and needs to know the decision is theirs.
         'description' => 'Professionals available for :service_type. Pick the one you prefer.',
     ],
+    'serviceWon' => [
+        'title' => 'The job is yours',
+        'description' => 'The customer picked you for :service_type and has paid. You can head over.',
+    ],
     'matchingFailed' => [
         'title' => 'Nobody available right now',
         'description' => 'We could not find professionals for :service_type. Try again or book another time.',
