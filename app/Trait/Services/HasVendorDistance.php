@@ -17,6 +17,15 @@ trait HasVendorDistance
             $address = $vendor->addresses()->where('address_type', AddressType::FISCAL_ADDRESS)->first();
         }
 
+        // Sem morada nenhuma nao ha distancia que calcular, e o acesso direto
+        // a `$address->latitude` rebentava com 500. O `vendor_id` do
+        // `/calculate` vem do cliente, por isso e alcancavel de fora: bastava
+        // pedir o preco de um profissional que ainda nao completou o perfil
+        // para o checkout responder "Something went wrong".
+        if (! $address) {
+            throw new \Exception('Vendor has no address to measure the distance from', 422);
+        }
+
         return calculate_distance(
             $address->latitude,
             $address->longitude,
