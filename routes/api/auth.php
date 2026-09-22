@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Auth\ChangeEmailController;
 use App\Http\Controllers\Api\Auth\CreateUserController;
 use App\Http\Controllers\Api\Auth\DeviceNotificationsController;
 use App\Http\Controllers\Api\Auth\ForgotPasswordController;
@@ -68,6 +69,8 @@ Route::group(['prefix' => 'auth', 'middleware' => 'locale'], function () {
             Route::post('/send-confirmation', [VerificationController::class, 'send'])
                 ->middleware(['throttle:6,1'])
                 ->name('verification.send');
+            // Mesmo tecto do reenvio: os dois acabam a mandar um email.
+            Route::put('/', ChangeEmailController::class)->middleware(['throttle:6,1']);
         });
         Route::get('/sms-validation', ValidationPhoneNumberController::class);
         Route::post('/sms-validation', ValidatePhoneNumberController::class);
