@@ -34,7 +34,7 @@ class ServiceController extends Controller
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
         $query = Service::query()
-            ->with(['customerUser', 'vendor.user', 'serviceType', 'schedule'])
+            ->with(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'media', 'operationAreas'])
             ->withCount([
                 'candidates as candidates_notified' => fn ($q) => $q->where('status', CandidateStatus::NOTIFIED),
                 'candidates as candidates_accepted' => fn ($q) => $q->where('status', CandidateStatus::ACCEPTED),
@@ -93,10 +93,19 @@ class ServiceController extends Controller
      */
     public function show(Service $service): ApiSuccessResponse
     {
-        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user']);
+        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user', 'media', 'operationAreas']);
 
         return ApiSuccessResponse::make([
             ...$this->present($service),
+            /*
+             * As fotografias que o cliente anexou, com URL assinado.
+             *
+             * `customerPhotosPayload()` é o mesmo método que as apps do cliente
+             * e do técnico usam -- uma só definição de validade (60 min) em vez
+             * de três que divergiriam à primeira alteração. Só no detalhe: na
+             * listagem vai apenas a contagem.
+             */
+            'customer_photos' => $service->customerPhotosPayload(),
             'candidates' => $service->candidates
                 ->sortBy('rank')
                 ->map(fn ($c) => [
@@ -173,6 +182,26 @@ class ServiceController extends Controller
             'piquet_revenue' => $this->euros($comissao),
             'rating' => $service->rating_by_customer,
             'customer_notes' => $service->customer_notes,
+            /*
+             * Pedido personalizado: o que o cliente descreveu por palavras dele,
+             * quando não há tipo de catálogo que sirva.
+             *
+             * O backoffice mostrava aqui seis pedidos inventados enquanto os
+             * reais -- serviços com `is_custom` -- não chegavam à API de admin.
+             */
+            'is_custom' => (bool) $service->is_custom,
+            'custom_description' => $service->custom_description,
+            'custom_duration_minutes' => $service->custom_duration_minutes,
+            'custom_dispatched_at' => $service->custom_dispatched_at?->toIso8601String(),
+            'custom_categories' => $service->operationAreas->pluck('name')->all(),
+            /*
+             * Quantas fotografias o cliente anexou.
+             *
+             * Só a CONTAGEM na listagem: os URLs são assinados e temporários, e
+             * gerar dezenas por página para imagens que ninguém abriu seria
+             * trabalho deitado fora. O detalhe (`show`) traz os URLs.
+             */
+            'customer_photos_count' => $service->getMedia('customer')->count(),
             /*
              * O estado do matching. Sem isto não se sabe a diferença entre "não
              * apareceu ninguém" e "ninguém foi sequer perguntado" -- que é a
