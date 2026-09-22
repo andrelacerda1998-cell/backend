@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'auth' => [
+        'email_already_verified' => 'Este email já está confirmado.',
+    ],
     'payment_methods' => [
         'credit_card_invalid_data' => 'A chave de encriptação não é válida.',
         'disabled' => 'Este método de pagamento não está disponível de momento.',
