@@ -135,6 +135,45 @@ class DuracaoDoTrabalhoTest extends TestCase
     }
 
     /**
+     * Os ecrãs do cliente não recebem a quantidade — nem podem multiplicar
+     * nada. Quem faz a conta é o servidor: o payload passa a levar a duração
+     * real, e os ecrãs só a mostram.
+     */
+    public function test_o_payload_do_cliente_leva_a_duracao_ja_feita(): void
+    {
+        $service = $this->servico(['quantity' => 3], tempoDoTipo: 60);
+
+        $dados = $this->actingAs($service->customer, 'api')
+            ->getJson("/api/v1/customer/services/{$service->id}")
+            ->assertSuccessful()
+            ->json('data.service');
+
+        $this->assertSame(180, $dados['duration_minutes'], 'três unidades de uma hora são três horas');
+        $this->assertSame(3, $dados['quantity']);
+        // O tempo do tipo continua a ir, para não partir quem já o lia.
+        $this->assertSame(60, $dados['service_type']['time']);
+    }
+
+    /**
+     * A mesma armadilha do lado do técnico, agora no ecrã do cliente: um
+     * pedido personalizado não tem tipo de serviço, e o acesso direto a
+     * `serviceType->operationArea` rebentava a resposta com 500.
+     */
+    public function test_o_ecra_de_pedido_em_curso_aguenta_um_personalizado(): void
+    {
+        $service = $this->servico(['services_type_id' => null]);
+        $service->forceFill([
+            'is_custom' => true,
+            'custom_description' => 'Trocar a fechadura da porta da rua.',
+            'custom_duration_minutes' => 90,
+        ])->save();
+
+        $this->actingAs($service->customer, 'api')
+            ->getJson('/api/v1/customer/services/pending')
+            ->assertSuccessful();
+    }
+
+    /**
      * O caminho síncrono — cartão que passa à primeira, saldo ou voucher.
      *
      * Exercitado por reflexão: o caminho público exige o gateway de pagamento,

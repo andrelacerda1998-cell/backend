@@ -32,6 +32,13 @@ class GetServiceDetailsController extends Controller
                     'price_rate' => $service->vendor->price_rate,
                     'location' => $service->vendor->currentLocation?->only('latitude', 'longitude'),
                 ] : null,
+                // Quanto tempo o trabalho leva, JÁ com as unidades pedidas.
+                // Os ecrãs liam `service_type.time` — o tempo de UMA unidade — e
+                // escreviam "Duração do serviço: 1 hora" a quem tinha comprado
+                // três. A quantidade não chega sequer a estes ecrãs; quem sabe
+                // a conta é o servidor (ver Service::durationMinutes()).
+                'duration_minutes' => $service->durationMinutes(),
+                'quantity' => $service->quantity,
                 'service_type' => $service->serviceType ? [
                     'id' => $service->serviceType->id,
                     'name' => $service->serviceType->name,

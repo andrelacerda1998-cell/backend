@@ -95,6 +95,27 @@ class PedidoPersonalizadoAgendadoTest extends TestCase
         $this->assertSame(ServiceStatus::PENDING, $service->fresh()->status);
     }
 
+    /**
+     * O payload do técnico leva a duração já feita.
+     *
+     * Do lado da app o objeto do serviço é `any`, por isso o TypeScript não
+     * verifica nada — quem tem de garantir o contrato é este teste.
+     */
+    public function test_o_payload_do_tecnico_leva_a_duracao_real(): void
+    {
+        [, $vendor, $service] = $this->personalizadoPago(duracao: 90);
+
+        $lista = $this->actingAs($vendor->user, 'api')
+            ->getJson('/api/v1/vendor/services/pending/all')
+            ->assertSuccessful()
+            ->json('data.services');
+
+        $encontrado = collect($lista)->firstWhere('id', $service->id);
+
+        $this->assertNotNull($encontrado, 'o pedido tem de aparecer na lista do técnico');
+        $this->assertSame(90, $encontrado['duration_minutes']);
+    }
+
     public function test_um_personalizado_agendado_e_pago_passa_a_gerar_a_marcacao(): void
     {
         [, $vendor, $service] = $this->personalizadoPago(duracao: 90);

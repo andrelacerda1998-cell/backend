@@ -41,7 +41,7 @@ class ListSchedulesController extends Controller
                 'scheduled_time_start' => Carbon::parse($schedule->scheduled_time_start)->format('H:i'),
                 'scheduled_time_end' => Carbon::parse($schedule->scheduled_time_end)->format('H:i'),
                 'service_id' => $schedule->service_id,
-                'price' => number_format(($schedule->service->amount/100), 2, '.'),
+                'price' => number_format(($schedule->service->amount / 100), 2, '.'),
                 'vendor' => $schedule->vendor ? [
                     'id' => $schedule->vendor->id,
                     'name' => $schedule->vendor->user->name,
@@ -50,11 +50,14 @@ class ListSchedulesController extends Controller
                     // ainda não há compromisso e não expomos o número.
                     'phone' => $schedule->is_pending ? null : $schedule->vendor->user->phone_number,
                 ] : null,
+                // A duração do trabalho marcado, com as unidades pedidas.
+                'duration_minutes' => $schedule->service?->durationMinutes(),
+                'quantity' => $schedule->service?->quantity,
                 'service_type' => $schedule->serviceType ? [
                     'id' => $schedule->serviceType->id,
                     'name' => $schedule->serviceType->name,
                 ] : null,
-                'address' => $schedule->service->address?$schedule->service->address['name']  : null,
+                'address' => $schedule->service->address ? $schedule->service->address['name'] : null,
                 'created_at' => $schedule->created_at,
             ];
         });

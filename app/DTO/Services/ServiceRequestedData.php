@@ -28,6 +28,13 @@ readonly class ServiceRequestedData
         /** URL assinados e temporarios (60 min) das fotos que o cliente juntou ao pedido. */
         public array $customer_photos,
         public array $service_area,
+        /**
+         * Duração real do trabalho em minutos, JÁ com as unidades pedidas.
+         * O `service_type.time` é o tempo de UMA unidade: o técnico via
+         * "1 hora" num convite de três, e o cronómetro de execução dava
+         * "tempo excedido" ao minuto 60.
+         */
+        public ?int $duration_minutes,
         public array $service_type,
         public ?array $schedule,
         public ?string $date_label,
@@ -130,6 +137,7 @@ readonly class ServiceRequestedData
             // `custom_duration_minutes` que ele definiu na mesma altura.
             // O MatchingInvitationsController já resolvia isto assim.
             service_area: self::serviceArea($service),
+            duration_minutes: $service->durationMinutes(),
             // includes/excludes vão para a app do técnico pelo mesmo motivo por
             // que vão para a do cliente: é o que separa "o que combinei fazer"
             // de "o que o cliente vai pedir na hora" — e é aí que nascem as
