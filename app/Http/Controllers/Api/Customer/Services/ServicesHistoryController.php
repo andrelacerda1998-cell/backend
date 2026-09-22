@@ -68,6 +68,9 @@ class ServicesHistoryController extends Controller
                             'user' => $service->vendor->user->only('name', 'avatar'),
                             // 'price_rate' => $service->vendor->price_rate,
                         ] : null,
+                        // Duração real do trabalho, com as unidades pedidas.
+                        'duration_minutes' => $service->durationMinutes(),
+                        'quantity' => $service->quantity,
                         'service_type' => $service->serviceType ? [
                             'id' => $service?->serviceType?->id,
                             'name' => $service?->serviceType?->name,

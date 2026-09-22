@@ -42,8 +42,16 @@ class CheckHasAnyServicePendingController extends Controller
                 'name' => $service->address['name'],
                 'additional_info' => $service->address['additional_info'],
             ] : null,
-            'service_area' => $service->serviceType->operationArea->only(['name']),
-            'service_type' => $service->serviceType->only(['time', 'name']),
+            // Guardas: um pedido personalizado não tem tipo de serviço, e o
+            // acesso direto rebentava este ecrã com 500 — a mesma armadilha
+            // que já estava do lado do técnico.
+            'service_area' => $service->serviceType?->operationArea?->only(['name']) ?? [],
+            'service_type' => $service->serviceType?->only(['time', 'name']) ?? [
+                'time' => $service->custom_duration_minutes,
+                'name' => $service->custom_description,
+            ],
+            'duration_minutes' => $service->durationMinutes(),
+            'quantity' => $service->quantity,
             'updated_at' => $service->updated_at,
             'server_time' => now()->toIso8601String()
         ];

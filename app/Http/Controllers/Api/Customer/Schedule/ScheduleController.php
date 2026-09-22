@@ -83,6 +83,24 @@ class ScheduleController
             return new ApiErrorResponse(new \Exception('Schedule already exists'), 'Schedule already exists', 400);
         }
 
+        $inicio = Carbon::parse($request->input('scheduled_time_start'));
+
+        // A hora de fim é calculada AQUI, não aceite do cliente.
+        //
+        // A app mandava um fim calculado com 30 minutos fixos, e o servidor
+        // gravava-o tal e qual: a agenda do profissional ficava bloqueada pelo
+        // tempo errado — a menos, e a menos ainda quando o cliente pedia várias
+        // unidades. Quem sabe quanto tempo o trabalho leva é o servidor.
+        //
+        // Sem serviço ou sem duração conhecida, respeita-se o que veio: é o
+        // caminho antigo e não se parte um pedido em curso por causa disto.
+        $servicoDoPedido = $serviceId ? Service::find($serviceId) : null;
+        $minutos = $servicoDoPedido?->durationMinutes();
+
+        $fim = $minutos !== null
+            ? $inicio->copy()->addMinutes($minutos)
+            : Carbon::parse($request->input('scheduled_time_end'));
+
         /** @var Schedule $schedule */
         $schedule = $vendor->schedules()
             ->create([
@@ -90,8 +108,8 @@ class ScheduleController
                 'scheduled_day' => Carbon::parse($scheduledDay),
                 'service_type_id' => $request->input('service_type_id'),
                 'service_id' => $serviceId,
-                'scheduled_time_start' => Carbon::parse($request->input('scheduled_time_start')),
-                'scheduled_time_end' => Carbon::parse($request->input('scheduled_time_end')),
+                'scheduled_time_start' => $inicio,
+                'scheduled_time_end' => $fim,
                 'recurrence' => $request->input('recurrence'),
                 'is_pending' => true,
             ]);

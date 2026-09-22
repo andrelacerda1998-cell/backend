@@ -359,9 +359,13 @@ class OpenServiceController extends Controller
         $scheduleData = $request->input('schedule', []);
         $scheduledDay = $scheduleData['scheduled_day'] ?? null;
 
-        $serviceType = ServicesType::find($service->services_type_id);
         $scheduledTimeStart = Carbon::parse($scheduleData['scheduled_time_start']);
-        $scheduledTimeEnd = $scheduledTimeStart->copy()->addMinutes((int) $serviceType->time);
+        // A duração vem de Service::durationMinutes(), que conta as unidades
+        // pedidas. Aqui usava-se o tempo do tipo em cru: quem comprasse "2
+        // torneiras na mesma visita" pagava duas horas e a agenda bloqueava uma.
+        $scheduledTimeEnd = $scheduledTimeStart->copy()->addMinutes(
+            $service->durationMinutes() ?? 0
+        );
 
         $scheduleExists = $vendor->schedules()
             ->where('customer_id', $service->customer_id)
@@ -383,6 +387,13 @@ class OpenServiceController extends Controller
             'service_id' => $service->id,
             'scheduled_time_start' => $scheduledTimeStart,
             'scheduled_time_end' => $scheduledTimeEnd,
+            // A repetição que o cliente escolheu no checkout. O pedido sempre a
+            // aceitou (OpenServiceRequest valida `schedule.recurrence`) e os
+            // outros dois caminhos sempre a gravaram — este deitava-a fora sem
+            // dizer nada. O cliente via "Repete todas as semanas" confirmado no
+            // ecrã, pagava, e a série nunca nascia. Acontecia no caminho mais
+            // comum: cartão que passa à primeira, saldo ou voucher.
+            'recurrence' => $scheduleData['recurrence'] ?? null,
             'is_pending' => true,
         ]);
 

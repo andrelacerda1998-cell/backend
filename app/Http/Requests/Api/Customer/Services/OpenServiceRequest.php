@@ -33,7 +33,7 @@ class OpenServiceRequest extends FormRequest
             // Unidades do mesmo serviço ("2 reparações de torneira"). O teto de
             // 10 não é técnico: acima disso deixa de ser uma visita e passa a
             // ser uma obra, que precisa de orçamento e não de checkout.
-            'quantity' => 'integer|nullable|min:1|max:10',
+            'quantity' => 'integer|nullable|min:1|max:5',
             // Ids das fotos já carregadas em /customer/services/photos. A
             // propriedade e a coleção são reconfirmadas ao anexar — este limite
             // é conveniência, não segurança.

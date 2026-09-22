@@ -28,6 +28,13 @@ readonly class ServiceRequestedData
         /** URL assinados e temporarios (60 min) das fotos que o cliente juntou ao pedido. */
         public array $customer_photos,
         public array $service_area,
+        /**
+         * Duração real do trabalho em minutos, JÁ com as unidades pedidas.
+         * O `service_type.time` é o tempo de UMA unidade: o técnico via
+         * "1 hora" num convite de três, e o cronómetro de execução dava
+         * "tempo excedido" ao minuto 60.
+         */
+        public ?int $duration_minutes,
         public array $service_type,
         public ?array $schedule,
         public ?string $date_label,
@@ -48,6 +55,48 @@ readonly class ServiceRequestedData
             array_map(static fn ($item) => is_string($item) ? trim($item) : '', $items),
             static fn (string $item) => $item !== '',
         ));
+    }
+
+    /**
+     * A categoria do trabalho. Num pedido de catálogo vem do tipo de serviço;
+     * num personalizado vem das áreas que o backoffice escolheu ao despachar.
+     */
+    private static function serviceArea(Service $service): array
+    {
+        if ($area = $service->serviceType?->operationArea) {
+            return $area->only(['name']);
+        }
+
+        $primeira = $service->operationAreas->first();
+
+        return $primeira ? $primeira->only(['name']) : [];
+    }
+
+    /**
+     * O que o técnico vai fazer.
+     *
+     * Num personalizado o `name` é a descrição que o cliente escreveu — é o que
+     * ele tem para decidir se aceita — e o `time` é a duração que o backoffice
+     * definiu. O `id` fica null: não há tipo de serviço nenhum, e devolver um
+     * id inventado era pior do que não devolver nada.
+     */
+    private static function serviceType(Service $service): array
+    {
+        if ($type = $service->serviceType) {
+            return [
+                ...$type->only(['id', 'time', 'name']),
+                'includes' => self::cleanList($type->getTranslatedIncludes()),
+                'excludes' => self::cleanList($type->getTranslatedExcludes()),
+            ];
+        }
+
+        return [
+            'id' => null,
+            'time' => $service->custom_duration_minutes,
+            'name' => $service->custom_description,
+            'includes' => [],
+            'excludes' => [],
+        ];
     }
 
     public static function fromArray(Service $service, User $user): self
@@ -80,16 +129,21 @@ readonly class ServiceRequestedData
             address_details: $service->formatVendorAddress(),
             customer_notes: $service->customer_notes,
             customer_photos: $service->customerPhotosPayload(),
-            service_area: $service->serviceType->operationArea->only(['name']),
+            // Um pedido PERSONALIZADO não tem tipo de serviço: `services_type_id`
+            // é null de propósito. Sem estas guardas, o acesso direto rebentava
+            // a lista INTEIRA de pedidos pendentes do técnico com 500 — não só
+            // o personalizado, todos. A categoria vem da relação que o
+            // backoffice preenche ao despachar, e a duração do
+            // `custom_duration_minutes` que ele definiu na mesma altura.
+            // O MatchingInvitationsController já resolvia isto assim.
+            service_area: self::serviceArea($service),
+            duration_minutes: $service->durationMinutes(),
             // includes/excludes vão para a app do técnico pelo mesmo motivo por
             // que vão para a do cliente: é o que separa "o que combinei fazer"
             // de "o que o cliente vai pedir na hora" — e é aí que nascem as
-            // discussões à porta de casa.
-            service_type: [
-                ...$service->serviceType->only(['id', 'time', 'name']),
-                'includes' => self::cleanList($service->serviceType->getTranslatedIncludes()),
-                'excludes' => self::cleanList($service->serviceType->getTranslatedExcludes()),
-            ],
+            // discussões à porta de casa. Um personalizado não os tem: o que
+            // combinou está na descrição que o cliente escreveu.
+            service_type: self::serviceType($service),
             // vendor_confirmed_at vai junto: é o que permite à app do técnico
             // mostrar "Confirmar presença" ou "Presença confirmada" sem ter de
             // perguntar por outro pedido.

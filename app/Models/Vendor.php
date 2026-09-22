@@ -288,10 +288,78 @@ class Vendor extends Model implements Auditable
      * marcações confirmadas: um agendamento ainda pendente não deve reservar
      * tempo de deslocação que talvez nunca seja preciso.
      */
-    public function hasFreeSlot(CarbonInterface $start, CarbonInterface $end): bool
+    /**
+     * As candidaturas deste profissional — ver docs/matching.md.
+     */
+    public function candidates(): HasMany
+    {
+        return $this->hasMany(ServiceCandidate::class);
+    }
+
+    /**
+     * Horários que ele próprio reservou ao dizer que tinha interesse.
+     *
+     * Dizer "tenho interesse" num agendado é assumir aquele horário enquanto o
+     * cliente decide. Sem isto, ele continuava disponível: um segundo cliente
+     * passava o portão, pagava, e ficavam dois pagamentos para a mesma hora da
+     * mesma pessoa — confirmado por sonda na auditoria.
+     *
+     * A reserva dura o que a candidatura durar (`expires_at`: 180s no imediato,
+     * 1200s no agendado) e cai sozinha quando ele deixa de estar em `accepted`
+     * — porque recusou, porque o cliente escolheu outro, ou porque o prazo
+     * passou. Não é preciso mecanismo novo a libertá-la.
+     *
+     * @return array<int, array{0: CarbonInterface, 1: CarbonInterface}>
+     */
+    private function heldSlots(CarbonInterface $day, ?int $ignoreServiceId = null): array
+    {
+        return $this->candidates()
+            ->accepted()
+            ->where('expires_at', '>', now())
+            // O próprio pedido que está a ser avaliado não se bloqueia a si
+            // mesmo: quando o cliente o escolhe, a reverificação pergunta se a
+            // hora está livre — e a resposta não pode ser "não, por causa da
+            // reserva que este mesmo pedido criou".
+            ->when($ignoreServiceId, fn ($q) => $q->where('service_id', '!=', $ignoreServiceId))
+            ->with('service')
+            ->get()
+            ->map(function (ServiceCandidate $candidate) {
+                $service = $candidate->service;
+                $intent = $service?->scheduleIntent();
+                $minutes = $service?->durationMinutes();
+
+                if (! $intent || ! $intent['scheduled_day'] || ! $intent['scheduled_time_start'] || ! $minutes) {
+                    return null;
+                }
+
+                // O `scheduled_time_start` tanto vem como "14:30" como datetime
+                // completo, conforme o caminho que gravou o pedido. Concatenar
+                // às cegas dava "2026-09-29 2026-09-29 10:00:00" e rebentava.
+                // Dia e hora parseados em separado, como no resto do código.
+                $start = Carbon::parse($intent['scheduled_day'])
+                    ->setTimeFrom(Carbon::parse($intent['scheduled_time_start']));
+
+                return [$start, $start->copy()->addMinutes($minutes)];
+            })
+            ->filter()
+            ->filter(fn (array $janela) => $janela[0]->isSameDay($day))
+            ->values()
+            ->all();
+    }
+
+    public function hasFreeSlot(CarbonInterface $start, CarbonInterface $end, ?int $ignoreServiceId = null): bool
     {
         if ($this->isUnavailableOn($start)) {
             return false;
+        }
+
+        // Sem margem de segurança nas reservas: ainda ninguém pagou, e reservar
+        // tempo de deslocação para um trabalho que talvez não aconteça tirava-lhe
+        // convites a troco de nada. A margem entra quando a marcação é confirmada.
+        foreach ($this->heldSlots($start, $ignoreServiceId) as [$reservaInicio, $reservaFim]) {
+            if ($start->lt($reservaFim) && $end->gt($reservaInicio)) {
+                return false;
+            }
         }
 
         $margin = (int) config('services.request.schedule_safety_margin_minutes', 60);
