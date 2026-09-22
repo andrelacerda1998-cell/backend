@@ -13,6 +13,7 @@ use App\Models\Vendor;
 use App\Models\Voucher;
 use App\Services\RateService;
 use App\Trait\GeoAddress;
+use Carbon\CarbonInterface;
 
 trait CalculateServicePriceForCustomer
 {
@@ -43,7 +44,8 @@ trait CalculateServicePriceForCustomer
         AddressCoordinatesDTO|Address $address,
         Vendor $vendor,
         bool $isScheduled = false,
-        int $quantity = 1
+        int $quantity = 1,
+        ?CarbonInterface $serviceAt = null,
     ): float {
         $rateService = app(RateService::class);
 
@@ -57,12 +59,12 @@ trait CalculateServicePriceForCustomer
 
             $distance = $this->calculateVendorDistance($vendor, $customerCoords);
 
-            return $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
+            return $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance, true, true, $serviceAt);
         }
 
         $distance = $this->calculateVendorDistanceInstantService($vendor, $address);
 
-        return $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
+        return $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance, true, true, $serviceAt);
     }
 
     /**
@@ -83,13 +85,15 @@ trait CalculateServicePriceForCustomer
         AddressCoordinatesDTO|Address $address,
         Vendor $vendor,
         bool $isScheduled = false,
-        int $quantity = 1
+        int $quantity = 1,
+        ?CarbonInterface $serviceAt = null,
     ): array {
         return $this->calculatePricesForMinutes(
             $this->effectiveMinutes($serviceType, $quantity),
             $address,
             $vendor,
             $isScheduled,
+            $serviceAt,
         );
     }
 
@@ -105,6 +109,7 @@ trait CalculateServicePriceForCustomer
         AddressCoordinatesDTO|Address $address,
         Vendor $vendor,
         bool $isScheduled = false,
+        ?CarbonInterface $serviceAt = null,
     ): array {
         $rateService = app(RateService::class);
 
@@ -117,13 +122,13 @@ trait CalculateServicePriceForCustomer
                 : AddressCoordinatesDTO::fromAddress($address);
 
             $distance = $this->calculateVendorDistance($vendor, $customerCoords);
-            $customerAmount = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
+            $customerAmount = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance, true, true, $serviceAt);
         } else {
             $distance = $this->calculateVendorDistanceInstantService($vendor, $address);
-            $customerAmount = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance);
+            $customerAmount = $rateService->calculateForCustomerInstantService($hourlyRate, $timeService, $distance, true, true, $serviceAt);
         }
 
-        $vendorAmount = $rateService->calculateForVendor($hourlyRate, $timeService, $distance);
+        $vendorAmount = $rateService->calculateForVendor($hourlyRate, $timeService, $distance, true, true, $serviceAt);
 
         return [
             'customer_amount' => (int) round($customerAmount),
@@ -274,7 +279,8 @@ trait CalculateServicePriceForCustomer
         $vendor,
         ServicesType $serviceType,
         bool $isScheduled = false,
-        ?Voucher $voucher = null, bool $isGuest = false, ?array $address = null, int $quantity = 1): array
+        ?Voucher $voucher = null, bool $isGuest = false, ?array $address = null, int $quantity = 1,
+        ?CarbonInterface $serviceAt = null): array
     {
 
         if ($isGuest) {
@@ -286,7 +292,7 @@ trait CalculateServicePriceForCustomer
             $address = $this->fetchCustomerMainAddress($customer);
         }
 
-        $prices = $this->calculatePrices($serviceType, $address, $vendor, $isScheduled, $quantity);
+        $prices = $this->calculatePrices($serviceType, $address, $vendor, $isScheduled, $quantity, $serviceAt);
 
         return $this->buildTransactionTotals(
             $isGuest ? null : $customer,

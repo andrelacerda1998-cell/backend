@@ -571,6 +571,12 @@ class MatchingService
      * 15h avaliado à meia-noite cai sempre fora — o que rejeitava toda a gente
      * em silêncio.
      */
+    /**
+     * Para DISPONIBILIDADE. Para PRECO existe `Service::scheduledAt()`, que
+     * le o mesmo dia e a mesma hora mas em Europe/Lisbon e sem inventar
+     * meia-noite quando falta a hora (ver la o porque). Se um dia mexeres
+     * numa, ve a outra.
+     */
     public function scheduledStartAt(Service $service): ?CarbonInterface
     {
         $schedule = $service->schedule;

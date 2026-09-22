@@ -7,6 +7,7 @@ use App\Models\Service;
 use App\Models\Vendor;
 use App\Notifications\Vendor\NewServiceAvailableNotification;
 use App\Services\RateService;
+use Carbon\CarbonInterface;
 
 trait NotifyVendor
 {
@@ -23,7 +24,7 @@ trait NotifyVendor
         // nunca sobrescrever o valor consistente por uma medição posterior/divergente.
         if (is_null($service->amount_for_vendor)) {
             $gpsDistance = $vendor->calculateDistance($service->address);
-            $service->amount_for_vendor = $this->calculatePriceForVendor($rateService, $hourlyRate, $timeService, $gpsDistance);
+            $service->amount_for_vendor = $this->calculatePriceForVendor($rateService, $hourlyRate, $timeService, $gpsDistance, $service->scheduledAt());
             $service->save();
         }
 
@@ -50,9 +51,9 @@ trait NotifyVendor
         ];
     }
 
-    private function calculatePriceForVendor(RateService $rateService, float $hourlyRate, int $timeService, float $distance): float
+    private function calculatePriceForVendor(RateService $rateService, float $hourlyRate, int $timeService, float $distance, ?CarbonInterface $serviceAt = null): float
     {
-        return $rateService->calculateForVendor($hourlyRate, $timeService, $distance);
+        return $rateService->calculateForVendor($hourlyRate, $timeService, $distance, true, true, $serviceAt);
     }
 
     private function prepareServiceData(Service $service, float $distance): array

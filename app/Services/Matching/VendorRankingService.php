@@ -316,7 +316,7 @@ class VendorRankingService
         bool $immediate,
     ): ?RankedVendor {
         try {
-            $prices = $this->calculatePricesForMinutes($scope->minutes, $address, $vendor, ! $immediate);
+            $prices = $this->calculatePricesForMinutes($scope->minutes, $address, $vendor, ! $immediate, $scope->serviceAt);
         } catch (\Throwable $e) {
             \Log::warning('[matching] profissional excluído do ranking', [
                 'vendor_id' => $vendor->id,

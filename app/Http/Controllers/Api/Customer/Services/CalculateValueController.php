@@ -7,6 +7,7 @@ use App\Http\Requests\Api\Customer\Services\CalculateValueRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\ServicesType;
+use App\Models\Service;
 use App\Models\Vendor;
 use App\Models\Voucher;
 use App\Trait\Services\CalculateServicePriceForCustomer;
@@ -33,7 +34,15 @@ class CalculateValueController extends Controller
                 $voucher = Voucher::find($request->get('voucher_id'));
             }
 
-            $transaction = $this->calculateTransaction($vendor, $serviceType, $isScheduled, $voucher, $isGuest, $address, (int) $request->get('quantity', 1));
+            // A faixa horaria e a do trabalho. Quando a app manda o dia e a hora
+            // (agendado), o preco do checkout passa a ser o mesmo a qualquer hora
+            // a que o cliente decida pagar. Sem eles cai em "agora", que continua
+            // certo para um pedido imediato.
+            $serviceAt = $isScheduled
+                ? Service::instanteDe($request->get('scheduled_day'), $request->get('scheduled_time_start'))
+                : null;
+
+            $transaction = $this->calculateTransaction($vendor, $serviceType, $isScheduled, $voucher, $isGuest, $address, (int) $request->get('quantity', 1), $serviceAt);
 
             return new ApiSuccessResponse($transaction);
 

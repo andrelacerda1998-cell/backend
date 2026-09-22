@@ -219,7 +219,10 @@ class OpenServiceController extends Controller
         // A quantidade vem do serviço já construído (createService), e não do
         // request: é o valor que fica gravado e o que o cliente vai pagar tem
         // de ser calculado sobre exatamente esse.
-        $total = $this->calculateTransaction($vendor, $serviceType, $schedule, $voucher, false, null, (int) ($service->quantity ?? 1));
+        // A hora do SERVICO, nao a do pagamento: a faixa horaria multiplica a mao
+        // de obra, e quem paga as 22:00 um trabalho para as 10:00 nao pode levar
+        // com a faixa da noite.
+        $total = $this->calculateTransaction($vendor, $serviceType, $schedule, $voucher, false, null, (int) ($service->quantity ?? 1), $service->scheduledAt());
 
         $service->amount = $total['amount'];
         $service->amount_for_vendor = $total['amount_for_vendor'];
