@@ -14,18 +14,15 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Schedule\Schedule;
 use App\Models\Schedule\ScheduleDays;
-use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Repository\Schedule\ScheduleRepository;
 use App\Services\Common\AddressService;
 use App\Services\Common\Services\AcceptService;
-use App\Services\Common\Services\RefuseService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 
 class ScheduleController extends Controller
 {
@@ -215,35 +212,32 @@ class ScheduleController extends Controller
             ->orderBy('scheduled_time_start', 'asc')
             ->get();
 
-        $schedules->each(function ($schedule) {
-            // Ocorrência de uma série ainda por pagar: não está à espera do
-            // técnico, está à espera do cliente. O prazo de 20 minutos existe
-            // para pedidos que o técnico deixou sem resposta; aqui marcava como
-            // confirmado — dias antes do serviço — o que ninguém confirmou, e o
-            // agendamento aparecia-lhe na agenda sem ele ter aceitado nada.
-            if (! $schedule->service_id) {
-                return;
-            }
+        // Esta lista é de LEITURA. Abri-la não aceita nada em nome de ninguém.
+        //
+        // Até aqui, abrir o ecrã gravava `is_pending = false` em todo o
+        // agendamento já pago com mais de 20 minutos, sem o técnico tocar em
+        // coisa nenhuma. O dano não era sobretudo mostrar uma aceitação que não
+        // houve — era o oposto: o CancelJobWithoutReactionJob, que trata a falta
+        // de resposta, tem a guarda `! $schedule->is_pending` e desistia. O
+        // serviço ficava PENDING para sempre: nunca aceite, nunca cancelado,
+        // nunca reembolsado, e fora da vista dos dois lados.
+        //
+        // Os dois corriam ao mesmo prazo (services.request.time_accept_scheduled,
+        // 1200s), por isso era uma corrida entre o técnico abrir a app e a fila
+        // processar o job. E a escrita acontecia ANTES do filtro abaixo, ou seja
+        // atingia também agendamentos que nem chegavam a aparecer na resposta.
+        //
+        // Onde o serviço já estivesse ACCEPTED ou SCHEDULED, somava-se a isso
+        // mostrar "accepted" ao cliente e libertar-lhe o telemóvel do técnico
+        // (ListSchedulesController) — mas esse não era o caso comum, porque
+        // um pedido à espera de resposta tem o serviço em PENDING.
+        //
+        // Quem não responde deixa o job cancelar. Aceitar é um gesto: storeSchedule().
 
-            if ($schedule->created_at && $schedule->created_at->lt(now()->subMinutes(20))) {
-                $schedule->is_pending = false;
-            }
-
-            $schedule->save();
-
-            /*try {
-                $refuseService = new RefuseService($schedule->service);
-                $refuseService->refuse();
-            } catch (Exception $e) {
-                Log::error($e->getMessage());
-            }*/
-        });
-
-        $schedules = $schedules->filter(fn ($schedule) => $schedule->is_pending)
-            ->filter(fn ($schedule) => $schedule->service && (
-                $schedule->service->status === ServiceStatus::SCHEDULED ||
-                $schedule->service->status === ServiceStatus::ACCEPTED
-            ))->values();
+        $schedules = $schedules->filter(fn ($schedule) => $schedule->service && (
+            $schedule->service->status === ServiceStatus::SCHEDULED ||
+            $schedule->service->status === ServiceStatus::ACCEPTED
+        ))->values();
 
         return new ApiSuccessResponse($schedules);
     }

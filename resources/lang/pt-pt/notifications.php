@@ -133,6 +133,11 @@ return [
         'title' => 'Ninguém disponível de momento',
         'description' => 'Não encontrámos profissionais para :service_type. Tenta outra vez ou marca para outra hora.',
     ],
+    'serviceTimedOut' => [
+        'title' => 'Pedido sem resposta',
+        'description' => 'Ninguém respondeu ao teu pedido de :service_type a tempo. Foi cancelado — podes tentar outra vez.',
+        'description_scheduled' => 'O teu agendamento de :service_type não foi confirmado a tempo e foi cancelado. Podes marcar outra hora.',
+    ],
     'scheduledService' => [
         'title' => 'Novo serviço agendado para :when',
         'description' => 'de :service_type',

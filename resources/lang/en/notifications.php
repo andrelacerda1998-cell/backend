@@ -133,6 +133,11 @@ return [
         'title' => 'Nobody available right now',
         'description' => 'We could not find professionals for :service_type. Try again or book another time.',
     ],
+    'serviceTimedOut' => [
+        'title' => 'No response to your request',
+        'description' => 'Nobody responded to your :service_type request in time. It has been canceled — you can try again.',
+        'description_scheduled' => 'Your :service_type booking was not confirmed in time and has been canceled. You can book another time.',
+    ],
     'scheduledService' => [
         'title' => 'New service scheduled for :when',
         'description' => 'of :service_type',
