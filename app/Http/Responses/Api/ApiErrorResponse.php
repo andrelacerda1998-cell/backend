@@ -24,12 +24,35 @@ class ApiErrorResponse implements Responsable
         private readonly int $options = 0
     ) {}
 
+    private function ehCodigoHttp(mixed $codigo): bool
+    {
+        return is_int($codigo) && $codigo >= 400 && $codigo <= 599;
+    }
+
     public function toResponse($request): JsonResponse|\Symfony\Component\HttpFoundation\Response
     {
 
         if (! is_null($this->exception)) {
             if (method_exists($this->exception, 'getStatus')) {
                 $this->statusCode = $this->exception->getStatus();
+                $this->message = $this->exception->getMessage();
+            } elseif ($this->ehCodigoHttp($this->exception->getCode())) {
+                // `throw new Exception('Service not found', 404)` aparece em
+                // nove sitios do codigo, e nenhum deles funcionava: so o
+                // `getStatus()` das excecoes proprias era lido, por isso o 404
+                // (ou o 409, ou o 403) ficava no getCode() a ser ignorado e a
+                // resposta era sempre 500.
+                //
+                // O efeito estava espalhado: recusar um servico ja terminado,
+                // fechar um servico ja fechado, pedir a rota de um servico
+                // alheio — regras de negocio cumpridas a responder como se o
+                // servidor tivesse rebentado, e a app a mostrar "Something
+                // went wrong" onde devia mostrar o motivo.
+                //
+                // So se aceita o intervalo HTTP: ha excecoes cujo getCode()
+                // vem do driver da base de dados ou fica a zero, e essas
+                // continuam a ser erro de servidor.
+                $this->statusCode = (int) $this->exception->getCode();
                 $this->message = $this->exception->getMessage();
             }
         }
