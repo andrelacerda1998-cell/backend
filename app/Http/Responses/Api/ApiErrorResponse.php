@@ -8,6 +8,7 @@ use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Laravel\Telescope\EntryType;
 use Laravel\Telescope\Storage\EntryModel;
 
@@ -23,12 +24,35 @@ class ApiErrorResponse implements Responsable
         private readonly int $options = 0
     ) {}
 
+    private function ehCodigoHttp(mixed $codigo): bool
+    {
+        return is_int($codigo) && $codigo >= 400 && $codigo <= 599;
+    }
+
     public function toResponse($request): JsonResponse|\Symfony\Component\HttpFoundation\Response
     {
 
         if (! is_null($this->exception)) {
             if (method_exists($this->exception, 'getStatus')) {
                 $this->statusCode = $this->exception->getStatus();
+                $this->message = $this->exception->getMessage();
+            } elseif ($this->ehCodigoHttp($this->exception->getCode())) {
+                // `throw new Exception('Service not found', 404)` aparece em
+                // nove sitios do codigo, e nenhum deles funcionava: so o
+                // `getStatus()` das excecoes proprias era lido, por isso o 404
+                // (ou o 409, ou o 403) ficava no getCode() a ser ignorado e a
+                // resposta era sempre 500.
+                //
+                // O efeito estava espalhado: recusar um servico ja terminado,
+                // fechar um servico ja fechado, pedir a rota de um servico
+                // alheio — regras de negocio cumpridas a responder como se o
+                // servidor tivesse rebentado, e a app a mostrar "Something
+                // went wrong" onde devia mostrar o motivo.
+                //
+                // So se aceita o intervalo HTTP: ha excecoes cujo getCode()
+                // vem do driver da base de dados ou fica a zero, e essas
+                // continuam a ser erro de servidor.
+                $this->statusCode = (int) $this->exception->getCode();
                 $this->message = $this->exception->getMessage();
             }
         }
@@ -43,10 +67,19 @@ class ApiErrorResponse implements Responsable
                 'trace' => $this->exception->getTrace(),
             ];
 
-            $response['telescope'] = route('telescope').'/requests/'.EntryModel::where('type', EntryType::EXCEPTION)
-                ->where('content->response_status', Response::HTTP_INTERNAL_SERVER_ERROR)
-                ->latest('created_at')
-                ->first()?->uuid;
+            // So quando o Telescope esta mesmo registado. Com APP_DEBUG=true e
+            // TELESCOPE_ENABLED=false — a configuracao normal de um staging, e
+            // a dos testes — o `route('telescope')` lancava
+            // RouteNotFoundException DE DENTRO do formatador de erros: o erro
+            // real desaparecia e a resposta virava um 500 a falar de uma rota
+            // que nada tem a ver com o pedido. Um link de diagnostico nao pode
+            // ser a razao pela qual o diagnostico se perde.
+            $response['telescope'] = Route::has('telescope')
+                ? route('telescope').'/requests/'.EntryModel::where('type', EntryType::EXCEPTION)
+                    ->where('content->response_status', Response::HTTP_INTERNAL_SERVER_ERROR)
+                    ->latest('created_at')
+                    ->first()?->uuid
+                : null;
         } elseif (! is_null($this->exception)) {
             if (app(ExceptionHandler::class)->shouldReport($this->exception)) {
                 Log::error($this->exception->getMessage());

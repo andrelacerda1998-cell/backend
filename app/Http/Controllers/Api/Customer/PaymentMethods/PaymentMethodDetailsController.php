@@ -15,8 +15,14 @@ class PaymentMethodDetailsController extends Controller
             $customer = auth('api')->user();
 
             if ($customer->id !== $paymentMethod->user_id) {
-                throw new \Exception('Invalid payment method');
+                // 404 e nao 500 — e tambem nao 403: o cartao de outra
+                // pessoa nao existe do ponto de vista de quem pergunta, e
+                // confirmar que existe ja e dizer alguma coisa. Sem codigo,
+                // isto caia no 500 por omissao e a app mostrava "Something
+                // went wrong" a quem tocou num id que nao e dele.
+                throw new \Exception('Payment method not found', 404);
             }
+
             return ApiSuccessResponse::make($paymentMethod);
         } catch (\Exception $e) {
             return new ApiErrorResponse($e);

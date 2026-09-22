@@ -10,6 +10,7 @@ use App\Models\Schedule\Schedule;
 use App\Notifications\Vendor\ScheduleCanceledByCustomerNotification;
 use App\Services\Common\Services\CancellationPolicy;
 use App\Services\Common\Services\CancelService;
+use Carbon\Carbon;
 use Exception;
 
 class CancelScheduleController extends Controller
@@ -18,7 +19,12 @@ class CancelScheduleController extends Controller
     {
         try {
             if ($schedule->customer_id !== auth()->user()->id) {
-                throw new Exception('Schedule not found', 404);
+                // `ApiErrorResponse` le o codigo de `getStatus()`, nunca de
+                // `getCode()`: uma `Exception` crua com 404 no construtor caia
+                // no 500 por omissao, e quem tentasse cancelar a marcacao de
+                // outra pessoa recebia "Something went wrong" em vez de 404.
+                // Mesmo formato que o ConfirmScheduleAttendanceController.
+                return new ApiErrorResponse(new Exception, 'Schedule not found', 404);
             }
 
             $service = $schedule->service;
@@ -57,10 +63,10 @@ class CancelScheduleController extends Controller
         }
 
         try {
-            $day = \Carbon\Carbon::parse($schedule->scheduled_day)->format('Y-m-d');
+            $day = Carbon::parse($schedule->scheduled_day)->format('Y-m-d');
             $time = $schedule->scheduled_time_start ?: '00:00:00';
 
-            return \Carbon\Carbon::parse("{$day} {$time}");
+            return Carbon::parse("{$day} {$time}");
         } catch (\Throwable $e) {
             report($e);
 
