@@ -19,7 +19,12 @@ class CancelScheduleController extends Controller
             $vendor = auth()->user()->vendor;
 
             if (! $vendor || $schedule->vendor_id !== $vendor->id) {
-                throw new Exception('Schedule not found', 404);
+                // `ApiErrorResponse` le o codigo de `getStatus()`, nunca de
+                // `getCode()`: uma `Exception` crua com 404 no construtor caia
+                // no 500 por omissao, e quem tentasse cancelar a marcacao de
+                // outra pessoa recebia "Something went wrong" em vez de 404.
+                // Mesmo formato que o ConfirmScheduleAttendanceController.
+                return new ApiErrorResponse(new Exception, 'Schedule not found', 404);
             }
 
             $service = $schedule->service;

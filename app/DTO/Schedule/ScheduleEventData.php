@@ -3,7 +3,7 @@
 namespace App\DTO\Schedule;
 
 use App\Models\Schedule\Schedule;
-use Illuminate\Support\Facades\Date;
+use DateTimeInterface;
 
 readonly class ScheduleEventData
 {
@@ -11,11 +11,18 @@ readonly class ScheduleEventData
         public int $schedule_id,
         public int $vendor_id,
         public int $customer_id,
-        public Date $scheduled_day,
+        // Era `Illuminate\Support\Facades\Date` — a FACADE, nao um tipo de
+        // data. Nenhum valor podia satisfazer esse tipo, por isso construir
+        // este DTO lancava sempre TypeError e o ecra de detalhes da marcacao
+        // do cliente respondia 500 em todos os casos.
+        public DateTimeInterface|string $scheduled_day,
         public string $customer_name,
         public array $service_type,
-        public int $service_id,
-        public string $customer_address,
+        // `schedule.service_id` e anulavel — uma marcacao pode existir antes
+        // de haver servico — e a morada pode faltar se o cliente apagou a
+        // unica que tinha.
+        public ?int $service_id,
+        public ?string $customer_address,
         public string $scheduled_time_start,
         public string $scheduled_time_end,
     ) {}
@@ -39,7 +46,11 @@ readonly class ScheduleEventData
                 'name' => $schedule->service?->custom_description,
             ],
             service_id: $schedule->service_id,
-            customer_address: $schedule->customer->mainAddress()->name,
+            // Mesma guarda que a de cima, pelo mesmo motivo. Apagar a unica
+            // morada promove outra a principal — mas se nao houver outra, o
+            // cliente fica sem nenhuma e este acesso direto rebentava o ecra
+            // de detalhes de todas as marcacoes que ele ja tinha.
+            customer_address: $schedule->customer->mainAddress()?->name,
             scheduled_time_start: $schedule->scheduled_time_start,
             scheduled_time_end: $schedule->scheduled_time_end,
         );
