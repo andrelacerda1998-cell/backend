@@ -129,6 +129,10 @@ return [
         // tem um relógio a correr e precisa de saber que a decisão é dele.
         'description' => 'Profissionais disponíveis para :service_type. Escolhe quem preferes.',
     ],
+    'serviceWon' => [
+        'title' => 'O trabalho é teu',
+        'description' => 'O cliente escolheu-te para :service_type e já pagou. Podes pôr-te a caminho.',
+    ],
     'matchingFailed' => [
         'title' => 'Ninguém disponível de momento',
         'description' => 'Não encontrámos profissionais para :service_type. Tenta outra vez ou marca para outra hora.',

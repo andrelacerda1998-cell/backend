@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Customer\Services;
 use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Events\Common\Services\ServiceAcceptedEvent;
 use App\Exceptions\MatchingCheckoutException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\MatchingCheckoutRequest;
@@ -17,6 +18,7 @@ use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
 use App\Models\Voucher;
+use App\Notifications\Vendor\ServiceWonNotification;
 use App\Services\Common\Services\MaterializePendingSchedule;
 use App\Services\Matching\MatchingService;
 use App\Settings\MatchingSettings;
@@ -24,6 +26,7 @@ use App\Trait\Services\CalculateServicePriceForCustomer;
 use App\Trait\Services\ProcessesServicePayment;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Seleção de profissional pelo cliente — ver docs/matching.md.
@@ -443,6 +446,21 @@ class MatchingController extends Controller
         // materialização, que notificaria como se fosse um serviço novo.
         $service->status = ServiceStatus::ACCEPTED;
         $service->save();
+
+        // Mas GANHAR tem de produzir sinal. Até aqui não produzia nenhum: os
+        // que perdiam eram avisados em segundos e com motivo, o que ganhava não
+        // sabia. Num agendado o mesmo facto manda push e websocket há muito.
+        //
+        // Depois do commit e sem poder rebentar o checkout: o cliente já pagou
+        // e o serviço já é dele. Uma falha do Expo reporta-se, não desfaz nada.
+        DB::afterCommit(function () use ($service) {
+            try {
+                ServiceAcceptedEvent::dispatch($service->customer, ['id' => $service->id]);
+                $service->vendor?->user?->notify(new ServiceWonNotification($service));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        });
     }
 
     private function resolvePaymentMethod(MatchingCheckoutRequest $request, $customer, string $method)
