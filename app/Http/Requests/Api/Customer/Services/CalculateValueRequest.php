@@ -15,6 +15,11 @@ class CalculateValueRequest extends FormRequest
             'vendor_id' => 'integer|required|exists:App\Models\Vendor,id',
             'service_type' => 'integer|required|exists:App\Models\GeneralSettings\ServicesType,id',
             'scheduled' => 'boolean',
+            // Dia e hora do trabalho. Opcionais para nao partir clientes
+            // antigos, mas sem eles um agendado e cotado com a hora do
+            // checkout — que e precisamente o que se quer deixar de fazer.
+            'scheduled_day' => 'date|nullable|required_with:scheduled_time_start',
+            'scheduled_time_start' => 'string|nullable|required_with:scheduled_day',
             'voucher_id' => 'integer|nullable|exists:App\Models\Voucher,id',
             'is_guest' => 'nullable|boolean',
             'address' => 'array|nullable',

@@ -11,6 +11,7 @@ use App\Http\Requests\Api\Customer\Services\RequestServiceRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\ServicesType;
+use App\Models\Service;
 use App\Models\Vendor;
 use App\Services\Customer\Services\ScheduleVendorSearchService;
 use App\Services\Customer\Services\VendorSearchService;
@@ -60,6 +61,10 @@ class RequestServiceController extends Controller
         $request->validate([
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
+            // Dia e hora do trabalho, quando ja escolhidos: a lista mostra
+            // precos e a sobretaxa e a do servico, nao a de agora.
+            'scheduled_day' => 'date|nullable|required_with:scheduled_time_start',
+            'scheduled_time_start' => 'string|nullable|required_with:scheduled_day',
         ]);
 
         $latitude = (float) $request->get('latitude');
@@ -84,8 +89,9 @@ class RequestServiceController extends Controller
 
             if ($isScheduled) {
                 $matchingVendors = $scheduleSearchService->search($guestAddress, $serviceType, false);
+                $serviceAt = Service::instanteDe($request->get('scheduled_day'), $request->get('scheduled_time_start'));
 
-                $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress, $quantity) {
+                $transformed = $matchingVendors->transform(function (Vendor $vendor) use ($serviceType, $guestAddress, $quantity, $serviceAt) {
                     try {
                         $rateService = app(RateService::class);
                         $hourlyRate = $vendor->getRawOriginal('price_rate');
@@ -107,8 +113,8 @@ class RequestServiceController extends Controller
                             ->first();
 
                         $distance = $this->calculateVendorDistance($vendor, $guestAddress);
-                        $price = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance);
-                        $original_price = $rateService->calculateForCustomerForOldPrice($hourlyRate, $timeService, $distance);
+                        $price = $rateService->calculateForCustomerForSchedule($hourlyRate, $timeService, $distance, true, true, $serviceAt);
+                        $original_price = $rateService->calculateForCustomerForOldPrice($hourlyRate, $timeService, $distance, true, true, $serviceAt);
 
                         return [
                             'id' => $vendor->id,

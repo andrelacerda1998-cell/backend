@@ -4,6 +4,7 @@ namespace App\Services\Matching;
 
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
+use Carbon\CarbonImmutable;
 
 /**
  * O que o ranking precisa de saber sobre um pedido para escolher e para
@@ -25,6 +26,15 @@ final class MatchingScope
         public readonly array $operationAreaIds,
         /** Duracao total a cotar e a reservar, em minutos (ja com a quantidade). */
         public readonly int $minutes,
+        /**
+         * Instante em que o trabalho comeca; null = imediato ("agora").
+         *
+         * Entra aqui porque a cotacao depende dele: a faixa horaria multiplica
+         * a mao de obra e tem de ser a do servico, nao a do momento em que o
+         * ranking correu. Sem isto, o mesmo pedido cotado as 22:00 e as 10:00
+         * dava dois precos diferentes para o mesmo trabalho.
+         */
+        public readonly ?CarbonImmutable $serviceAt = null,
     ) {}
 
     public static function forService(Service $service): self
@@ -40,7 +50,7 @@ final class MatchingScope
                 throw new \LogicException("Pedido personalizado #{$service->id} sem duracao ou sem categorias definidas.");
             }
 
-            return new self(null, $areas, $minutes);
+            return new self(null, $areas, $minutes, $service->scheduledAt());
         }
 
         $service->loadMissing('serviceType');
@@ -54,7 +64,7 @@ final class MatchingScope
         // a quantidade pedida.
         $minutes = (int) round(((float) ($type->time ?? 0)) * max(1, (int) ($service->quantity ?? 1)));
 
-        return new self($type, [(int) $type->operation_area_id], $minutes);
+        return new self($type, [(int) $type->operation_area_id], $minutes, $service->scheduledAt());
     }
 
     public function isCustom(): bool

@@ -11,6 +11,7 @@ use App\Observers\ServiceObserver;
 use Bavix\Wallet\Interfaces\Customer;
 use Bavix\Wallet\Interfaces\ProductLimitedInterface;
 use Bavix\Wallet\Traits\HasWallet;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -227,6 +228,66 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'scheduled_day' => $pending['scheduled_day'] ?? null,
             'scheduled_time_start' => $pending['scheduled_time_start'] ?? null,
         ];
+    }
+
+    /**
+     * O instante em que o trabalho vai comecar, ou null se e para agora.
+     *
+     * E o que o preco precisa de saber: a faixa horaria (diurna, noite,
+     * madrugada) multiplica a mao de obra, e tem de ser a faixa do SERVICO e
+     * nao a do checkout. Sai daqui e nao de cada controlador porque ja sao
+     * varios a precisar — a cotacao do matching, o pagamento, o convite do
+     * tecnico — e todos TEM de chegar a mesma hora; espalhado, divergia a
+     * primeira vez que alguem mexesse num dos lados.
+     *
+     * Em Europe/Lisbon de proposito: `scheduled_day` e `scheduled_time_start`
+     * sao a hora de relogio que o cliente escolheu, e o APP_TIMEZONE e UTC.
+     * Le-las sem fuso dava 09:00 onde o cliente marcou 10:00 no verao.
+     *
+     * NAO e o mesmo que `MatchingService::scheduledStartAt()`, e a diferenca e
+     * deliberada: sem hora, aquele devolve o dia a meia-noite (para a
+     * disponibilidade, o dia certo a uma hora aproximada vale mais do que
+     * nada) e este devolve null. Meia-noite aqui nao seria aproximada — seria
+     * a faixa da madrugada, x1,90, um agravamento de 90% inventado a partir
+     * de um campo em falta. Null cai em "agora", que e o comportamento de um
+     * pedido imediato e nao surpreende ninguem.
+     */
+    public function scheduledAt(): ?CarbonImmutable
+    {
+        $intencao = $this->scheduleIntent();
+
+        if (! $intencao) {
+            return null;
+        }
+
+        return self::instanteDe($intencao['scheduled_day'] ?? null, $intencao['scheduled_time_start'] ?? null);
+    }
+
+    /**
+     * Junta um dia e uma hora num instante de Lisboa.
+     *
+     * `scheduled_time_start` chega das duas maneiras — "14:30" vindo da app,
+     * datetime completo vindo da coluna depois de um cast — por isso a hora e
+     * transplantada para o dia com `setTimeFrom` em vez de concatenada: a
+     * concatenacao produzia "2026-09-29 2026-09-29 10:00:00".
+     */
+    public static function instanteDe($dia, $hora): ?CarbonImmutable
+    {
+        if (blank($dia) || blank($hora)) {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($dia, 'Europe/Lisbon')
+                ->startOfDay()
+                ->setTimeFrom(CarbonImmutable::parse($hora, 'Europe/Lisbon'));
+        } catch (\Throwable $e) {
+            // Uma data mal formada nao pode rebentar um checkout. Sem hora o
+            // preco cai em "agora", que e o comportamento de um imediato.
+            report($e);
+
+            return null;
+        }
     }
 
     public function candidates(): HasMany
