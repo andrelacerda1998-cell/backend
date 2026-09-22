@@ -28,9 +28,15 @@ readonly class ScheduleEventData
             customer_id: $schedule->customer->id,
             scheduled_day: $schedule->scheduled_day,
             customer_name: $schedule->customer->name,
-            service_type: [
+            // Uma marcação de pedido personalizado não tem tipo de serviço: o
+            // que o cliente comprou está na descrição que escreveu. Sem guarda,
+            // o acesso direto rebentava o evento com 500.
+            service_type: $schedule->serviceType ? [
                 'id' => $schedule->serviceType->id,
                 'name' => $schedule->serviceType->name,
+            ] : [
+                'id' => null,
+                'name' => $schedule->service?->custom_description,
             ],
             service_id: $schedule->service_id,
             customer_address: $schedule->customer->mainAddress()->name,

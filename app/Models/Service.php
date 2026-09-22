@@ -172,6 +172,42 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
      *
      * @return array{scheduled_day: ?string, scheduled_time_start: ?string}|null null = imediato
      */
+    /**
+     * Quanto tempo este trabalho ocupa, em minutos. A pergunta tem UMA resposta.
+     *
+     * A quantidade que o cliente escolhe ("2 torneiras na mesma visita") entrava
+     * só no preço e no filtro de elegibilidade. Não entrava na duração da
+     * marcação, nem no convite ao técnico, nem em ecrã nenhum: o cliente pagava
+     * três horas e lia "1 hora", a agenda bloqueava 60 minutos para 180, e o
+     * cronómetro dava "tempo excedido" ao minuto 60 — com atalho para pedir ao
+     * cliente que pagasse horas que já tinha comprado.
+     *
+     * A conta é a mesma que o preço já faz (`effectiveMinutes`) e que o
+     * MatchingScope já fazia: tempo do tipo vezes as unidades pedidas. Num
+     * pedido personalizado não há tipo — a duração é a que o backoffice definiu.
+     *
+     * Devolve null quando não se sabe. Quem chama decide o que fazer com isso;
+     * o que não se faz é adivinhar um número e bloquear a agenda de alguém pelo
+     * tempo errado.
+     */
+    public function durationMinutes(): ?int
+    {
+        if ($this->is_custom) {
+            $minutos = (int) ($this->custom_duration_minutes ?? 0);
+
+            return $minutos > 0 ? $minutos : null;
+        }
+
+        $this->loadMissing('serviceType');
+        $tempoDoTipo = (int) ($this->serviceType?->time ?? 0);
+
+        if ($tempoDoTipo <= 0) {
+            return null;
+        }
+
+        return (int) round($tempoDoTipo * max(1, (int) ($this->quantity ?? 1)));
+    }
+
     public function scheduleIntent(): ?array
     {
         if ($this->schedule) {

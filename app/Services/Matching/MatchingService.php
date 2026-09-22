@@ -262,7 +262,12 @@ class MatchingService
             $startAt = $this->scheduledStartAt($service);
 
             if ($startAt && $fresh->vendor) {
-                $minutes = (int) ($service->serviceType?->time ?: 60);
+                // A MESMA duração que o convite usou. Aqui lia-se o tempo do
+                // tipo em cru, com 60 minutos de recurso: o convite dizia 180 e
+                // cinco minutos depois a reverificação perguntava por 60 —
+                // duas respostas à mesma pergunta, e um pedido personalizado
+                // caía sempre nos 60 inventados.
+                $minutes = $service->durationMinutes() ?? 60;
 
                 if (! $fresh->vendor->hasFreeSlot($startAt, $startAt->copy()->addMinutes($minutes))) {
                     $fresh->update(['status' => CandidateStatus::LOST]);

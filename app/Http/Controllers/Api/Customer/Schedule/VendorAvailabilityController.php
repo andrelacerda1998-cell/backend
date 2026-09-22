@@ -18,12 +18,19 @@ class VendorAvailabilityController extends Controller
             $serviceId = request()->input('service_id');
             $serviceTypeId = request()->input('service_type_id');
             $serviceDurationMinutes = null;
+            // As horas livres que o cliente vê têm de contar as unidades que
+            // ele pediu. Sem isto, era convidado a marcar três torneiras numa
+            // hora que só comporta uma — e a sobreposição só aparecia depois,
+            // na agenda do profissional.
             if ($serviceId) {
                 $service = Service::query()->findOrFail($serviceId);
-                $serviceDurationMinutes = (int) $service->serviceType?->time;
+                $serviceDurationMinutes = (int) ($service->durationMinutes() ?? 0);
             } elseif ($serviceTypeId) {
                 $serviceType = ServicesType::query()->findOrFail($serviceTypeId);
-                $serviceDurationMinutes = (int) $serviceType->time;
+                // Ainda não há serviço: a quantidade vem do pedido, como no
+                // cálculo do preço.
+                $quantidade = max(1, (int) request()->input('quantity', 1));
+                $serviceDurationMinutes = (int) round(((int) $serviceType->time) * $quantidade);
             } else {
                 return new ApiErrorResponse(new \Exception('service_id or service_type_id is required'), 'service_id or service_type_id is required', 400);
             }

@@ -185,9 +185,10 @@ class MatchingInvitationsController extends Controller
             // duracao vem do backoffice. Vai sempre `duration_minutes` para a
             // app nao ter de saber de onde veio.
             'custom' => $service?->customPayload(auth()->user()->language ?? 'pt-pt'),
-            'duration_minutes' => $service?->is_custom
-                ? $service->custom_duration_minutes
-                : $service?->serviceType?->time,
+            // Service::durationMinutes() já sabe distinguir personalizado de
+            // catálogo — e, ao contrário disto, conta as unidades pedidas. O
+            // técnico via "1 hora" num convite de três.
+            'duration_minutes' => $service?->durationMinutes(),
             'address' => $service?->address ? [
                 'city' => $service->address['city'] ?? null,
                 'postal_code' => $service->address['postal_code'] ?? null,

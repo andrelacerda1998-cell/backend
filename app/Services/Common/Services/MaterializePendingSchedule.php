@@ -8,12 +8,12 @@ use App\Events\Vendor\Schedule\CreateScheduleEvent;
 use App\Events\Vendor\Schedule\ServiceScheduledEvent;
 use App\Http\Controllers\Api\Customer\Services\traits\NotifyVendor;
 use App\Jobs\Services\CancelJobWithoutReactionJob;
-use App\Models\GeneralSettings\ServicesType;
 use App\Models\Schedule\Schedule;
 use App\Models\Service;
 use App\Notifications\Vendor\NewScheduledServiceNotification;
 use App\Notifications\Vendor\NewServiceAvailableNotification;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -75,16 +75,29 @@ class MaterializePendingSchedule
         $vendor = $service->vendor;
         $scheduleData = $pendingData['schedule'] ?? [];
         $scheduledDay = $scheduleData['scheduled_day'] ?? null;
-        $serviceType = ServicesType::find($service->services_type_id);
-        if (! $serviceType) {
-            $service->pending_schedule_data = null;
-            $service->save();
+        // Um personalizado não tem tipo de serviço: a duração é a que o
+        // backoffice definiu. Procurar o tipo devolvia null, e o código limpava
+        // a intenção de agendamento e saía em silêncio — o cliente pagava um
+        // agendamento e a marcação nunca nascia, sem erro em lado nenhum.
+        $minutos = $service->durationMinutes();
+
+        if ($minutos === null) {
+            // Não se inventa uma duração: bloqueava a agenda de alguém pelo
+            // tempo errado. E não se limpa o `pending_schedule_data` — é a
+            // única prova do que o cliente comprou, e sem ele ninguém consegue
+            // reprocessar o pedido depois de a duração ser definida.
+            Log::warning('[agendamento] pedido pago sem duração conhecida: marcação por criar', [
+                'service_id' => $service->id,
+                'is_custom' => (bool) $service->is_custom,
+                'services_type_id' => $service->services_type_id,
+                'custom_duration_minutes' => $service->custom_duration_minutes,
+            ]);
 
             return;
         }
 
         $scheduledTimeStart = Carbon::parse($scheduleData['scheduled_time_start']);
-        $scheduledTimeEnd = $scheduledTimeStart->copy()->addMinutes((int) $serviceType->time);
+        $scheduledTimeEnd = $scheduledTimeStart->copy()->addMinutes($minutos);
 
         // Confirmar uma ocorrência que JÁ existe (série recorrente): o cliente
         // acabou de pagar uma marcação criada pelo CreateNextRecurrence, que
@@ -192,7 +205,14 @@ class MaterializePendingSchedule
                 report($e);
             }
         } else {
-            CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id]);
+            // `service_id` vai junto, como nos outros dois caminhos que
+            // disparam este evento (Customer\Schedule\ScheduleController e
+            // OpenServiceController). Sem ele, o técnico carregava em Recusar,
+            // a app não sabia que serviço recusar e fechava a folha em silêncio
+            // — o servidor nunca era chamado e o pedido continuava dele, com o
+            // cliente já cobrado, até o prazo o cancelar 20 minutos depois com
+            // a mensagem errada.
+            CreateScheduleEvent::dispatch($vendor->user->id, ['id' => $schedule->id, 'service_id' => $service->id]);
 
             try {
                 $vendor->user->notifyNow(new NewServiceAvailableNotification($service));
