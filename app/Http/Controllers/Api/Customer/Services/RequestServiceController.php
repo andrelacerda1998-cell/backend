@@ -121,6 +121,11 @@ class RequestServiceController extends Controller
                             'name' => $vendor->user->name,
                             'rate' => $price,
                             'original_price' => $original_price,
+                            // A fatia da estrada dentro do total, para o cartao poder
+                            // separar servico de deslocacao. Nao e um extra a somar: ja
+                            // esta dentro do `rate`. Corre a mesma formula com tarifa e
+                            // tempo a zero, por isso acompanha qualquer mudanca de preco.
+                            'travel_amount' => (int) round($rateService->calculateTravelForCustomer($distance, true)),
                             'distance' => $distance,
                             // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
                             // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
@@ -170,6 +175,8 @@ class RequestServiceController extends Controller
                         'id' => $vendor->id,
                         'name' => $vendor->user->name,
                         'rate' => $price,
+                        // Ver a nota na lista de agendados: parcela ja incluida no `rate`.
+                        'travel_amount' => (int) round($rateService->calculateTravelForCustomer($distance, false)),
                         'distance' => $distance,
                         // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
                         // nunca foi avaliado: um tecnico acabado de entrar aparecia ao
@@ -227,6 +234,8 @@ class RequestServiceController extends Controller
                 // 'nif' => $vendorUser->nif,
                 'rate' => $price,
                 // 'hourly_rate' => $hourlyRate,
+                // Ver a nota na lista de agendados: parcela ja incluida no `rate`.
+                'travel_amount' => (int) round($rateService->calculateTravelForCustomer($distance, false)),
                 'distance' => $distance,
                 // Nota real ou null. O `?? 5` que aqui estava dava 5 estrelas a quem
                 // nunca foi avaliado: um tecnico acabado de entrar aparecia ao

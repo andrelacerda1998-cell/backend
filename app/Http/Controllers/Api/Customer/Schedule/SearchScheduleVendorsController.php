@@ -88,6 +88,8 @@ class SearchScheduleVendorsController extends Controller
                 'name' => $vendorUser->name,
                 'rate' => $price,
                 'original_price' => $original_price,
+                // Ver RequestServiceController: parcela da estrada ja incluida no `rate`.
+                'travel_amount' => (int) round($rateService->calculateTravelForCustomer($distance, true)),
                 'distance' => $distance,
                 // null = ainda sem avaliações. Não se inventa 5: a app do
                 // cliente já trata o null e esconde a nota em vez de mostrar
