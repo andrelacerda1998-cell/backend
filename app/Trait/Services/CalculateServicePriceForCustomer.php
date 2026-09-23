@@ -198,6 +198,15 @@ trait CalculateServicePriceForCustomer
     {
         $customer = auth('api')->user();
 
+        // Sem sessao nao ha cliente nenhum a quem perguntar isto. O
+        // `/calculate` e publico de proposito — o fluxo de convidado precisa
+        // dele — e um pedido sem token e sem `is_guest` chegava aqui com
+        // `$customer` a null: o `hasVerifiedPhoneNumber()` rebentava e o
+        // endpoint respondia 500 num caso que e so falta de autenticacao.
+        if (! $customer) {
+            throw new CustomerCantRequestServices;
+        }
+
         // Telemóvel por verificar tem mensagem própria: a genérica fala do
         // cliente na terceira pessoa e não diz o que falta, o que deixa quem
         // está a pagar num beco sem saída. Aqui há um passo concreto a dar.

@@ -116,6 +116,30 @@ class ClienteCalculoEagendaTest extends TestCase
             ->assertJsonValidationErrors(['scheduled_day']);
     }
 
+    /**
+     * O `/calculate` e publico de proposito — o fluxo de convidado precisa
+     * dele. Mas um pedido sem token e sem `is_guest` chegava ao
+     * `fetchCustomer()` com o utilizador a null e rebentava com 500 num caso
+     * que e so falta de autenticacao.
+     */
+    public function test_sem_sessao_e_sem_convidado_nao_rebenta(): void
+    {
+        [, $vendor, $tipo] = $this->cenario();
+
+        // `scheduled: true` de proposito: sem isso o `findVendor()` rejeita
+        // antes por `can_accept_service`, o pedido nunca chega ao
+        // `fetchCustomer()` e o teste passaria mesmo sem a guarda — foi o que
+        // aconteceu na primeira versao deste teste.
+        $r = $this->postJson('/api/v1/customer/services/calculate', [
+            'vendor_id' => $vendor->id,
+            'service_type' => $tipo->id,
+            'scheduled' => true,
+        ]);
+
+        $this->assertNotSame(500, $r->status(), 'falta de sessao nao e uma avaria do servidor');
+        $this->assertSame(403, $r->status());
+    }
+
     public function test_o_calculo_exige_tecnico_e_tipo_de_servico(): void
     {
         $this->actingAs(User::factory()->create(), 'api')
