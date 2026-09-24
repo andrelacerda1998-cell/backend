@@ -114,14 +114,38 @@ class TravelAmountForCustomerTest extends TestCase
     }
 
     /**
-     * O imediato é mais caro do que o agendado, e a estrada acompanha — não
-     * fica congelada no valor do agendado enquanto o resto sobe.
+     * A deslocação é a MESMA nos dois modos.
+     *
+     * Este teste afirmava o contrário — que a estrada acompanhava o prémio de
+     * imediatismo — e prendia o comportamento até 24/09/2026. A razão que dava
+     * era que "não fica congelada enquanto o resto sobe"; só que a estrada é a
+     * mesma estrada. Os mesmos quilómetros, o mesmo combustível, quer o pedido
+     * seja para agora ou para quinta às 10:00.
+     *
+     * É o mesmo raciocínio que o teste acima já aplicava à faixa horária: se a
+     * deslocação não custa mais às 03:00, também não custa mais por ser agora.
+     * O prémio paga o trabalho de largar tudo, não a viagem.
      */
-    public function test_a_deslocacao_de_um_imediato_e_maior_do_que_a_de_um_agendado(): void
+    public function test_a_deslocacao_e_igual_no_imediato_e_no_agendado(): void
     {
-        $this->assertGreaterThan(
+        $this->assertSame(
             $this->rateService->calculateTravelForCustomer(10, true),
             $this->rateService->calculateTravelForCustomer(10, false),
+        );
+    }
+
+    /**
+     * E o prémio continua a existir — no trabalho.
+     *
+     * Sem isto, alguém podia "corrigir" o teste acima tirando o prémio de todo
+     * e os testes continuavam verdes com os imediatos a valer o mesmo que os
+     * agendados.
+     */
+    public function test_o_premio_de_imediatismo_continua_a_valer_sobre_o_trabalho(): void
+    {
+        $this->assertGreaterThan(
+            $this->customerTotal(true, 2000, 90, 0),
+            $this->customerTotal(false, 2000, 90, 0),
         );
     }
 
