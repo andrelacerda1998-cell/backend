@@ -57,6 +57,23 @@ class UserController extends Controller
                     'longitude' => $vendor->currentLocation->longitude ?? 0,
                 ],
                 'notifications' => $user->unreadNotifications->count(),
+                /*
+                 * O que falta a este técnico para poder trabalhar -- e a app
+                 * poder dizer-lho sem ele ter de perguntar.
+                 *
+                 * Porque existe: as únicas duas mensagens de suporte que a
+                 * Piquet recebeu de técnicos (10/09 e 18/09) eram a mesma
+                 * pergunta -- "em que ponto está o meu processo?". A resposta
+                 * já estava toda na base de dados; só não chegava a quem
+                 * precisava dela. Uma delas ficou seis dias sem resposta.
+                 *
+                 * Vai um CÓDIGO e não uma frase: o texto é da app, que fala
+                 * com o técnico na segunda pessoa e tem as suas traduções. O
+                 * backoffice traduz o mesmo código para a terceira pessoa.
+                 * Valores: contact_unverified, documents_pending, iban_missing,
+                 * fiscal_address_missing, ou null quando está tudo pronto.
+                 */
+                'account_blocker' => $vendor->invoicingBlocker(),
                 'iban' => $vendor->iban,
                 'price_rate' => $vendor->price_rate,
                 'company_name' => $vendor->company_name,
