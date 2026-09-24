@@ -5,7 +5,7 @@ namespace Tests\Feature\Api\Vendor;
 use App\Models\GeneralSettings\Document;
 use App\Models\User;
 use App\Models\Vendor;
-use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -22,12 +22,18 @@ use Tests\TestCase;
  */
 class EstadoDaContaTest extends TestCase
 {
-    use DatabaseTruncation;
+    /*
+      RefreshDatabase e não DatabaseTruncation.
 
-    protected array $tablesToTruncate = [
-        'users', 'vendors', 'wallets', 'schedule_available', 'addresses',
-        'documents', 'vendor_documents',
-    ];
+      Truncar CONFIRMA o que o teste escreve, e o que fica confirmado atravessa
+      a fronteira da classe. Foi o que aconteceu: o AvaliacoesVoltamNoDeployTest
+      corre em transação, afirma `Vendor::count() === 0`, e encontrou o técnico
+      que este ficheiro tinha deixado para trás. A CI ficou vermelha e o deploy
+      parou.
+
+      Com transação, o que este teste escreve desaparece no fim de cada caso.
+    */
+    use RefreshDatabase;
 
     protected function setUp(): void
     {
