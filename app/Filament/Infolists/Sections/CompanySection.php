@@ -12,29 +12,29 @@ use Filament\Notifications\Notification;
 
 class CompanySection
 {
+    /**
+     * Porque é que ainda não se pode criar o workspace, em português de admin.
+     *
+     * A REGRA vive no modelo (`Vendor::invoicingBlocker()`), porque a app do
+     * técnico precisa da mesma e duas cópias divergiriam à primeira alteração.
+     * Aqui fica só a tradução para quem está no backoffice -- que fala do
+     * técnico na terceira pessoa, ao contrário da app, que fala com ele.
+     */
     public static function getWorkspaceDisabledReason(Vendor $record): ?string
     {
-        if (! $record->user->hasVerifiedEmail() && ! $record->user->hasVerifiedPhoneNumber()) {
-            return __('backoffice/vendor.infolist.workspace_disabled_no_verification');
-        }
-
-        if (! $record->all_documents_verified) {
-            return __('backoffice/vendor.infolist.workspace_disabled_documents');
-        }
-
-        if (! $record->iban) {
-            return __('backoffice/vendor.infolist.workspace_disabled_iban');
-        }
-
-        if ($record->invoice_workspace !== '') {
+        // Caso que só o backoffice tem: o botão está desativado porque já foi
+        // criado. Para o técnico isso não é bloqueio nenhum -- é estar pronto.
+        if ($record->invoice_workspace !== '' && $record->invoice_workspace !== null) {
             return __('backoffice/vendor.infolist.workspace_disabled_already_exists');
         }
 
-        if (! $record->addresses()->where('address_type', AddressType::FISCAL_ADDRESS)->exists()) {
-            return __('backoffice/vendor.infolist.workspace_disabled_fiscal_address');
-        }
-
-        return null;
+        return match ($record->invoicingBlocker()) {
+            'contact_unverified' => __('backoffice/vendor.infolist.workspace_disabled_no_verification'),
+            'documents_pending' => __('backoffice/vendor.infolist.workspace_disabled_documents'),
+            'iban_missing' => __('backoffice/vendor.infolist.workspace_disabled_iban'),
+            'fiscal_address_missing' => __('backoffice/vendor.infolist.workspace_disabled_fiscal_address'),
+            default => null,
+        };
     }
 
     public static function shouldShowWorkspaceDisabledReason(Vendor $record): bool

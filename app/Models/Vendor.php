@@ -812,4 +812,39 @@ class Vendor extends Model implements Auditable
             return $documents = $documents->unique();
         });
     }
+
+    /**
+     * O que falta a este técnico para poder trabalhar e ser faturado.
+     *
+     * Devolve um CÓDIGO, não uma frase. A regra -- e sobretudo a ORDEM em que
+     * as coisas são pedidas -- vive aqui, num sítio só; quem mostra escreve
+     * para o seu público. O backoffice diz "os documentos DO TÉCNICO ainda não
+     * foram verificados"; a app dele tem de dizer "os TEUS documentos estão a
+     * ser verificados". A mesma frase nos dois sítios estaria errada num deles.
+     *
+     * A ordem não é arbitrária: é a ordem pela qual as coisas se resolvem. Não
+     * vale a pena pedir o IBAN a quem ainda nem confirmou o telemóvel.
+     *
+     * `null` = está tudo pronto.
+     */
+    public function invoicingBlocker(): ?string
+    {
+        if (! $this->user?->hasVerifiedEmail() && ! $this->user?->hasVerifiedPhoneNumber()) {
+            return 'contact_unverified';
+        }
+
+        if (! $this->all_documents_verified) {
+            return 'documents_pending';
+        }
+
+        if (! $this->iban) {
+            return 'iban_missing';
+        }
+
+        if (! $this->addresses()->where('address_type', AddressType::FISCAL_ADDRESS)->exists()) {
+            return 'fiscal_address_missing';
+        }
+
+        return null;
+    }
 }
