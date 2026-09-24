@@ -138,14 +138,45 @@ class PremioDeImediatismoTest extends TestCase
         $this->assertGreaterThan($lucroAgendado, $lucroImediato);
     }
 
-    /** A deslocacao tambem leva premio: senao cliente != tecnico/0,75 quando ha km. */
-    public function test_a_deslocacao_entra_no_premio(): void
+    /**
+     * A deslocacao NAO leva premio.
+     *
+     * Este teste afirmava o contrario ate 24/09/2026, com a justificacao de que
+     * "senao cliente != tecnico/0,75 quando ha km". A justificacao estava
+     * errada: essa relacao vem da comissao, nao da composicao do subtotal. O
+     * cliente paga sempre `subtotal / (1 - comissao)`, seja o subtotal feito de
+     * trabalho, de estrada ou dos dois — e por isso a razao mantem-se 1/0,75
+     * independentemente de a estrada levar premio ou nao. A asercao de baixo
+     * prova-o: continua verde depois da mudanca.
+     *
+     * O premio paga o trabalho de largar tudo e ir agora. A estrada e a mesma
+     * estrada.
+     */
+    public function test_a_deslocacao_fica_fora_do_premio(): void
     {
         $tecnico = $this->rateService->calculateForVendorInstantService(0, 0, 10, false, false);
         $cliente = $this->rateService->calculateForCustomerInstantService(0, 0, 10, false, false);
 
-        $this->assertEqualsWithDelta((80 * 10) / 0.75, $tecnico, 0.01);
+        // Sem trabalho, o subtotal do profissional e so a estrada, sem premio.
+        $this->assertEqualsWithDelta(80 * 10, $tecnico, 0.01);
+
+        // E a relacao entre os dois lados nao depende disso.
         $this->assertEqualsWithDelta($tecnico / 0.75, $cliente, 0.01);
+    }
+
+    /** O mesmo servico, com e sem quilometros: o premio so deve mexer no trabalho. */
+    public function test_o_premio_so_incide_sobre_o_trabalho(): void
+    {
+        $trabalhoAgendado = $this->rateService->calculateForVendor(2000, 90, 0, false, false);
+        $trabalhoImediato = $this->rateService->calculateForVendorInstantService(2000, 90, 0, false, false);
+        $premioEmEuros = $trabalhoImediato - $trabalhoAgendado;
+
+        // Com 10 km, o premio em euros tem de ser exatamente o mesmo: a estrada
+        // entrou nos dois lados pelo mesmo valor e cancela-se.
+        $comKmAgendado = $this->rateService->calculateForVendor(2000, 90, 10, false, false);
+        $comKmImediato = $this->rateService->calculateForVendorInstantService(2000, 90, 10, false, false);
+
+        $this->assertEqualsWithDelta($premioEmEuros, $comKmImediato - $comKmAgendado, 0.01);
     }
 
     /** O premio aplica-se DEPOIS da faixa horaria, nao em vez dela. */

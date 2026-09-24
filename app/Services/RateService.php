@@ -65,8 +65,8 @@ class RateService
     {
         $systemCommission = $this->calculateSystemCommissionRate();
 
-        $vendorSubtotal = $this->calculateForVendor($hourRate, $timeService, $distance, false, false, $serviceAt);
-        $total = (($vendorSubtotal) / self::PREMIO_DE_IMEDIATISMO) / (1 - $systemCommission);
+        $vendorSubtotal = $this->subtotalDoProfissional($hourRate, $timeService, $distance, true, $serviceAt);
+        $total = $vendorSubtotal / (1 - $systemCommission);
 
         if ($addVat) {
             $total = $total * $this->getVat();
@@ -129,13 +129,31 @@ class RateService
             : $this->calculateForCustomerInstantService(0, 0, $distance, $round, $addVat);
     }
 
+    /**
+     * O subtotal do profissional: trabalho + estrada, antes de comissao e IVA.
+     *
+     * O premio de imediatismo multiplica SO o trabalho. A estrada e a mesma
+     * estrada — os mesmos quilometros, o mesmo combustivel — quer o pedido
+     * seja para agora ou para quinta as 10:00, e por isso fica de fora, como
+     * ja ficava de fora da faixa horaria (ver `calculateTravelForCustomer`:
+     * "a deslocacao custa o mesmo as 10:00 e as 03:00").
+     *
+     * Ate 24/09/2026 o premio era aplicado ao subtotal inteiro. Num pedido de
+     * 10 km isso fazia a parcela da deslocacao passar de 13,12 EUR para 17,49
+     * no que o cliente paga — mais 33% pela mesma viagem. Divergia tambem da
+     * formula do produto, que aplica o premio a `valor_hora x tempo`.
+     */
+    private function subtotalDoProfissional($hourRate, $timeService, $distance, bool $imediato, ?CarbonInterface $serviceAt): float
+    {
+        $trabalho = $this->calculateTimeRate($hourRate, $timeService) * $this->calculateHourCommission($serviceAt);
+        $estrada = $this->calculateDistanceRate($distance);
+
+        return ($imediato ? $trabalho / self::PREMIO_DE_IMEDIATISMO : $trabalho) + $estrada;
+    }
+
     public function calculateForVendor($hourRate, $timeService, $distance, $round = true, $addVat = true, ?CarbonInterface $serviceAt = null): float
     {
-        $distanceRate = $this->calculateDistanceRate($distance);
-        $timeRate = $this->calculateTimeRate($hourRate, $timeService);
-        $hourCommission = $this->calculateHourCommission($serviceAt);
-
-        $total = (($timeRate * $hourCommission) + $distanceRate);
+        $total = $this->subtotalDoProfissional($hourRate, $timeService, $distance, false, $serviceAt);
 
         if ($addVat) {
             $total = $total * $this->getVat();
@@ -163,8 +181,7 @@ class RateService
      */
     public function calculateForVendorInstantService($hourRate, $timeService, $distance, $round = true, $addVat = true, ?CarbonInterface $serviceAt = null): float
     {
-        $total = $this->calculateForVendor($hourRate, $timeService, $distance, false, false, $serviceAt)
-            / self::PREMIO_DE_IMEDIATISMO;
+        $total = $this->subtotalDoProfissional($hourRate, $timeService, $distance, true, $serviceAt);
 
         if ($addVat) {
             $total = $total * $this->getVat();
