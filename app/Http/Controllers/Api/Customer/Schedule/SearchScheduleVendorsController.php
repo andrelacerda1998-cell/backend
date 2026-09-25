@@ -25,7 +25,7 @@ class SearchScheduleVendorsController extends Controller
             $userAddress = $currentUser->mainAddress();
 
             if (! $currentUser->canRequestService()) {
-                throw new CustomerCantRequestServices;
+                throw CustomerCantRequestServices::comMotivos($currentUser->cannotRequestServiceReasonsForApp());
             } elseif (! $userAddress) {
                 throw new CustomerDontHaveMainAddress;
             }

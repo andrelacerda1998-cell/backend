@@ -31,7 +31,17 @@ class VendorSearchService
         $servicesType = $this->servicesType;
 
 
-        if (config('services.request.mock_location')) {
+        // MOCK_LOCATION devolve TUDO: sem raio geografico, sem filtro de tipo de
+        // servico, sem `status = Online`, sem a janela dos 60 minutos e sem
+        // ordenacao nenhuma. Serve para desenvolver sem ter um tecnico a mandar
+        // localizacao, mas em producao significaria oferecer ao cliente
+        // profissionais offline, de outra especialidade e a qualquer distancia,
+        // por ordem arbitraria.
+        //
+        // A guarda `! app()->isProduction()` e a mesma que o MOCK_SMS ja usa
+        // (PhoneLoginController, GuestSendOtpController, PhoneLoginSmsService):
+        // se a variavel ficar ligada por engano num deploy, o mock nao pega.
+        if ($this->usaLocalizacaoSimulada()) {
 
             return Vendor::search('', function (Indexes $meilisearch, string $query, array $options) {
                 $offset = 0;
@@ -65,6 +75,18 @@ class VendorSearchService
 
             return $meilisearch->search($query, $options);
         });
+    }
+
+    /**
+     * A regra do mock, num sítio só e com nome.
+     *
+     * Estava escrita dentro do `if` e sem guarda de ambiente. Fica aqui para
+     * poder ser presa por um teste — a diferença entre ligado e desligado é
+     * devolver os profissionais certos ou devolver o índice inteiro.
+     */
+    public function usaLocalizacaoSimulada(): bool
+    {
+        return (bool) config('services.request.mock_location') && ! app()->isProduction();
     }
 
     private function buildGeoFilter(float $latitude, float $longitude): string

@@ -12,6 +12,13 @@ return [
         'service_not_found' => 'Serviço não encontrado.',
         'verify_phone_to_request' => 'Verifica o teu número de telemóvel para pedires um serviço. É por aí que o profissional te contacta quando chega.',
         'customer_cannot_request_service' => 'O cliente não pode solicitar um serviço.',
+        // Ditas ao CLIENTE, na segunda pessoa. As equivalentes de backoffice
+        // estao em backoffice/customer.infolist.eligibility e ficam na terceira.
+        'cannot_request' => [
+            'unverified_phone' => 'Confirma o teu número de telemóvel para pedires um serviço.',
+            'no_main_address' => 'Escolhe a morada onde queres o serviço.',
+            'open_service' => 'Já tens um serviço a decorrer (:services). Termina-o ou cancela-o para pedires outro.',
+        ],
         'customer_dont_have_balance' => 'O cliente não tem saldo suficiente.',
         'customer_dont_have_main_address' => 'O cliente não tem uma morada principal.',
         'service_already_canceled' => 'O serviço já foi cancelado.',

@@ -188,24 +188,54 @@ class User extends Authenticatable implements Auditable, ContractCanResetPasswor
      */
     public function cannotRequestServiceReasons(): Collection
     {
-        $reasons = collect();
+        return $this->condicoesPorCumprir()
+            ->map(fn (array $c) => __('backoffice/customer.infolist.eligibility.'.$c['code'], $c));
+    }
+
+    /**
+     * As mesmas razões, escritas para o CLIENTE e não para quem o observa.
+     *
+     * As de cima estão na terceira pessoa ("O cliente não tem...") porque nasceram
+     * para o backoffice. Mostradas ao próprio, soam a ficha de processo — por isso
+     * há um segundo conjunto de textos, na segunda pessoa, como o resto da app.
+     */
+    public function cannotRequestServiceReasonsForApp(): Collection
+    {
+        return $this->condicoesPorCumprir()
+            ->map(fn (array $c) => __('exceptions.services.cannot_request.'.$c['code'], $c));
+    }
+
+    /**
+     * Onde as condições vivem, uma só vez.
+     *
+     * Antes as três condições estavam escritas duas vezes — no
+     * `canRequestService()` e outra vez no método que explica porquê — com um
+     * comentário a pedir que ficassem consistentes. Um pedido não é uma garantia:
+     * agora há uma lista de códigos e cada público só escolhe as palavras.
+     *
+     * @return Collection<int, array{code: string, services?: string}>
+     */
+    private function condicoesPorCumprir(): Collection
+    {
+        $condicoes = collect();
 
         if (! $this->hasVerifiedPhoneNumber()) {
-            $reasons->push(__('backoffice/customer.infolist.eligibility.unverified_phone'));
+            $condicoes->push(['code' => 'unverified_phone']);
         }
 
         if (! $this->addresses()->where('main_address', true)->exists()) {
-            $reasons->push(__('backoffice/customer.infolist.eligibility.no_main_address'));
+            $condicoes->push(['code' => 'no_main_address']);
         }
 
         $openServices = $this->openServices()->pluck('id');
         if ($openServices->isNotEmpty()) {
-            $reasons->push(__('backoffice/customer.infolist.eligibility.open_service', [
+            $condicoes->push([
+                'code' => 'open_service',
                 'services' => '#'.$openServices->join(', #'),
-            ]));
+            ]);
         }
 
-        return $reasons;
+        return $condicoes;
     }
 
     public function isPhoneOnly(): bool

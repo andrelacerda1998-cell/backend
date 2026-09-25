@@ -12,6 +12,11 @@ return [
         'service_not_found' => 'Service not found.',
         'verify_phone_to_request' => 'Verify your phone number to request a service. It is how the professional reaches you on arrival.',
         'customer_cannot_request_service' => 'Customer can´t request a service.',
+        'cannot_request' => [
+            'unverified_phone' => 'Confirm your phone number to request a service.',
+            'no_main_address' => 'Choose the address where you want the service.',
+            'open_service' => 'You already have a service in progress (:services). Finish or cancel it to request another.',
+        ],
         'customer_dont_have_balance' => 'Customer have insufficient balance.',
         'customer_dont_have_main_address' => 'Customer don´t have main Address.',
         'service_already_canceled' => 'Service already canceled.',

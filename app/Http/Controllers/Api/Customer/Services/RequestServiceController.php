@@ -33,7 +33,7 @@ class RequestServiceController extends Controller
             $mainAddress = $currentUser->mainAddress();
 
             if (! $currentUser->canRequestService()) {
-                throw new CustomerCantRequestServices;
+                throw CustomerCantRequestServices::comMotivos($currentUser->cannotRequestServiceReasonsForApp());
             } elseif (! $mainAddress) {
                 throw new CustomerDontHaveMainAddress;
             }
