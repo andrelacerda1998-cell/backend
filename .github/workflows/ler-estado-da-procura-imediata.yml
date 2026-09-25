@@ -1,0 +1,127 @@
+name: Ler estado da procura imediata em produção
+
+# So por accionamento manual, como o `ler-definicoes-matching.yml`. Existe para
+# responder a UMA pergunta: porque e que a procura imediata devolve zero
+# tecnicos em producao enquanto a agendada devolve tres.
+on:
+  workflow_dispatch:
+
+# De proposito SEM o grupo de concorrencia `deploy-production`: isto e uma
+# leitura, nao deve segurar o lugar a um deploy nem ficar atras de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler estado da procura
+    runs-on: ubuntu-latest
+    # Necessario para chegar aos mesmos segredos que o deploy usa, e traz de
+    # borla o portao de aprovacao manual. Abrir uma sessao SSH ao servidor de
+    # producao merece uma aprovacao explicita, mesmo so para ler.
+    environment: production
+    steps:
+      - name: Ler o estado no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # O comando e FIXO neste ficheiro, e NAO um input do workflow. Aceitar
+          # um comando por parametro transformava este botao numa shell remota
+          # para producao a espera de ser usada. Para ler outra coisa,
+          # altera-se o ficheiro e passa por revisao.
+          script: |
+            # SEM `-e`: uma leitura que falhe nao pode levar as outras atras.
+            set -uo pipefail
+            cd ~/project-laravel
+
+            ART="docker compose exec -T laravel-prod php artisan"
+
+            echo "=========== OS DOIS MOTORES ==========="
+            # Se o Horizon estiver inactive/paused, o indice de pesquisa
+            # congela -- que e a avaria reproduzida em local.
+            $ART horizon:status || true
+            $ART queue:monitor redis:default || true
+
+            echo
+            echo "--- ultimas execucoes das tarefas agendadas ---"
+            # `matching:advance` corre AO MINUTO e e o emparelhamento inteiro.
+            # Se a ultima execucao tiver horas, o agendador esta parado -- e
+            # isso e maior do que a procura imediata, que passa a ser so o
+            # sintoma que calhou de ser visivel.
+            $ART schedule-monitor:list || true
+
+            echo
+            echo "--- jobs falhados: o QUE falha, nao so quantos ---"
+            $ART queue:failed 2>/dev/null | tail -30 || true
+
+            echo
+            echo "=========== OS REGISTOS ==========="
+            # A primeira linha SO e escrita quando o indice Meilisearch falha e
+            # o agendado cai para a base de dados. Se aparecer, esta provado.
+            docker compose exec -T laravel-prod sh -c \
+              "grep -c 'Schedule vendor search fell back to database' storage/logs/laravel*.log" || true
+            docker compose exec -T laravel-prod sh -c \
+              "grep -c 'Guest vendor search failed' storage/logs/laravel*.log" || true
+
+            echo
+            echo "=========== BASE DE DADOS, INDICE E PROCURA ==========="
+            # SO LEITURAS. Nada aqui escreve na base de dados, no indice ou na
+            # fila: nem `searchable()`, nem `scout:import`, nem `queue:retry`.
+            # O `toSearchableArray()` tambem ja nao escreve (deixou de chamar o
+            # `updateRatting()`), por isso nem sequer e tocado aqui.
+            $ART tinker --execute='
+              $ok = function (string $rotulo, callable $f) {
+                  try { echo str_pad($rotulo, 44)." = ".$f().PHP_EOL; }
+                  catch (\Throwable $e) { echo str_pad($rotulo, 44)." = ERRO: ".$e->getMessage().PHP_EOL; }
+              };
+
+              echo "== 1. O QUE A BASE DE DADOS DIZ ==".PHP_EOL;
+              $ok("tecnicos validos", fn () => App\Models\Vendor::where("at_valid", true)->count());
+              $ok("  destes, status Online", fn () => App\Models\Vendor::where("at_valid", true)->where("status", "Online")->count());
+              $ok("  com localizacao guardada", fn () => App\Models\Vendor::where("at_valid", true)->whereHas("currentLocation")->count());
+              $ok("  com localizacao < 60 min", fn () => App\Models\Vendor::where("at_valid", true)
+                      ->whereHas("currentLocation", fn ($q) => $q->where("updated_at", ">=", now()->subMinutes(60)))->count());
+              $ok("localizacao mais recente de todas", fn () => App\Models\Vendor\Location::max("updated_at") ?: "nenhuma");
+
+              echo PHP_EOL."== 2. O QUE O INDICE DIZ ==".PHP_EOL;
+              // Se estes numeros nao baterem com os de cima, o indice esta
+              // desatualizado -- e e ai que o imediato morre, porque os quatro
+              // filtros correm no indice e nao na base de dados.
+              $ix = app(Meilisearch\Client::class)->index("vendors");
+              $limiar = now()->subMinutes(60)->timestamp;
+              $ok("documentos no indice", fn () => $ix->stats()["numberOfDocuments"]);
+              $ok("  com status Online", fn () => $ix->search("", ["filter" => "status = \"Online\"", "limit" => 1000])->getHitsCount());
+              $ok("  com geoTime < 60 min", fn () => $ix->search("", ["filter" => "geoTime >= ".$limiar, "limit" => 1000])->getHitsCount());
+              $ok("limiar do geoTime usado", fn () => $limiar." (".now()->subMinutes(60)->toDateTimeString().")");
+              // Primeiro ping de sempre: o UpdateLocationController le a
+              // relacao ANTES do touch() e nunca a recarrega, por isso o
+              // tecnico entra no indice em _geo {0,0} e fica invisivel a
+              // procura imediata ate ao segundo ping. Confirmado em local.
+              $ok("indexados em 0,0 (Null Island)", fn () => $ix->search("", ["filter" => "_geoRadius(0, 0, 1000)", "limit" => 1000])->getHitsCount());
+              $ok("tecnicos na base (p/ achar orfaos)", fn () => App\Models\Vendor::count());
+
+              echo PHP_EOL."== 3. A FILA QUE ALIMENTA O INDICE ==".PHP_EOL;
+              // scout.queue = true: cada atualizacao de localizacao so chega ao
+              // indice quando um worker processa o job. Sem worker, o geoTime
+              // congela e o filtro dos 60 minutos exclui toda a gente. Foi
+              // exactamente isto que se reproduziu em local.
+              $ok("scout.queue", fn () => var_export(config("scout.queue"), true));
+              // NAO se conta `DB::table("jobs")`: com QUEUE_CONNECTION=redis
+              // essa tabela esta sempre vazia, e um zero ali leria-se como
+              // "fila vazia" quando nao prova nada. A fila e Horizon sobre
+              // redis -- ver o passo `horizon:status` abaixo.
+              $ok("driver da fila", fn () => config("queue.default"));
+              $ok("jobs falhados", fn () => DB::table("failed_jobs")->count());
+              $ok("falhado mais recente", fn () => DB::table("failed_jobs")->max("failed_at") ?: "nenhum");
+
+              echo PHP_EOL."== 4. A PROCURA, A SERIO ==".PHP_EOL;
+              // O mesmo caminho que a app percorre, com o servico 17
+              // (Desentupimento de Cano) e as coordenadas da Rua Augusta, que
+              // sao as que devolveram 0 no imediato e 3 no agendado por fora.
+              $st = App\Models\GeneralSettings\ServicesType::find(17);
+              $addr = new App\DTO\Services\AddressCoordinatesDTO(38.7223, -9.1393);
+              $ok("servico 17", fn () => $st ? $st->name : "NAO EXISTE");
+              $ok("procura IMEDIATA devolve", fn () => app(App\Services\Customer\Services\VendorSearchService::class)->search($addr, $st, false)->count());
+              $ok("procura AGENDADA devolve", fn () => app(App\Services\Customer\Services\ScheduleVendorSearchService::class)->search($addr, $st, false)->count());
+            '

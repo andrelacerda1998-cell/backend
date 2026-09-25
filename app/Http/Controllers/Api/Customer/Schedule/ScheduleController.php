@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Customer\Schedule;
 
 use App\DTO\Schedule\ScheduleEventData;
 use App\Events\Vendor\Schedule\CreateScheduleEvent;
+use App\Exceptions\Api\Customer\CustomerCantRequestServices;
 use App\Exceptions\Api\Vendor\Service\ServiceIsNotPending;
 use App\Http\Controllers\Api\Customer\Services\traits\NotifyVendor;
 use App\Http\Requests\Api\Customer\Schedule\StoreScheduleRequest;
@@ -69,7 +70,12 @@ class ScheduleController
 
         $customer = User::query()->findOrFail($customerId);
         if (! $customer->canRequestService()) {
-            return new ApiErrorResponse(new \Exception('Customer cannot request service'), 'Customer cannot request service', 400);
+            // Era uma frase em ingles escrita a mao, num 400 generico, numa app
+            // toda em portugues. Passa pela mesma excecao dos outros dois sitios
+            // que fazem esta verificacao, que diz o que falta e responde 403.
+            return new ApiErrorResponse(
+                CustomerCantRequestServices::comMotivos($customer->cannotRequestServiceReasonsForApp())
+            );
         }
 
         $vendor = Vendor::query()->findOrFail($vendorId);
