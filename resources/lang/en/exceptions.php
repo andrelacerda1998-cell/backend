@@ -6,6 +6,8 @@ return [
     ],
     'payment_methods' => [
         'credit_card_invalid_data' => 'Encryption key is not valid.',
+        'card_data_invalid' => 'The card details are not valid. Check the number, the expiry date and the code.',
+        'session_expired' => 'Your session has expired. Sign in again to save the card.',
         'disabled' => 'This payment method is currently unavailable.',
     ],
     'services' => [
