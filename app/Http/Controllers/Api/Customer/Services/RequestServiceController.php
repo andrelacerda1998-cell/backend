@@ -42,7 +42,21 @@ class RequestServiceController extends Controller
 
             $requestedServiceType = ServicesType::find($request->get('service_type'));
 
-            $matchingVendors = $searchService->search($userAddress, $requestedServiceType, false);
+            // Contas de teste procuram contas de teste.
+            //
+            // Estava `false` fixo, e o agendamento — SearchScheduleVendorsController
+            // — passa `$currentUser->is_test` no mesmo sítio. A diferença tinha
+            // duas consequências, as duas silenciosas:
+            //
+            //  - os técnicos marcados como teste nunca apareciam no imediato, a
+            //    ninguém, o que torna inútil criá-los para testar este fluxo;
+            //  - um cliente de teste via os técnicos REAIS e, se o pedido
+            //    avançasse, o trabalho caía a um profissional a sério.
+            //
+            // O caminho de convidado, mais abaixo, continua em `false` de
+            // propósito: quem não tem sessão não tem flag, e o que se lhe deve
+            // mostrar é o catálogo verdadeiro.
+            $matchingVendors = $searchService->search($userAddress, $requestedServiceType, (bool) $currentUser->is_test);
 
             $transformedVendors = $this->transformVendors($matchingVendors, $requestedServiceType, $userAddress, $quantity);
             $transformedVendors = $transformedVendors->filter();
