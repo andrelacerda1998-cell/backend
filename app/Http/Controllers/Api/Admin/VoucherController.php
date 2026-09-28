@@ -15,7 +15,11 @@ class VoucherController extends Controller
     {
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
-        $query = Voucher::query()->withCount('usages')->latest('created_at');
+        $query = Voucher::query()
+            ->withCount('usages')
+            ->withCount('services')
+            ->withSum('services as discount_total_cents', 'discount_amount')
+            ->latest('created_at');
 
         if ($request->filled('is_active')) {
             $query->where('is_active', $request->boolean('is_active'));
@@ -47,7 +51,7 @@ class VoucherController extends Controller
 
     public function show(Voucher $voucher): ApiSuccessResponse
     {
-        $voucher->loadCount('usages');
+        $this->comTotais($voucher);
 
         return ApiSuccessResponse::make($this->present($voucher));
     }
@@ -55,7 +59,7 @@ class VoucherController extends Controller
     public function update(UpdateVoucherRequest $request, Voucher $voucher): ApiSuccessResponse
     {
         $voucher->update($request->validated());
-        $voucher->loadCount('usages');
+        $this->comTotais($voucher);
 
         return ApiSuccessResponse::make($this->present($voucher));
     }
@@ -65,6 +69,14 @@ class VoucherController extends Controller
         $voucher->delete();
 
         return ApiSuccessResponse::make();
+    }
+
+    /** Os mesmos agregados que o index traz, para uma so instancia. */
+    private function comTotais(Voucher $voucher): void
+    {
+        $voucher->loadCount('usages');
+        $voucher->loadCount('services');
+        $voucher->loadSum('services as discount_total_cents', 'discount_amount');
     }
 
     private function present(Voucher $voucher): array
@@ -80,6 +92,19 @@ class VoucherController extends Controller
             'is_active' => $voucher->is_active,
             'is_valid' => $voucher->isValid(),
             'usages_count' => $voucher->usages_count ?? 0,
+            'services_count' => $voucher->services_count ?? 0,
+            /*
+             * Quanto desconto este voucher ja deu, EM CENTIMOS.
+             *
+             * O nome diz a unidade de proposito: `services.discount_amount` e
+             * inteiro em centimos, e um campo chamado so `discount_total` seria
+             * lido como euros por quem o consome -- ja aconteceu com o
+             * `starts_from`. Quem mostrar isto divide por 100.
+             *
+             * Vem de `services`, nao de `voucher_usages`: o uso regista que o
+             * voucher foi aplicado, o servico e que guarda o valor abatido.
+             */
+            'discount_total_cents' => (int) ($voucher->discount_total_cents ?? 0),
             'created_at' => $voucher->created_at?->toIso8601String(),
         ];
     }

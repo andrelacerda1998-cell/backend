@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Service;
 use App\Models\Voucher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -109,5 +110,63 @@ class AdminVoucherApiTest extends TestCase
             ->assertOk();
 
         $this->assertSoftDeleted('vouchers', ['id' => $voucher->id]);
+    }
+
+    public function test_it_reports_how_much_discount_a_voucher_has_given(): void
+    {
+        $voucher = Voucher::create([
+            'name' => 'Natal 20',
+            'discount_percentage' => 20,
+            'valid_services' => ['scheduled'],
+            'is_active' => true,
+        ]);
+
+        // Dois servicos com este voucher: 12,50 EUR e 7,50 EUR de desconto.
+        Service::factory()->create(['voucher_id' => $voucher->id, 'discount_amount' => 1250]);
+        Service::factory()->create(['voucher_id' => $voucher->id, 'discount_amount' => 750]);
+        // Um servico sem voucher nenhum nao pode entrar na conta.
+        Service::factory()->create(['voucher_id' => null, 'discount_amount' => 9999]);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vouchers')
+            ->assertOk()
+            ->assertJsonPath('data.items.0.services_count', 2)
+            // EM CENTIMOS: 2000 = 20,00 EUR. Um 20 aqui seria euros e estaria errado.
+            ->assertJsonPath('data.items.0.discount_total_cents', 2000);
+    }
+
+    public function test_a_voucher_never_used_reports_zero_and_not_null(): void
+    {
+        Voucher::create([
+            'name' => 'Nunca usado',
+            'discount_percentage' => 10,
+            'valid_services' => ['immediate'],
+            'is_active' => true,
+        ]);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vouchers')
+            ->assertOk()
+            ->assertJsonPath('data.items.0.services_count', 0)
+            ->assertJsonPath('data.items.0.discount_total_cents', 0);
+    }
+
+    public function test_the_totals_are_there_when_asking_for_one_voucher(): void
+    {
+        $voucher = Voucher::create([
+            'name' => 'Um so',
+            'discount_percentage' => 15,
+            'valid_services' => ['scheduled'],
+            'is_active' => true,
+        ]);
+        Service::factory()->create(['voucher_id' => $voucher->id, 'discount_amount' => 500]);
+
+        // O `show` carregava so a contagem de usos; sem os mesmos agregados,
+        // abrir um voucher mostrava 0,00 EUR de desconto para um que ja deu.
+        $this->withAuth()
+            ->getJson("/api/v1/admin/vouchers/{$voucher->id}")
+            ->assertOk()
+            ->assertJsonPath('data.services_count', 1)
+            ->assertJsonPath('data.discount_total_cents', 500);
     }
 }
