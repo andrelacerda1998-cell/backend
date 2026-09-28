@@ -27,6 +27,7 @@ use App\Trait\Services\CalculateServicePriceForCustomer;
 use App\Trait\Services\ProcessesServicePayment;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use RwInteractive\PayshopSdk\Enums\Payment\Wallet;
 use Throwable;
 
 /**
@@ -299,6 +300,18 @@ class MatchingController extends Controller
      * do que o cliente viu ao escolher. Cupão e saldo aplicam-se por cima, com
      * as mesmas regras do fluxo antigo (buildTransactionTotals).
      */
+    /**
+     * Os metodos de pagamento que sao uma carteira, e a carteira de cada um.
+     *
+     * O nome que a app manda e minusculas com underscore, como os outros
+     * metodos; o valor e o que a API do Payshop espera. Um mapa em vez de dois
+     * `if`: acrescentar uma carteira passa a ser uma linha.
+     */
+    private const CARTEIRAS = [
+        'apple_pay' => Wallet::APPLE_PAY,
+        'google_pay' => Wallet::GOOGLE_PAY,
+    ];
+
     public function checkout(MatchingCheckoutRequest $request, Service $service): ApiSuccessResponse|ApiErrorResponse
     {
         DB::beginTransaction();
@@ -374,11 +387,28 @@ class MatchingController extends Controller
                 $service->payment_status = PaymentStatus::PAID;
                 $service->save();
             } else {
-                $paymentMethod = $this->resolvePaymentMethod($request, $customer, $method);
+                $carteira = self::CARTEIRAS[$method] ?? null;
 
-                $validationUrl = $method === 'mbway'
-                    ? $this->processMbwayPayment($customer, $service, $service->vendor, $total, $paymentMethod)
-                    : $this->processCreditCardPayment($customer, $service, $service->vendor, $total, $paymentMethod);
+                if ($carteira) {
+                    // Sem resolvePaymentMethod: o payload da carteira e de uso
+                    // unico e nao existe como metodo guardado. Exigir um cartao
+                    // aqui impediria de pagar exactamente quem escolheu nao ter.
+                    $validationUrl = $this->processWalletPayment(
+                        $customer,
+                        $service,
+                        $service->vendor,
+                        $total,
+                        $carteira,
+                        $request->input('wallet_payload'),
+                        $request->ip(),
+                    );
+                } else {
+                    $paymentMethod = $this->resolvePaymentMethod($request, $customer, $method);
+
+                    $validationUrl = $method === 'mbway'
+                        ? $this->processMbwayPayment($customer, $service, $service->vendor, $total, $paymentMethod)
+                        : $this->processCreditCardPayment($customer, $service, $service->vendor, $total, $paymentMethod);
+                }
             }
 
             if ($service->payment_status === PaymentStatus::PAID) {
