@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use RwInteractive\PayshopSdk\Api\Payments\WalletPayment;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,6 +26,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // O pagamento com carteira, resolvido pelo contentor.
+        //
+        // O `WalletPayment::make()` constrói o seu próprio cliente HTTP a partir
+        // da config, por isso não se auto-resolve. Registá-lo aqui é o que
+        // permite trocá-lo por um duplo nos testes: sem isto, provar o que
+        // acontece a um 3DS ou a uma recusa exigiria falar com o Payshop a
+        // sério — ou seja, não se provava.
+        $this->app->bind(WalletPayment::class, fn () => WalletPayment::make());
+
         // Tradutor para RASCUNHOS do backoffice. Sem chave fica o NullTranslator,
         // que nao traduz e diz porque — em vez de falhar a meio de um formulario.
         $this->app->singleton(Translator::class, function () {
