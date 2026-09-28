@@ -66,6 +66,28 @@ class AdminVendorsApiTest extends TestCase
         config(['scout.driver' => 'null']);
     }
 
+    /**
+     * Limpar TAMBEM no fim, e nao so antes de cada teste.
+     *
+     * DatabaseTruncation trunca no setUp. Isso protege os testes desta classe
+     * uns dos outros, mas nao protege a classe SEGUINTE: as linhas do ultimo
+     * teste ficam confirmadas na base de dados, fora de qualquer transacao.
+     *
+     * Foi o que aconteceu: esta classe corre antes de AvaliacoesVoltamNoDeploy
+     * (ordem alfabetica, Ad < Av), esse teste corre em transacao e afirma que
+     * nao ha nenhum Vendor -- e encontrava o que ficou aqui para tras. A CI
+     * ficava vermelha num ficheiro que ninguem tinha tocado.
+     *
+     * Truncar no fim fecha isso para qualquer teste que venha a ser
+     * acrescentado aqui, em vez de depender de o ultimo nao criar nada.
+     */
+    protected function tearDown(): void
+    {
+        $this->truncateTablesForAllConnections();
+
+        parent::tearDown();
+    }
+
     private function withAuth(): static
     {
         config(['services.admin_api.token' => 'a-valid-token']);
@@ -508,5 +530,53 @@ class AdminVendorsApiTest extends TestCase
         $this->withAuth()->postJson('/api/v1/admin/vendors/test-account', [
             'first_name' => 'Rui',
         ])->assertStatus(422);
+    }
+
+    /**
+     * A listagem diz o que FALTA a cada tecnico, em codigo.
+     *
+     * E a mesma regra e a mesma fonte que o GET /me da a app do tecnico
+     * (Vendor::invoicingBlocker). Se um dia divergirem, o tecnico le uma coisa
+     * na app e o backoffice mostra outra sobre a mesma pessoa.
+     */
+    public function test_it_says_what_each_vendor_is_missing(): void
+    {
+        // Contacto por confirmar: e o primeiro degrau, antes de tudo o resto.
+        $porConfirmar = $this->makeVendor([
+            'first_name' => 'Ana', 'last_name' => 'Por Confirmar',
+            'email_verified_at' => null, 'phone_number_verified_at' => null,
+        ]);
+
+        // Contacto confirmado, mas sem IBAN.
+        $semIban = $this->makeVendor(
+            ['first_name' => 'Bruno', 'last_name' => 'Sem Iban', 'email_verified_at' => now()],
+            ['iban' => null],
+        );
+
+        // Confirmado e com IBAN: falta-lhe a morada fiscal.
+        $semMorada = $this->makeVendor(['first_name' => 'Carla', 'last_name' => 'Sem Morada', 'email_verified_at' => now()]);
+
+        $res = $this->withAuth()->getJson('/api/v1/admin/vendors')->assertOk();
+        $porId = collect($res->json('data.items'))->keyBy('id');
+
+        $this->assertSame('contact_unverified', $porId[$porConfirmar->id]['account_blocker']);
+        $this->assertSame('iban_missing', $porId[$semIban->id]['account_blocker']);
+        $this->assertSame('fiscal_address_missing', $porId[$semMorada->id]['account_blocker']);
+    }
+
+    /** A ordem importa: quem nem confirmou o contacto nao e listado por falta de IBAN. */
+    public function test_the_first_missing_thing_wins(): void
+    {
+        $vendor = $this->makeVendor(
+            ['first_name' => 'Duarte', 'last_name' => 'Nada Feito', 'email_verified_at' => null, 'phone_number_verified_at' => null],
+            ['iban' => null],
+        );
+
+        $res = $this->withAuth()->getJson('/api/v1/admin/vendors')->assertOk();
+        $porId = collect($res->json('data.items'))->keyBy('id');
+
+        // Falta-lhe o IBAN tambem, mas pedir o IBAN a quem nem confirmou o
+        // telemovel e mandar preencher um campo para continuar bloqueado.
+        $this->assertSame('contact_unverified', $porId[$vendor->id]['account_blocker']);
     }
 }
