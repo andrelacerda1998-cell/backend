@@ -71,37 +71,39 @@ class SondarCarteirasCommand extends Command
 
         $assinatura = config('payshop-sdk.api.signature');
 
-        // 1. Ordem com AUTHORIZATION. Se a sandbox recusar já aqui, o problema
-        //    é da ordem e não da carteira — vale a pena separar os dois.
-        $this->info('1. A criar uma ordem de 1 cêntimo com operative=AUTHORIZATION...');
-
-        $ordem = $this->pedir($http, 'payment', [
-            'signature' => $assinatura,
-            'operative' => 'AUTHORIZATION',
-            'amount' => 1,
-            'description' => 'Sonda de carteiras (Piquet)',
-            'customer_ext_id' => 'sonda-carteiras',
-            'secure' => false,
-            'service' => config('payshop-sdk.paymentServices.creditCard'),
-            'expires_in' => 900,
-        ]);
-
-        $this->linha('ordem', $ordem);
-
-        $uuid = data_get($ordem, 'corpo.order.uuid');
-
-        if (! $uuid) {
-            $this->error('Sem ordem não há nada a sondar. A mensagem acima diz porquê.');
-
-            return self::FAILURE;
-        }
-
-        $this->info("   ordem criada: {$uuid}");
-        $this->newLine();
-
-        // 2. Pagar com cada carteira, com um payload inválido de propósito.
+        // UMA ORDEM POR CARTEIRA.
+        //
+        // A primeira versão criava uma ordem só e usava-a nas duas tentativas.
+        // A primeira tentativa consome-a — o pagamento falha e a ordem fecha —
+        // e a segunda recebia `404 Order token not found`, que se lia como "a
+        // carteira não existe" quando era a ordem que já não servia. Deu um
+        // diagnóstico errado à primeira vez que isto correu.
         foreach (['APPLEPAY', 'GOOGLEPAY'] as $carteira) {
-            $this->info("2. A tentar /payment/wallet com {$carteira} e um payload inválido...");
+            $this->info("A criar uma ordem de 1 cêntimo (AUTHORIZATION) para o {$carteira}...");
+
+            $ordem = $this->pedir($http, 'payment', [
+                'signature' => $assinatura,
+                'operative' => 'AUTHORIZATION',
+                'amount' => 1,
+                'description' => 'Sonda de carteiras (Piquet)',
+                'customer_ext_id' => 'sonda-carteiras',
+                'secure' => false,
+                'service' => config('payshop-sdk.paymentServices.creditCard'),
+                'expires_in' => 900,
+            ]);
+
+            $uuid = data_get($ordem, 'corpo.order.uuid');
+
+            if (! $uuid) {
+                $this->linha('ordem', $ordem);
+                $this->error('   Sem ordem não há nada a sondar para esta carteira.');
+                $this->newLine();
+
+                continue;
+            }
+
+            $this->line('   ordem: '.$uuid);
+            $this->info('   A tentar /payment/wallet com um payload inválido...');
 
             $resposta = $this->pedir($http, 'payment/wallet', [
                 'signature' => $assinatura,
@@ -116,8 +118,11 @@ class SondarCarteirasCommand extends Command
 
         $this->newLine();
         $this->line('COMO LER ISTO:');
-        $this->line('  - erro a falar de serviço/configuração  -> a carteira não está ativa na conta; falar com o Payshop.');
-        $this->line('  - erro a falar do payload ou de decifrar -> a carteira está ativa. Segue o trabalho na app.');
+        $this->line('  - HTTP 303 com um URL .../payment/wrong  -> A CARTEIRA ESTÁ ATIVA. O Paylands aceitou');
+        $this->line('    o pedido, tentou processar o payload (que é lixo de propósito) e mandou para o');
+        $this->line('    callback de falha. É o que se quer ver aqui.');
+        $this->line('  - erro a falar de serviço ou configuração -> a carteira não está ativa na conta.');
+        $this->line('  - HTTP 401 -> as credenciais do .env não servem.');
         $this->line('  - a ordem acima criou-se com AUTHORIZATION -> cativar agora e cobrar depois é aceite pela ordem.');
         $this->line('    Isso ainda não prova a captura diferida DA CARTEIRA: para isso é preciso um payload a sério,');
         $this->line('    de um telemóvel, e depois um /payment/order/confirmation. Fica para o teste na app.');
