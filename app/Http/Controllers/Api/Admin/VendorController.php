@@ -657,6 +657,20 @@ class VendorController extends Controller
             // dependem de relações (documentos, morada fiscal) que não são
             // enviadas na listagem, logo o cliente não as podia avaliar.
             'invoice_workspace_blocker' => CompanySection::getWorkspaceDisabledReason($vendor),
+            /*
+             * O MESMO bloqueio, em codigo em vez de frase.
+             *
+             * A frase acima e para mostrar ao lado de um botao: esta escrita na
+             * terceira pessoa e inclui o caso "ja existe workspace", que e
+             * assunto de administracao e nao do tecnico. Um codigo agrupa-se, e
+             * e o que o backoffice precisa para responder a "quantos tecnicos
+             * estao parados por falta de IBAN?".
+             *
+             * E o mesmo valor que o GET /me devolve a app do tecnico, da mesma
+             * fonte (Vendor::invoicingBlocker), para os dois lados nunca
+             * divergirem: null quer dizer que esta tudo pronto.
+             */
+            'account_blocker' => $vendor->invoicingBlocker(),
             // Morada FISCAL (a que vai na fatura), não a morada de serviço --
             // é a que o CompanySection exige para criar o workspace.
             'billing_address' => $fiscal
