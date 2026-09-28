@@ -6,6 +6,10 @@ return [
     ],
     'payment_methods' => [
         'credit_card_invalid_data' => 'A chave de encriptação não é válida.',
+        // Separada da chave de encriptação: uma é problema do cartão que o
+        // cliente escreveu, a outra é da cifra e ele não tem como a resolver.
+        'card_data_invalid' => 'Os dados do cartão não são válidos. Confirma o número, a validade e o código.',
+        'session_expired' => 'A tua sessão expirou. Entra outra vez para guardares o cartão.',
         'disabled' => 'Este método de pagamento não está disponível de momento.',
     ],
     'services' => [

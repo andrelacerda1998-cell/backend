@@ -36,7 +36,9 @@ class AddCreditCardController extends Controller
 
             $user = auth('api')->user();
             if (! $user) {
-                throw new \Exception('Authentication required');
+                // Chave traduzida, com 401, em vez de uma Exception nua que dava
+            // 500 e a frase em ingles ao cliente.
+            throw new WrongEncryptionKey('exceptions.payment_methods.session_expired');
             }
 
             $this->ensurePayShopCustomer($user);
@@ -75,7 +77,10 @@ class AddCreditCardController extends Controller
         $auth = Authentications::where('token', $token)->first();
 
         if (! $auth) {
-            throw new WrongEncryptionKey('Authentication token is invalid.');
+            // Era 'Authentication token is invalid.' — inglês, escrito à mão,
+            // mostrado a um cliente português. A excecao ja tem chave por
+            // omissao; aqui usa-se a que descreve o caso.
+            throw new WrongEncryptionKey('exceptions.payment_methods.session_expired');
         }
 
         return $auth;
@@ -106,7 +111,9 @@ class AddCreditCardController extends Controller
         ]);
 
         if ($validator->fails()) {
-            throw new CreditCardInvalidData('Invalid card data.');
+            // Idem: 'Invalid card data.' passa a dizer ao cliente o que
+            // conferir, em portugues.
+            throw new CreditCardInvalidData('exceptions.payment_methods.card_data_invalid');
         }
 
         return $validator->validated();
