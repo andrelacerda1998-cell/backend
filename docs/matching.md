@@ -277,14 +277,43 @@ Nenhum destes números é inventado aqui; são pontos de calibração com dados 
 | `wave_size` | 6 | quantos são notificados por onda (agendado) |
 | `wave_interval_seconds` | 45 | espera antes da onda seguinte |
 | `max_waves` | 3 | até onde vai antes de desistir |
-| `vendor_response_seconds_immediate` | 60 | igual à janela de hoje |
-| `vendor_response_seconds_scheduled` | 1800 | 30 min |
-| `customer_choice_seconds` | 200 | quanto tempo o cliente tem para escolher num pedido imediato (cobre os ~180 s das ondas) |
-| `customer_choice_seconds_scheduled` | 1800 | o mesmo num agendado — igual à janela de resposta, porque o cliente fechou a app |
-| `checkout_seconds` | 300 | quanto tempo tem para pagar depois de escolher |
+| `vendor_response_seconds_immediate` | 120 | quanto tempo o profissional tem para responder |
+| `vendor_response_seconds_scheduled` | 120 | o mesmo num agendado — hoje é o mesmo número |
+| `request_deadline_seconds` | 600 | prazo da **fase de convites**, antes do primeiro sim (rede de segurança) |
+| `customer_choice_seconds` | 300 | o prazo do cliente para escolher **e** pagar, do primeiro sim |
+| `customer_choice_seconds_scheduled` | 300 | o mesmo num agendado — hoje é o mesmo número |
+| `customer_choice_seconds_custom` | 3600 | o mesmo num personalizado: uma hora, porque a notificação chega com a app fechada |
+| `checkout_seconds` | 300 | tecto da fase de pagamento; só corta se for mais curto do que o que resta ao cliente |
+| `custom_review_alert_weekdays` | 1 | dias úteis até o backoffice ser avisado de um personalizado esquecido |
+| `custom_review_deadline_weekdays` | 2 | dias úteis até um personalizado em análise falhar sozinho |
 | `rating_bands` | `[4.5, 4.0, 3.0]` | fronteiras das faixas |
 | `new_vendor_min_ratings` | 5 | abaixo disto conta como profissional novo |
 | `require_recent_activity_minutes` | 15 | para entrar na shortlist do imediato |
+| `max_radius_km` | 50 | raio a partir da morada do serviço (abre-se quando não sobra ninguém dentro) |
+
+### Os dois prazos
+
+O pedido tem **duas fases, com orçamentos próprios, em cadeia** — e não um tecto
+único por cima das duas:
+
+1. **Fase de convites.** Cada profissional tem `vendor_response_seconds_*` para
+   dizer se tem interesse. O mesmo número no imediato e no agendado: a pergunta
+   muda ("podes agora?" ou "podes quinta às 15h?"), o tempo para responder não.
+   Enquanto ninguém aceitou, `request_deadline_seconds` limita a fase — mas é uma
+   rede de segurança contra um pedido encravado, não uma promessa: um pedido que
+   ninguém aceita morre muito antes, quando as ondas se esgotam.
+
+2. **Fase do cliente.** Do **primeiro sim**, `customer_choice_seconds*` para
+   escolher **e** pagar. É o número que o contador mostra no ecrã, e é o mesmo
+   que o `matching:advance` usa para matar o pedido.
+
+O tempo que os profissionais levaram a responder **não é descontado** ao cliente.
+Descontá-lo dava-lhe menos do que os minutos prometidos, e quanto mais depressa
+alguém aceitasse mais tempo ele teria — o incentivo ao contrário.
+
+Também não há um segundo relógio a arrancar na escolha: quem escolhe ao último
+segundo não ganha tempo por isso. Um contador que chega a zero sem nada acontecer
+ensina o cliente a não acreditar nele.
 
 ## Pedido personalizado
 

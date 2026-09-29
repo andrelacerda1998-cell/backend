@@ -120,6 +120,16 @@ return [
         // qui fait que le pro se sent trompé quand il perd — et arrête de répondre.
         'description' => 'Dis-nous si tu es disponible. Le client choisit parmi ceux qui répondent.',
     ],
+    'matchingOutcome' => [
+        'lost' => [
+            'title' => 'Le client a choisi un autre pro',
+            'description' => 'Cette demande est allée à quelqu\'un d\'autre. Merci d\'avoir répondu.',
+        ],
+        'closed' => [
+            'title' => 'La demande a été annulée',
+            'description' => 'Le client n\'a pas finalisé le paiement à temps. Tu peux accepter d\'autres demandes.',
+        ],
+    ],
     'customRequest' => [
         'label' => 'ta demande personnalisée',
     ],

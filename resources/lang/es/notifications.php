@@ -120,6 +120,16 @@ return [
         // profesional se sienta engañado cuando lo pierde — y deje de responder.
         'description' => 'Dinos si tienes disponibilidad. El cliente elige entre quienes respondan.',
     ],
+    'matchingOutcome' => [
+        'lost' => [
+            'title' => 'El cliente eligió a otro profesional',
+            'description' => 'Esta solicitud fue para otra persona. Gracias por responder.',
+        ],
+        'closed' => [
+            'title' => 'La solicitud se canceló',
+            'description' => 'El cliente no completó el pago a tiempo. Ya puedes aceptar otras solicitudes.',
+        ],
+    ],
     'customRequest' => [
         'label' => 'tu solicitud personalizada',
     ],

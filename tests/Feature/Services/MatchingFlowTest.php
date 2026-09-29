@@ -48,16 +48,16 @@ class MatchingFlowTest extends TestCase
             'wave_size' => 6,
             'wave_interval_seconds' => 45,
             'max_waves' => 3,
-            'vendor_response_seconds_immediate' => 60,
-            'vendor_response_seconds_scheduled' => 1800,
-            'customer_choice_seconds' => 120,
-            'customer_choice_seconds_scheduled' => 1800,
+            'vendor_response_seconds_immediate' => 120,
+            'vendor_response_seconds_scheduled' => 120,
+            'customer_choice_seconds' => 300,
+            'customer_choice_seconds_scheduled' => 300,
             'checkout_seconds' => 300,
             'rating_bands' => [4.5, 4.0, 3.0],
             'new_vendor_min_ratings' => 5,
             'require_recent_activity_minutes' => 15,
             'customer_choice_seconds_custom' => 3600,
-            'request_deadline_seconds' => 180,
+            'request_deadline_seconds' => 600,
         ]);
 
 
@@ -197,6 +197,50 @@ class MatchingFlowTest extends TestCase
         // enche à medida que forem respondendo.
         $this->assertGreaterThan(0, ServiceCandidate::where('status', CandidateStatus::NOTIFIED)->count());
         $this->assertSame([], $response->json('data.candidates'));
+    }
+
+    /**
+     * 120 segundos para dizer se tem interesse. NOS DOIS MODOS.
+     *
+     * A pergunta que se faz muda ("podes agora?" ou "podes quinta as 15h?"); o
+     * tempo para responder nao. Eram 60 s no imediato e 180 no agendado — e o
+     * agendado nunca chegava a ter os 180, porque o tecto global de 180 s a
+     * contar da criacao cortava-os por cima. O contador no telemovel prometia
+     * tempo que nao existia.
+     *
+     * O tecto continua a existir para a fase de convites, mas esta agora muito
+     * acima do que o calendario das ondas precisa, de proposito: colado a esse
+     * calendario, o atraso do cron cortava a janela da ultima onda e o
+     * profissional convidado ao fim tinha menos tempo do que os outros.
+     */
+    public function test_an_immediate_invitation_gives_the_vendor_120_seconds(): void
+    {
+        $this->start()->assertOk();
+
+        $this->assertVendorWindowIs(120);
+    }
+
+    public function test_a_scheduled_invitation_gives_the_same_120_seconds(): void
+    {
+        $this->start(scheduled: true)->assertOk();
+
+        $this->assertVendorWindowIs(120);
+    }
+
+    private function assertVendorWindowIs(int $seconds): void
+    {
+        $candidates = ServiceCandidate::where('status', CandidateStatus::NOTIFIED)->get();
+
+        $this->assertGreaterThan(0, $candidates->count(), 'sem convites nao ha janela para medir');
+
+        foreach ($candidates as $candidate) {
+            $this->assertEqualsWithDelta(
+                $candidate->notified_at->copy()->addSeconds($seconds)->timestamp,
+                $candidate->expires_at->timestamp,
+                2,
+                "a janela do convite de {$candidate->vendor_id} nao sao {$seconds} s",
+            );
+        }
     }
 
     public function test_opening_a_request_charges_nothing(): void
