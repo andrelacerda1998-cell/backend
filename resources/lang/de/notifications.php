@@ -19,7 +19,7 @@ return [
             'greetings' => 'Hallo',
             'line1' => 'Danke für deine Registrierung! Klicke auf den Button unten, um deine E-Mail-Adresse zu bestätigen.',
             'line2' => 'Wenn du kein Konto erstellt hast, ignoriere diese E-Mail einfach',
-            'line3' => 'Viele Grüße, das Team',
+            'line3' => 'Viele Grüße, dein Piquet-Team',
             'button' => 'Konto bestätigen',
             'copyLink' => 'Wenn der Button nicht funktioniert, kopiere diesen Link in deinen Browser:',
         ],
@@ -29,7 +29,7 @@ return [
             'line1' => 'Du erhältst diese E-Mail, weil für dein Konto ein neues Passwort angefordert wurde.',
             'action' => 'Passwort zurücksetzen',
             'line2' => 'Wenn du das nicht angefordert hast, musst du nichts weiter tun.',
-            'salutation' => 'Viele Grüße, das Team',
+            'salutation' => 'Viele Grüße, dein Piquet-Team',
         ],
         'twoFactorCode' => [
             'subject' => 'Dein Zugangscode für das Backoffice',
@@ -37,7 +37,7 @@ return [
             'line1' => 'Verwende diesen Code, um die Anmeldung im Backoffice abzuschließen:',
             'line2' => 'Dieser Code läuft in :minutes Minuten ab.',
             'line3' => 'Wenn du dich nicht anmelden wolltest, ignoriere diese E-Mail — dein Konto ist weiterhin sicher.',
-            'salutation' => 'Viele Grüße, das Team',
+            'salutation' => 'Viele Grüße, dein Piquet-Team',
         ],
         'noShowOps' => [
             'subject' => 'Mögliches Nichterscheinen — Auftrag #:service_id',
@@ -45,7 +45,7 @@ return [
             'line1' => 'Der Auftrag #:service_id (:service_type) war für :time Uhr geplant und die Fachkraft hat ihn noch nicht begonnen.',
             'line2' => 'Fachkraft: :vendor_name. Kunde: :customer_name (:customer_phone).',
             'line3' => 'Am besten kontaktierst du die Fachkraft und weist den Auftrag bei Bedarf neu zu oder erstattest dem Kunden den Betrag.',
-            'salutation' => 'Viele Grüße, das Team',
+            'salutation' => 'Viele Grüße, dein Piquet-Team',
         ],
         'userRegistered' => [
             'line1' => 'Willkommen in unserer App!',
@@ -58,7 +58,7 @@ return [
                 'greetings' => 'Hallo ',
                 'line1' => 'Dein Dokument wurde erfolgreich geprüft und freigegeben.',
                 'line2' => 'Danke, dass du unsere Plattform nutzt. Bei Fragen wende dich einfach an unser Support-Team.',
-                'salutation' => 'Viele Grüße, das Team',
+                'salutation' => 'Viele Grüße, dein Piquet-Team',
             ],
             'deny' => [
                 'greetings' => 'Hallo ',
@@ -101,11 +101,11 @@ return [
         'action' => 'Profil vervollständigen',
         'default' => [
             'title' => '{1} Noch :steps Schritt|[2,*] Noch :steps Schritte',
-            'description' => 'Vervollständige dein Profil, um Anfragen in deiner Gegend zu erhalten.',
+            'description' => 'Vervollständige dein Profil, um Anfragen in deiner Zone zu erhalten.',
         ],
         'with_requests' => [
             'title' => 'Anfragen warten auf dich',
-            'description' => '{1} Diese Woche kam :requests Anfrage in deiner Gegend an. Vervollständige dein Profil, um sie annehmen zu können.|[2,*] Diese Woche kamen :requests Anfragen in deiner Gegend an. Vervollständige dein Profil, um sie annehmen zu können.',
+            'description' => '{1} Diese Woche kam :requests Anfrage in deiner Zone an. Vervollständige dein Profil, um sie annehmen zu können.|[2,*] Diese Woche kamen :requests Anfragen in deiner Zone an. Vervollständige dein Profil, um sie annehmen zu können.',
         ],
     ],
     'newService' => [
@@ -138,7 +138,7 @@ return [
     ],
     'serviceTimedOut' => [
         'title' => 'Anfrage ohne Antwort',
-        'description' => 'Niemand hat rechtzeitig auf deine Anfrage für :service_type geantwortet. Wir haben sie abgebrochen — du kannst es noch einmal versuchen.',
+        'description' => 'Niemand hat rechtzeitig auf deine Anfrage für :service_type geantwortet. Wir haben sie storniert — du kannst es noch einmal versuchen.',
         'description_scheduled' => 'Dein Termin für :service_type wurde nicht rechtzeitig bestätigt und daher storniert. Du kannst einen neuen Termin buchen.',
     ],
     'scheduledService' => [

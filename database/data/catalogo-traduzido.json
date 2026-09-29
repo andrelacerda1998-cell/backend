@@ -117,7 +117,7 @@
     "fr": "Remplacer un WC",
     "es": "Sustituir un inodoro",
     "en": "Replace a toilet",
-    "de": "Toilette austauschen"
+    "de": "WC austauschen"
   },
   "Reparar um telhado com vazamento": {
     "fr": "Réparer une toiture qui fuit",
@@ -201,7 +201,7 @@
     "fr": "Réparation de WC",
     "es": "Reparación de inodoro",
     "en": "Toilet Repair",
-    "de": "Toiletten-Reparatur"
+    "de": "WCs-Reparatur"
   },
   "Reparação de Torneira de Lava-loiça": {
     "fr": "Réparation de robinet d'évier",
@@ -243,7 +243,7 @@
     "fr": "Débouchage de WC",
     "es": "Desatasco de inodoro",
     "en": "Toilet Unblocking",
-    "de": "Toilette entstopfen"
+    "de": "WC entstopfen"
   },
   "Instalação de Chuveiro": {
     "fr": "Installation de douche",
@@ -279,19 +279,19 @@
     "fr": "Remplacement de WC",
     "es": "Sustitución de inodoro",
     "en": "Toilet Replacement",
-    "de": "Toiletten-Austausch"
+    "de": "WCs-Austausch"
   },
   "Instalação de Sanita": {
     "fr": "Installation de WC",
     "es": "Instalación de inodoro",
     "en": "Toilet Installation",
-    "de": "Toiletten-Montage"
+    "de": "WCs-Montage"
   },
   "Remover Sanita": {
     "fr": "Dépose de WC",
     "es": "Retirar el inodoro",
     "en": "Remove a Toilet",
-    "de": "Toilette ausbauen"
+    "de": "WC ausbauen"
   },
   "Substituição juntas de silicone": {
     "fr": "Remplacement de joints silicone",
@@ -669,7 +669,7 @@
     "fr": "Nettoyage de cheminée",
     "es": "Limpieza de chimenea",
     "en": "Fireplace Cleaning",
-    "de": "Kaminreinigung"
+    "de": "Kaminreinigung (Feuerstelle)"
   },
   "Limpeza de Frigorifico (Interior e Exterior)": {
     "fr": "Nettoyage de réfrigérateur (intérieur et extérieur)",
@@ -1083,7 +1083,7 @@
     "fr": "Débouchage des bouchons simples dans les canalisations de lavabos, WC, bondes, baignoires ou éviers",
     "es": "Eliminación de atascos simples en tuberías de lavabos, inodoros, desagües, bañeras o fregaderos",
     "en": "Clearing simple blockages in washbasin, toilet, drain, bath or kitchen sink pipes",
-    "de": "Beseitigung einfacher Verstopfungen in Rohren von Waschbecken, Toiletten, Abflüssen, Badewannen oder Spülen"
+    "de": "Beseitigung einfacher Verstopfungen in Rohren von Waschbecken, WCs, Abflüssen, Badewannen oder Spülen"
   },
   "Teste de escoamento após o desentupimento": {
     "fr": "Test d'écoulement après le débouchage",
@@ -1155,7 +1155,7 @@
     "fr": "Interventions de débouchage des WC (intervention séparée)",
     "es": "Servicios de desatasco del inodoro (servicio aparte)",
     "en": "Toilet unblocking services (separate service)",
-    "de": "Beseitigung von Toilettenverstopfungen (separater Auftrag)"
+    "de": "Beseitigung von WC-Verstopfungen (separater Auftrag)"
   },
   "Avaliação do estado do lava-loiça, sifão e tubagens ligadas": {
     "fr": "Évaluation de l'état de l'évier, du siphon et des canalisations raccordées",
@@ -1221,13 +1221,13 @@
     "fr": "Évaluation de la cuvette de WC, du réservoir de chasse, du siphon et des raccords",
     "es": "Evaluación del inodoro, la cisterna, el sifón y las conexiones",
     "en": "Assessment of the toilet, cistern, trap and connections",
-    "de": "Beurteilung von Toilette, Spülkasten, Siphon und Anschlüssen"
+    "de": "Beurteilung von WC, Spülkasten, Siphon und Anschlüssen"
   },
   "Reparação de fugas simples na base da sanita, sifão, juntas ou ligações acessíveis": {
     "fr": "Réparation de fuites simples au pied de la cuvette, sur le siphon, les joints ou les raccords accessibles",
     "es": "Reparación de fugas simples en la base del inodoro, el sifón, las juntas o las conexiones accesibles",
     "en": "Repairing simple leaks at the base of the toilet pan, or on the trap, joints or accessible connections",
-    "de": "Beheben einfacher Undichtigkeiten am Fuß der Toilette, am Siphon, an Dichtungen oder zugänglichen Anschlüssen"
+    "de": "Beheben einfacher Undichtigkeiten am Fuß der WC, am Siphon, an Dichtungen oder zugänglichen Anschlüssen"
   },
   "Ajustes e reparação de mecanismos de descarga (quando possível sem substituição completa)": {
     "fr": "Réglage et réparation des mécanismes de chasse (lorsque c'est possible sans remplacement complet)",
@@ -1245,7 +1245,7 @@
     "fr": "Interventions de débouchage des WC (séparées)",
     "es": "Servicios de desatasco del inodoro (aparte)",
     "en": "Toilet unblocking services (separate)",
-    "de": "Rohrreinigung an der Toilette (separater Auftrag)"
+    "de": "Rohrreinigung an der WC (separater Auftrag)"
   },
   "Avaliação do estado da torneira e das ligações ao lava-loiça": {
     "fr": "Évaluation de l'état du robinet et des raccords à l'évier",
@@ -1413,7 +1413,7 @@
     "fr": "Diagnostic du bouchon dans le WC",
     "es": "Evaluación del atasco del inodoro",
     "en": "Assessing the blockage in the toilet",
-    "de": "Beurteilung der Verstopfung in der Toilette"
+    "de": "Beurteilung der Verstopfung in der WC"
   },
   "Utilização de equipamentos adequados (bomba de desentupimento, cabos ou produtos específicos)": {
     "fr": "Utilisation d'équipements adaptés (pompe de débouchage, furet ou produits spécifiques)",
@@ -1425,7 +1425,7 @@
     "fr": "Débouchage de la canalisation raccordée au WC",
     "es": "Desatasco de la tubería conectada al inodoro",
     "en": "Clearing the waste pipe serving the toilet",
-    "de": "Beseitigen der Verstopfung in der Abflussleitung der Toilette"
+    "de": "Beseitigen der Verstopfung in der Abflussleitung der WC"
   },
   "Teste final para garantir o escoamento normal da água": {
     "fr": "Test final pour garantir l'écoulement normal de l'eau",
@@ -1437,7 +1437,7 @@
     "fr": "Remplacement du WC ou de la canalisation",
     "es": "Sustitución del inodoro o de la tubería",
     "en": "Replacing the toilet or the pipework",
-    "de": "Austausch der Toilette oder der Rohrleitung"
+    "de": "Austausch der WC oder der Rohrleitung"
   },
   "Montagem e instalação de chuveiro de parede ou de mão (conforme modelo)": {
     "fr": "Montage et installation d'une pomme de douche murale ou d'une douchette (selon le modèle)",
@@ -1455,7 +1455,7 @@
     "fr": "Fixation du support de douchette et/ou de la barre de douche réglable",
     "es": "Fijación del soporte de la ducha y/o de la barra regulable",
     "en": "Fixing the shower head holder and/or adjustable riser rail",
-    "de": "Befestigung des Brausehalters und/oder der verstellbaren Brausestange"
+    "de": "Befestigung des Duschkopfhalters und/oder der verstellbaren Duschstange"
   },
   "Teste de funcionamento e estanquidade": {
     "fr": "Test de fonctionnement et d'étanchéité",
@@ -1467,7 +1467,7 @@
     "fr": "Fourniture de la pomme de douche, du mitigeur ou des accessoires",
     "es": "Suministro de la ducha, del grifo mezclador o de los accesorios",
     "en": "Supply of the shower, mixer tap or fittings",
-    "de": "Lieferung von Brause, Mischbatterie oder Zubehör"
+    "de": "Lieferung von Duschkopf, Mischbatterie oder Zubehör"
   },
   "Instalação de cabines de duche completas (serviço separado)": {
     "fr": "Installation de cabines de douche complètes (intervention séparée)",
@@ -1749,7 +1749,7 @@
     "fr": "Installation de la nouvelle pomme de douche (murale ou douchette, selon le modèle)",
     "es": "Instalación de la nueva ducha (de pared o de mano, según el modelo)",
     "en": "Installation of the new shower head (fixed wall-mounted or handheld, depending on the model)",
-    "de": "Montage des neuen Duschkopfes (Wandbrause oder Handbrause, je nach Modell)"
+    "de": "Montage des neuen Duschkopfes (Wand-Duschkopf oder Handbrause, je nach Modell)"
   },
   "Desmontagem e remoção da cabine de duche antiga": {
     "fr": "Démontage et évacuation de l'ancienne cabine de douche",
