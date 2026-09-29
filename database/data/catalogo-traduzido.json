@@ -42,13 +42,13 @@
     "de": "Renovierung"
   },
   "Serviços de Cozinha": {
-    "fr": "Services de cuisine",
+    "fr": "Équipement de cuisine",
     "es": "Servicios de Cocina",
     "en": "Kitchen Services",
     "de": "Küchenarbeiten"
   },
   "Segurança Doméstica": {
-    "fr": "Sécurité domestique",
+    "fr": "Sécurité de la maison",
     "es": "Seguridad del Hogar",
     "en": "Home Security",
     "de": "Haussicherheit"
@@ -74,7 +74,7 @@
   "DECORAÇÃO": {
     "fr": "DÉCORATION",
     "es": "DECORACIÓN",
-    "en": "DECORATING",
+    "en": "FIXTURES & FITTINGS",
     "de": "DEKORATION"
   },
   "LIMPEZAS": {
@@ -140,7 +140,7 @@
   "Construir um deck": {
     "fr": "Construire une terrasse en bois",
     "es": "Construir una tarima exterior",
-    "en": "Build a deck",
+    "en": "Build decking",
     "de": "Holzterrasse bauen"
   },
   "Cortar a grama": {
@@ -264,13 +264,13 @@
     "de": "Spülkasten-Montage"
   },
   "Reparação da Tampa de Sanita": {
-    "fr": "Réparation de l'abattant de WC",
+    "fr": "Réparation d'abattant de WC",
     "es": "Reparación de la tapa del inodoro",
     "en": "Toilet Seat Repair",
     "de": "WC-Sitz-Reparatur"
   },
   "Substituição de Tampa de Sanita": {
-    "fr": "Remplacement de l'abattant de WC",
+    "fr": "Remplacement d'abattant de WC",
     "es": "Sustitución de tapa de inodoro",
     "en": "Toilet Seat Replacement",
     "de": "WC-Sitz-Austausch"
@@ -288,7 +288,7 @@
     "de": "WCs-Montage"
   },
   "Remover Sanita": {
-    "fr": "Dépose de WC",
+    "fr": "Déposer un WC",
     "es": "Retirar el inodoro",
     "en": "Remove a Toilet",
     "de": "WC ausbauen"
@@ -409,7 +409,7 @@
   },
   "Substituir Tomada": {
     "fr": "Remplacer une prise",
-    "es": "Sustituir la toma de corriente",
+    "es": "Sustituir un enchufe",
     "en": "Replace a Socket",
     "de": "Steckdose austauschen"
   },
@@ -434,13 +434,13 @@
   "Abertura de Porta de Entrada": {
     "fr": "Ouverture de porte d'entrée",
     "es": "Apertura de puerta de entrada",
-    "en": "Front Door Opening",
+    "en": "Front Door Unlocking",
     "de": "Haustür-Öffnung"
   },
   "Abertura de Portão de Garagem": {
     "fr": "Ouverture de porte de garage",
     "es": "Apertura de puerta de garaje",
-    "en": "Garage Door Opening",
+    "en": "Garage Door Unlocking",
     "de": "Garagentor-Öffnung"
   },
   "Reparação de Fechadura Inteligente": {
@@ -559,7 +559,7 @@
   },
   "Instalação de Suporte de Piaçaba": {
     "fr": "Installation de porte-balai WC",
-    "es": "Instalación de soporte para escobilla de baño",
+    "es": "Instalación de portaescobillas",
     "en": "Toilet Brush Holder Installation",
     "de": "WC-Bürstenhalter-Montage"
   },
@@ -654,7 +654,7 @@
     "de": "Matratzenreinigung (Einzelbett)"
   },
   "Limpeza de Estores": {
-    "fr": "Nettoyage de volets roulants",
+    "fr": "Nettoyage de stores",
     "es": "Limpieza de persianas",
     "en": "Blind Cleaning",
     "de": "Rollladenreinigung"
@@ -816,205 +816,205 @@
     "de": "Babybett montieren"
   },
   "Montar Cama Beliche": {
-    "fr": "Monter un lit superposé",
+    "fr": "Montage de lit superposé",
     "es": "Montar litera",
     "en": "Bunk Bed Assembly",
     "de": "Etagenbett montieren"
   },
   "Montar Cadeira": {
-    "fr": "Monter une chaise",
+    "fr": "Montage de chaise",
     "es": "Montar silla",
     "en": "Chair Assembly",
     "de": "Stuhl montieren"
   },
   "Montar Estante": {
-    "fr": "Monter une étagère",
+    "fr": "Montage d'étagère",
     "es": "Montar estantería",
     "en": "Bookcase Assembly",
     "de": "Regal montieren"
   },
   "Montar Cabeceira de Cama": {
-    "fr": "Monter une tête de lit",
+    "fr": "Montage de tête de lit",
     "es": "Montar cabecero de cama",
     "en": "Headboard Assembly",
     "de": "Bettkopfteil montieren"
   },
   "Reparação de Máquina de Lavar Loiça": {
-    "fr": "Réparation d'un lave-vaisselle",
+    "fr": "Réparation de lave-vaisselle",
     "es": "Reparación de lavavajillas",
     "en": "Dishwasher Repair",
     "de": "Geschirrspüler-Reparatur"
   },
   "Reparação de Máquina de Secar Roupa": {
-    "fr": "Réparation d'un sèche-linge",
+    "fr": "Réparation de sèche-linge",
     "es": "Reparación de secadora",
     "en": "Tumble Dryer Repair",
     "de": "Wäschetrockner-Reparatur"
   },
   "Reparação de Máquina de Lavar Roupa": {
-    "fr": "Réparation d'un lave-linge",
+    "fr": "Réparation de lave-linge",
     "es": "Reparación de lavadora",
     "en": "Washing Machine Repair",
     "de": "Waschmaschinen-Reparatur"
   },
   "Reparação de Termoacumulador": {
-    "fr": "Réparation d'un ballon d'eau chaude",
+    "fr": "Réparation de ballon d'eau chaude",
     "es": "Reparación de termo eléctrico",
     "en": "Hot Water Cylinder Repair",
     "de": "Warmwasserspeicher-Reparatur"
   },
   "Reparação de Esquentador": {
-    "fr": "Réparation d'un chauffe-eau au gaz",
+    "fr": "Réparation de chauffe-eau instantané",
     "es": "Reparación de calentador de gas",
     "en": "Gas Water Heater Repair",
     "de": "Gas-Durchlauferhitzer-Reparatur"
   },
   "Reparação de Fogão": {
-    "fr": "Réparation d'une cuisinière",
+    "fr": "Réparation de cuisinière",
     "es": "Reparación de cocina",
     "en": "Cooker Repair",
     "de": "Herd-Reparatur"
   },
   "Reparação de Forno": {
-    "fr": "Réparation d'un four",
+    "fr": "Réparation de four",
     "es": "Reparación de horno",
     "en": "Oven Repair",
     "de": "Backofen-Reparatur"
   },
   "Reparação de Placa de Indução": {
-    "fr": "Réparation d'une plaque à induction",
+    "fr": "Réparation de plaque à induction",
     "es": "Reparación de placa de inducción",
     "en": "Induction Hob Repair",
     "de": "Induktionskochfeld-Reparatur"
   },
   "Reparação de Vitrocerâmica": {
-    "fr": "Réparation d'une plaque vitrocéramique",
+    "fr": "Réparation de plaque vitrocéramique",
     "es": "Reparación de vitrocerámica",
     "en": "Ceramic Hob Repair",
     "de": "Keramikkochfeld-Reparatur"
   },
   "Instalação de Máquina de Lavar Roupa": {
-    "fr": "Installation d'un lave-linge",
+    "fr": "Installation de lave-linge",
     "es": "Instalación de lavadora",
     "en": "Washing Machine Installation",
     "de": "Waschmaschinen-Installation"
   },
   "Instalação de Máquina de Lavar Loiça": {
-    "fr": "Installation d'un lave-vaisselle",
+    "fr": "Installation de lave-vaisselle",
     "es": "Instalación de lavavajillas",
     "en": "Dishwasher Installation",
     "de": "Geschirrspüler-Installation"
   },
   "Instalação de Máquina de Secar Roupa": {
-    "fr": "Installation d'un sèche-linge",
+    "fr": "Installation de sèche-linge",
     "es": "Instalación de secadora",
     "en": "Tumble Dryer Installation",
     "de": "Wäschetrockner-Installation"
   },
   "Instalação de Esquentador": {
-    "fr": "Installation d'un chauffe-eau au gaz",
+    "fr": "Installation de chauffe-eau instantané",
     "es": "Instalación de calentador de gas",
     "en": "Gas Water Heater Installation",
     "de": "Gasdurchlauferhitzer-Installation"
   },
   "Instalação de Fogão": {
-    "fr": "Installation d'une cuisinière",
+    "fr": "Installation de cuisinière",
     "es": "Instalación de cocina",
     "en": "Cooker Installation",
     "de": "Herd-Installation"
   },
   "Instalação de Forno": {
-    "fr": "Installation d'un four",
+    "fr": "Installation de four",
     "es": "Instalación de horno",
     "en": "Oven Installation",
     "de": "Backofen-Installation"
   },
   "Instalação de Termoacumulador": {
-    "fr": "Installation d'un ballon d'eau chaude",
+    "fr": "Installation de ballon d'eau chaude",
     "es": "Instalación de termo eléctrico",
     "en": "Hot Water Cylinder Installation",
     "de": "Warmwasserspeicher-Installation"
   },
   "Instalação de Placa de Indução": {
-    "fr": "Installation d'une plaque à induction",
+    "fr": "Installation de plaque à induction",
     "es": "Instalación de placa de inducción",
     "en": "Induction Hob Installation",
     "de": "Induktionskochfeld-Installation"
   },
   "Instalação de Vitrocerâmica": {
-    "fr": "Installation d'une plaque vitrocéramique",
+    "fr": "Installation de plaque vitrocéramique",
     "es": "Instalación de vitrocerámica",
     "en": "Ceramic Hob Installation",
     "de": "Keramikkochfeld-Installation"
   },
   "Manutenção de Máquina de Lavar Roupa": {
-    "fr": "Entretien d'un lave-linge",
+    "fr": "Entretien de lave-linge",
     "es": "Mantenimiento de lavadora",
     "en": "Washing Machine Servicing",
     "de": "Waschmaschinen-Wartung"
   },
   "Manutenção de Esquentador": {
-    "fr": "Entretien d'un chauffe-eau au gaz",
+    "fr": "Entretien de chauffe-eau instantané",
     "es": "Mantenimiento de calentador de gas",
     "en": "Gas Water Heater Servicing",
     "de": "Gasdurchlauferhitzer-Wartung"
   },
   "Manutenção de Máquina de Secar Roupa": {
-    "fr": "Entretien d'un sèche-linge",
+    "fr": "Entretien de sèche-linge",
     "es": "Mantenimiento de secadora",
     "en": "Tumble Dryer Servicing",
     "de": "Wäschetrockner-Wartung"
   },
   "Manutenção de Máquina de Lavar Loiça": {
-    "fr": "Entretien d'un lave-vaisselle",
+    "fr": "Entretien de lave-vaisselle",
     "es": "Mantenimiento de lavavajillas",
     "en": "Dishwasher Servicing",
     "de": "Geschirrspüler-Wartung"
   },
   "Manutenção de Forno": {
-    "fr": "Entretien d'un four",
+    "fr": "Entretien de four",
     "es": "Mantenimiento de horno",
     "en": "Oven Servicing",
     "de": "Backofen-Wartung"
   },
   "Manutenção de Fogão": {
-    "fr": "Entretien d'une cuisinière",
+    "fr": "Entretien de cuisinière",
     "es": "Mantenimiento de cocina",
     "en": "Cooker Servicing",
     "de": "Herd-Wartung"
   },
   "Manutenção de Termoacumulador": {
-    "fr": "Entretien d'un ballon d'eau chaude",
+    "fr": "Entretien de ballon d'eau chaude",
     "es": "Mantenimiento de termo eléctrico",
     "en": "Hot Water Cylinder Servicing",
     "de": "Warmwasserspeicher-Wartung"
   },
   "Manutenção de Placa de Indução": {
-    "fr": "Entretien d'une plaque à induction",
+    "fr": "Entretien de plaque à induction",
     "es": "Mantenimiento de placa de inducción",
     "en": "Induction Hob Servicing",
     "de": "Induktionskochfeld-Wartung"
   },
   "Manutenção de Vitrocerâmica": {
-    "fr": "Entretien d'une plaque vitrocéramique",
+    "fr": "Entretien de plaque vitrocéramique",
     "es": "Mantenimiento de vitrocerámica",
     "en": "Ceramic Hob Servicing",
     "de": "Keramikkochfeld-Wartung"
   },
   "Reparação de Frigorifico": {
-    "fr": "Réparation d'un réfrigérateur",
+    "fr": "Réparation de réfrigérateur",
     "es": "Reparación de frigorífico",
     "en": "Fridge Repair",
     "de": "Kühlschrank-Reparatur"
   },
   "Reparação de Micro-ondas": {
-    "fr": "Réparation d'un micro-ondes",
+    "fr": "Réparation de micro-ondes",
     "es": "Reparación de microondas",
     "en": "Microwave Repair",
     "de": "Mikrowellen-Reparatur"
   },
   "Instalação de Update": {
-    "fr": "Installation de Update",
+    "fr": "Installation d'Update",
     "es": "Instalación de Update",
     "en": "Update Installation",
     "de": "Update-Installation"
@@ -1080,7 +1080,7 @@
     "de": "Einsatz von Hand- oder einfachen mechanischen Werkzeugen"
   },
   "Remoção de entupimentos simples em canos de lavatórios, sanitas, ralos, banheiras ou lava-louças": {
-    "fr": "Débouchage des bouchons simples dans les canalisations de lavabos, WC, bondes, baignoires ou éviers",
+    "fr": "Élimination des bouchons simples dans les canalisations de lavabos, WC, bondes, baignoires ou éviers",
     "es": "Eliminación de atascos simples en tuberías de lavabos, inodoros, desagües, bañeras o fregaderos",
     "en": "Clearing simple blockages in washbasin, toilet, drain, bath or kitchen sink pipes",
     "de": "Beseitigung einfacher Verstopfungen in Rohren von Waschbecken, WCs, Abflüssen, Badewannen oder Spülen"
@@ -1140,7 +1140,7 @@
     "de": "Sofortreparatur von Defekten"
   },
   "Substituição de peças standard de desgaste (ex.: vedantes, boias, torneiras de enchimento, correntes), quando disponíveis": {
-    "fr": "Remplacement des pièces d'usure standard (ex. : joints d'étanchéité, flotteurs, robinets de remplissage, chaînettes), lorsqu'elles sont disponibles",
+    "fr": "Remplacement des pièces d'usure standard (ex. : joints d'étanchéité, flotteurs, robinets flotteurs, chaînettes), lorsqu'elles sont disponibles",
     "es": "Sustitución de piezas estándar de desgaste (p. ej.: gomas, flotadores, grifos de llenado, cadenas), cuando estén disponibles",
     "en": "Replacing standard wear parts (e.g. seals, floats, fill valves, chains), where available",
     "de": "Austausch von Standard-Verschleißteilen (z. B. Dichtungen, Schwimmer, Füllventile, Ketten), sofern verfügbar"
@@ -1170,7 +1170,7 @@
     "de": "Reparatur einfacher Lecks an zugänglichen Siphons, Armaturen, Dichtungen oder Anschlüssen"
   },
   "Substituição de vedantes, juntas ou pequenas peças standard (quando disponíveis)": {
-    "fr": "Remplacement de joints d'étanchéité, de joints ou de petites pièces standard (lorsqu'ils sont disponibles)",
+    "fr": "Remplacement de joints d'étanchéité, de garnitures ou de petites pièces standard (lorsqu'ils sont disponibles)",
     "es": "Sustitución de gomas, juntas o pequeñas piezas estándar (cuando estén disponibles)",
     "en": "Replacing seals, gaskets or small standard parts (where available)",
     "de": "Austausch von Dichtungen, Dichtungsringen oder kleinen Standardteilen (sofern verfügbar)"
@@ -1273,8 +1273,8 @@
   },
   "Reparações de canalização não ligadas diretamente à torneira": {
     "fr": "Réparations de plomberie non directement liées au robinet",
-    "es": "Reparaciones de fontanería no conectadas directamente al grifo",
-    "en": "Plumbing repairs not directly connected to the tap",
+    "es": "Reparaciones de fontanería no relacionadas directamente con el grifo",
+    "en": "Plumbing repairs not directly related to the tap",
     "de": "Sanitärreparaturen, die nicht direkt mit dem Wasserhahn zusammenhängen"
   },
   "Avaliação da torneira e ligações (lavatório, bidé ou banheira)": {
@@ -1302,7 +1302,7 @@
     "de": "Rohrreinigung an Waschbecken oder Bidet (separater Auftrag)"
   },
   "Remoção da torneira antiga (se necessário)": {
-    "fr": "Retrait de l'ancien robinet (si nécessaire)",
+    "fr": "Dépose de l'ancien robinet (si nécessaire)",
     "es": "Retirada del grifo antiguo (si es necesario)",
     "en": "Removing the old tap (if needed)",
     "de": "Ausbau des alten Wasserhahns (falls nötig)"
@@ -1410,7 +1410,7 @@
     "de": "Reparatur von Bauschäden durch eindringende Feuchtigkeit"
   },
   "Avaliação do entupimento da sanita": {
-    "fr": "Diagnostic du bouchon dans le WC",
+    "fr": "Diagnostic de l'engorgement du WC",
     "es": "Evaluación del atasco del inodoro",
     "en": "Assessing the blockage in the toilet",
     "de": "Beurteilung der Verstopfung in der WC"
@@ -1496,11 +1496,11 @@
   "Ligações à saída de água e esgoto já existentes": {
     "fr": "Raccordements à la sortie d'eau et à l'évacuation déjà existantes",
     "es": "Conexiones a la salida de agua y al desagüe ya existentes",
-    "en": "Connections to the existing water supply and waste",
+    "en": "Connections to the existing water outlet and waste",
     "de": "Anschlüsse an die vorhandene Wasser- und Abwasserleitung"
   },
   "Vedação e teste de estanquidade": {
-    "fr": "Réalisation des joints d'étanchéité et test d'étanchéité",
+    "fr": "Mise en étanchéité et test d'étanchéité",
     "es": "Sellado y prueba de estanqueidad",
     "en": "Sealing and leak testing",
     "de": "Abdichtung und Dichtheitsprüfung"
@@ -1741,13 +1741,13 @@
   },
   "Remoção do chuveiro antigo": {
     "fr": "Retrait de l'ancienne pomme de douche",
-    "es": "Retirada de la ducha antigua",
+    "es": "Retirada de la alcachofa de ducha antigua",
     "en": "Removal of the old shower head",
     "de": "Entfernung des alten Duschkopfes"
   },
   "Instalação do novo chuveiro (de parede ou de mão, conforme modelo)": {
     "fr": "Installation de la nouvelle pomme de douche (murale ou douchette, selon le modèle)",
-    "es": "Instalación de la nueva ducha (de pared o de mano, según el modelo)",
+    "es": "Instalación de la nueva alcachofa de ducha (de pared o de mano, según el modelo)",
     "en": "Installation of the new shower head (fixed wall-mounted or handheld, depending on the model)",
     "de": "Montage des neuen Duschkopfes (Wand-Duschkopf oder Handbrause, je nach Modell)"
   },
@@ -1910,7 +1910,7 @@
   "Deslocação do técnico ao local.": {
     "fr": "Déplacement du professionnel sur place.",
     "es": "Desplazamiento del profesional al domicilio.",
-    "en": "Call-out of the pro to the property.",
+    "en": "Pro call-out to the property.",
     "de": "Anfahrt der Fachkraft zu dir."
   },
   "Avaliação do toalheiro elétrico (resistência, termóstato, cablagem e interruptor)": {
@@ -2190,7 +2190,7 @@
     "de": "Anfahrt des Elektrikers zum Einsatzort"
   },
   "Inspeção visual do quadro elétrico (disjuntores, diferenciais, barramentos e ligações)": {
-    "fr": "Inspection visuelle du tableau électrique (disjoncteurs, interrupteurs différentiels, barrettes de répartition et raccordements)",
+    "fr": "Inspection visuelle du tableau électrique (disjoncteurs, interrupteurs différentiels, peignes de répartition et raccordements)",
     "es": "Inspección visual del cuadro eléctrico (magnetotérmicos, diferenciales, embarrados y conexiones)",
     "en": "Visual inspection of the consumer unit (MCBs, RCDs, busbars and connections)",
     "de": "Sichtprüfung des Sicherungskastens (Leitungsschutzschalter, FI-Schutzschalter, Sammelschienen und Anschlüsse)"
@@ -2262,7 +2262,7 @@
     "de": "Ausbau der alten Leuchtmittel"
   },
   "Instalação de novas lâmpadas": {
-    "fr": "Pose des nouvelles ampoules",
+    "fr": "Pose de nouvelles ampoules",
     "es": "Instalación de bombillas nuevas",
     "en": "Fitting new bulbs",
     "de": "Einbau neuer Leuchtmittel"
@@ -2304,7 +2304,7 @@
     "de": "Lieferung der Steckdose"
   },
   "Reparação de cablagens ou sistemas elétricos defeituosos fora do ponto da tomada": {
-    "fr": "Réparation du câblage ou des installations électriques défectueux hors de l'emplacement de la prise",
+    "fr": "Réparation du câblage ou des circuits électriques défectueux en dehors de l'emplacement de la prise",
     "es": "Reparación de cableado o sistemas eléctricos defectuosos fuera del punto de la toma de corriente",
     "en": "Repairing faulty wiring or electrics away from the socket position",
     "de": "Reparatur defekter Leitungen oder Elektroinstallationen außerhalb der Steckdose selbst"
@@ -2328,7 +2328,7 @@
     "de": "Lieferung des Lichtschalters"
   },
   "Reparação de cablagens ou sistemas elétricos defeituosos fora do ponto do interruptor": {
-    "fr": "Réparation du câblage ou des installations électriques défectueux hors de l'emplacement de l'interrupteur",
+    "fr": "Réparation du câblage ou des circuits électriques défectueux en dehors de l'emplacement de l'interrupteur",
     "es": "Reparación de cableado o sistemas eléctricos defectuosos fuera del punto del interruptor",
     "en": "Repairing faulty wiring or electrics away from the switch position",
     "de": "Reparatur defekter Leitungen oder Elektroinstallationen außerhalb des Lichtschalters selbst"
@@ -2400,7 +2400,7 @@
     "de": "Einfacher Austausch des Klingeltasters (wenn du das Teil bereitstellst)"
   },
   "Teste final de funcionamento": {
-    "fr": "Test de fonctionnement final",
+    "fr": "Test final de fonctionnement",
     "es": "Prueba final de funcionamiento",
     "en": "Final operational test",
     "de": "Abschließender Funktionstest"
@@ -2432,7 +2432,7 @@
   "Até 60 minutos de serviço": {
     "fr": "Jusqu'à 60 minutes d'intervention",
     "es": "Hasta 60 minutos de servicio",
-    "en": "Up to 60 minutes of work",
+    "en": "Up to 60 minutes of labour",
     "de": "Bis zu 60 Minuten Arbeitszeit"
   },
   "Substituição de fechadura ou cilindro": {
@@ -2450,7 +2450,7 @@
   "Reparação de danos pré-existentes na porta ou estrutura": {
     "fr": "Réparation des dommages préexistants sur la porte ou la structure",
     "es": "Reparación de daños preexistentes en la puerta o la estructura",
-    "en": "Repairing pre-existing damage to the door or surrounding structure",
+    "en": "Repairing pre-existing damage to the door or its structure",
     "de": "Reparatur bereits vorhandener Schäden an Tür oder Konstruktion"
   },
   "Serviços de serralharia adicionais": {
@@ -2460,14 +2460,14 @@
     "de": "Zusätzliche Schlosserleistungen"
   },
   "Avaliação do tipo de portão (manual ou elétrico)": {
-    "fr": "Évaluation du type de portail (manuel ou électrique)",
-    "es": "Evaluación del tipo de puerta de garaje (manual o eléctrica)",
+    "fr": "Évaluation du type de porte de garage (manuelle ou électrique)",
+    "es": "Evaluación del tipo de portón (manual o eléctrico)",
     "en": "Assessment of the garage door type (manual or electric)",
     "de": "Beurteilung der Art des Garagentors (manuell oder elektrisch)"
   },
   "Abertura do portão com técnicas adequadas e não destrutivas sempre que possível": {
-    "fr": "Ouverture du portail avec des techniques adaptées et non destructives dans la mesure du possible",
-    "es": "Apertura de la puerta con técnicas adecuadas y no destructivas siempre que sea posible",
+    "fr": "Ouverture de la porte de garage avec des techniques adaptées et non destructives dans la mesure du possible",
+    "es": "Apertura del portón con técnicas adecuadas y no destructivas siempre que sea posible",
     "en": "Opening the door using suitable, non-destructive techniques wherever possible",
     "de": "Öffnen des Tors mit geeigneten, zerstörungsfreien Techniken, wann immer möglich"
   },
@@ -2490,8 +2490,8 @@
     "de": "Austausch von Motor, Schloss oder Fernbedienungssystem"
   },
   "Reparação de danos pré-existentes no portão ou estrutura": {
-    "fr": "Réparation de dommages préexistants sur le portail ou la structure",
-    "es": "Reparación de daños preexistentes en la puerta o en la estructura",
+    "fr": "Réparation de dommages préexistants sur la porte de garage ou la structure",
+    "es": "Reparación de daños preexistentes en el portón o en la estructura",
     "en": "Repair of pre-existing damage to the door or its structure",
     "de": "Reparatur bereits vorhandener Schäden am Tor oder an der Konstruktion"
   },
@@ -2551,7 +2551,7 @@
   },
   "Substituição de pequenas peças standard (ex.: molas, parafusos, vedantes), quando disponíveis": {
     "fr": "Remplacement de petites pièces standard (ex. : ressorts, vis, joints), lorsqu'elles sont disponibles",
-    "es": "Sustitución de piezas estándar pequeñas (p. ej.: muelles, tornillos, juntas), cuando estén disponibles",
+    "es": "Sustitución de pequeñas piezas estándar (p. ej.: muelles, tornillos, juntas), cuando estén disponibles",
     "en": "Replacement of small standard parts (e.g. springs, screws, seals), where available",
     "de": "Austausch kleiner Standardteile (z. B. Federn, Schrauben, Dichtungen), sofern verfügbar"
   },
@@ -2593,7 +2593,7 @@
   },
   "Substituição de pequenas peças internas standard (quando disponíveis)": {
     "fr": "Remplacement de petites pièces internes standard (lorsqu'elles sont disponibles)",
-    "es": "Sustitución de piezas internas estándar pequeñas (cuando estén disponibles)",
+    "es": "Sustitución de pequeñas piezas internas estándar (cuando estén disponibles)",
     "en": "Replacement of small standard internal parts (where available)",
     "de": "Austausch kleiner Standard-Innenteile (sofern verfügbar)"
   },
@@ -2618,13 +2618,13 @@
   "Trabalhos de serralharia adicionais": {
     "fr": "Travaux de serrurerie supplémentaires",
     "es": "Trabajos de cerrajería adicionales",
-    "en": "Additional locksmithing or metalwork",
+    "en": "Additional metalwork",
     "de": "Zusätzliche Schlosserarbeiten"
   },
   "Instalação de novos canhões de segurança (serviço separado)": {
     "fr": "Installation de nouveaux cylindres de sécurité (intervention séparée)",
     "es": "Instalación de bombines de seguridad nuevos (servicio aparte)",
-    "en": "Fitting of new high-security cylinders (separate service)",
+    "en": "Fitting of new security cylinders (separate service)",
     "de": "Montage neuer Sicherheitszylinder (separater Auftrag)"
   },
   "Avaliação do estado da fechadura": {
@@ -2641,7 +2641,7 @@
   },
   "Substituição de pequenas peças standard, quando disponíveis": {
     "fr": "Remplacement de petites pièces standard, lorsqu'elles sont disponibles",
-    "es": "Sustitución de piezas estándar pequeñas, cuando estén disponibles",
+    "es": "Sustitución de pequeñas piezas estándar, cuando estén disponibles",
     "en": "Replacement of small standard parts, where available",
     "de": "Austausch kleiner Standardteile, sofern verfügbar"
   },
@@ -2671,7 +2671,7 @@
   },
   "Avaliação do estado do motor e sistema de automatização do portão": {
     "fr": "Évaluation de l'état du moteur et du système de motorisation du portail",
-    "es": "Evaluación del estado del motor y del automatismo de la puerta",
+    "es": "Evaluación del estado del motor y del automatismo del portón",
     "en": "Assessment of the condition of the gate motor and automation system",
     "de": "Beurteilung des Zustands von Motor und Torautomatik"
   },
@@ -2683,20 +2683,20 @@
   },
   "Lubrificação e ajustes de componentes mecânicos ligados ao motor": {
     "fr": "Lubrification et réglage des composants mécaniques liés au moteur",
-    "es": "Lubricación y ajuste de los componentes mecánicos unidos al motor",
+    "es": "Lubricación y ajuste de los componentes mecánicos conectados al motor",
     "en": "Lubrication and adjustment of the mechanical parts connected to the motor",
     "de": "Schmierung und Einstellung der mechanischen Bauteile am Motor"
   },
   "Substituição completa do motor do portão": {
     "fr": "Remplacement complet du moteur du portail",
-    "es": "Sustitución completa del motor de la puerta",
+    "es": "Sustitución completa del motor del portón",
     "en": "Full replacement of the gate motor",
     "de": "Kompletter Austausch des Torantriebs"
   },
   "Reparação estrutural do portão ou guias": {
     "fr": "Réparation structurelle du portail ou des rails",
-    "es": "Reparación estructural de la puerta o de las guías",
-    "en": "Structural repair of the gate or its runners",
+    "es": "Reparación estructural del portón o de las guías",
+    "en": "Structural repair of the gate or its guide rails",
     "de": "Reparatur der Torkonstruktion oder der Laufschienen"
   },
   "Instalação de novos sistemas de automatização (serviço separado)": {
@@ -2720,7 +2720,7 @@
   "Ligação elétrica ou a pilhas/baterias (conforme modelo)": {
     "fr": "Raccordement électrique ou alimentation par piles/batteries (selon le modèle)",
     "es": "Conexión eléctrica o a pilas/baterías (según el modelo)",
-    "en": "Mains or battery power connection (depending on the model)",
+    "en": "Wired or battery power connection (depending on the model)",
     "de": "Stromanschluss oder Batterie-/Akkubetrieb (je nach Modell)"
   },
   "Configuração básica (códigos, cartões, app ou Bluetooth/Wi-Fi)": {
@@ -2750,7 +2750,7 @@
   "Configurações avançadas de domótica ou integração com sistemas externos": {
     "fr": "Configurations avancées de domotique ou intégration avec des systèmes externes",
     "es": "Configuraciones avanzadas de domótica o integración con sistemas externos",
-    "en": "Advanced home-automation configuration or integration with third-party systems",
+    "en": "Advanced home-automation configuration or integration with external systems",
     "de": "Erweiterte Smart-Home-Konfiguration oder Einbindung in externe Systeme"
   },
   "Remoção do canhão/cilindro antigo (se aplicável)": {
@@ -2840,7 +2840,7 @@
   "Montagem e colocação da TV no suporte": {
     "fr": "Montage et mise en place du téléviseur sur le support",
     "es": "Montaje y colocación de la TV en el soporte",
-    "en": "Assembling and mounting the TV on the bracket",
+    "en": "Mounting and fitting the TV on the bracket",
     "de": "Montage und Einhängen des Fernsehers in die Halterung"
   },
   "Teste de estabilidade e segurança da instalação": {
@@ -2972,7 +2972,7 @@
   "Instalação de cabines de hidromassagem (serviço separado)": {
     "fr": "Installation de cabines d'hydromassage (intervention séparée)",
     "es": "Instalación de cabinas de hidromasaje (servicio aparte)",
-    "en": "Installation of whirlpool shower cabins (separate service)",
+    "en": "Installation of hydromassage shower cabins (separate service)",
     "de": "Einbau von Whirlpool-Duschkabinen (separater Auftrag)"
   },
   "Fixação do espelho de casa de banho": {
@@ -3552,14 +3552,14 @@
     "de": "Reinigung der Lamellen einzeln mit geeignetem Reinigungsmittel"
   },
   "Limpeza de caixas e guias acessíveis": {
-    "fr": "Nettoyage du coffre et des coulisses accessibles",
+    "fr": "Nettoyage des coffres et des coulisses accessibles",
     "es": "Limpieza de cajones y guías accesibles",
     "en": "Cleaning of accessible headboxes and guide rails",
     "de": "Reinigung zugänglicher Rollladenkästen und Führungsschienen"
   },
   "Reparação de estores, motores ou mecanismos de enrolamento": {
     "fr": "Réparation des volets roulants, des moteurs ou des mécanismes d'enroulement",
-    "es": "Reparación de persianas, motores o mecanismos de enrollamiento",
+    "es": "Reparación de persianas, motores o mecanismos de enrollado",
     "en": "Repairs to blinds, motors or roller mechanisms",
     "de": "Reparatur von Rollläden, Motoren oder Aufrollmechanismen"
   },
@@ -3618,15 +3618,15 @@
     "de": "Absaugen und Reinigen des Kamininnenraums"
   },
   "Limpeza da grelha, ferro ou suporte de lenha (quando aplicável)": {
-    "fr": "Nettoyage de la grille, du fer ou du chenet (le cas échéant)",
-    "es": "Limpieza de la parrilla, el hierro o el soporte para leña (cuando proceda)",
-    "en": "Cleaning of the grate, ironwork or log holder (where applicable)",
+    "fr": "Nettoyage de la grille, des pièces en fonte ou des chenets (le cas échéant)",
+    "es": "Limpieza de la parrilla, los morillos o el soporte para leña (cuando proceda)",
+    "en": "Cleaning of the grate, fire irons or log holder (where applicable)",
     "de": "Reinigung von Kaminrost, Kamineisen oder Holzhalter (sofern vorhanden)"
   },
   "Limpeza básica da área envolvente (pavimento e parapeito da lareira)": {
-    "fr": "Nettoyage de base de la zone autour (sol et tablette de la cheminée)",
+    "fr": "Nettoyage de base de la zone environnante (sol et tablette de la cheminée)",
     "es": "Limpieza básica de la zona circundante (suelo y repisa de la chimenea)",
-    "en": "Basic cleaning of the surrounding area (floor and fireplace hearth)",
+    "en": "Basic cleaning of the surrounding area (floor and mantelpiece)",
     "de": "Einfache Reinigung des umliegenden Bereichs (Boden und Kaminsims)"
   },
   "Limpeza de chaminé": {
@@ -3781,7 +3781,7 @@
   },
   "Polimento para acabamento sem manchas": {
     "fr": "Lustrage pour une finition sans traces",
-    "es": "Pulido para un acabado sin manchas",
+    "es": "Abrillantado para un acabado sin manchas",
     "en": "Polishing to a streak-free finish",
     "de": "Polieren für ein streifenfreies Ergebnis"
   },
@@ -3798,13 +3798,13 @@
     "de": "Reinigung und Desinfektion von WC, Waschbecken, Bidet, Dusche/Badewanne"
   },
   "Limpeza de torneiras, espelhos e superfícies de apoio": {
-    "fr": "Nettoyage de la robinetterie, des miroirs et des plans de toilette",
+    "fr": "Nettoyage de la robinetterie, des miroirs et des plans de toilette et tablettes",
     "es": "Limpieza de grifos, espejos y superficies de apoyo",
-    "en": "Cleaning of taps, mirrors and surrounding surfaces",
+    "en": "Cleaning of taps, mirrors and worktops",
     "de": "Reinigung von Armaturen, Spiegeln und Ablageflächen"
   },
   "Lavagem e desinfeção de pavimento e azulejos acessíveis": {
-    "fr": "Lavage et désinfection du sol et du carrelage accessible",
+    "fr": "Lavage et désinfection du sol et du carrelage accessibles",
     "es": "Lavado y desinfección del suelo y los azulejos accesibles",
     "en": "Washing and disinfecting the floor and accessible tiles",
     "de": "Wischen und Desinfektion von Boden und erreichbaren Fliesen"
@@ -3932,7 +3932,7 @@
   "Fixação de pés, tampo e eventuais prateleiras/acessórios": {
     "fr": "Fixation des pieds, du plateau et des éventuelles tablettes/accessoires",
     "es": "Fijación de patas, tablero y posibles estantes/accesorios",
-    "en": "Fitting of the feet, top and any shelves/accessories",
+    "en": "Fitting of the legs, top and any shelves/accessories",
     "de": "Befestigung von Füßen, Tischplatte und eventuellen Ablagen/Zubehörteilen"
   },
   "Montagem completa da mesa de apoio com gavetas, conforme manual de instruções": {
@@ -3944,7 +3944,7 @@
   "Instalação e fixação de pés, tampo e estrutura principal": {
     "fr": "Installation et fixation des pieds, du plateau et de la structure principale",
     "es": "Instalación y fijación de patas, tablero y estructura principal",
-    "en": "Installing and fitting the feet, top and main frame",
+    "en": "Installing and fitting the legs, top and main frame",
     "de": "Montage und Befestigung von Füßen, Tischplatte und Grundgestell"
   },
   "Montagem e ajuste das gavetas para correto funcionamento": {
@@ -4172,7 +4172,7 @@
   "Fixação de tampo, pés e estrutura principal": {
     "fr": "Fixation du plateau, des pieds et de la structure principale",
     "es": "Fijación de tablero, patas y estructura principal",
-    "en": "Fitting of the top, feet and main frame",
+    "en": "Fitting of the top, legs and main frame",
     "de": "Befestigung von Tischplatte, Füßen und Grundgestell"
   },
   "Montagem e ajuste de gavetas (quando aplicável)": {
@@ -4238,7 +4238,7 @@
   "Colocação de colchão, roupa de cama ou kits de proteção": {
     "fr": "Mise en place du matelas, du linge de lit ou des kits de protection",
     "es": "Colocación de colchón, ropa de cama o kits de protección",
-    "en": "Putting on the mattress, bed linen or protective sets",
+    "en": "Putting on the mattress, bed linen or protection kits",
     "de": "Auflegen von Matratze, Bettwäsche oder Schutzsets"
   },
   "Montagem completa da cama beliche conforme manual de instruções": {
@@ -4268,7 +4268,7 @@
   "Colocação de colchões e roupa de cama": {
     "fr": "Mise en place des matelas et du linge de lit",
     "es": "Colocación de colchones y ropa de cama",
-    "en": "Fitting the mattress and bedding",
+    "en": "Fitting the mattresses and bedding",
     "de": "Auflegen von Matratzen und Bettwäsche"
   },
   "Montagem completa da cadeira conforme manual de instruções": {
@@ -4346,7 +4346,7 @@
   "Perfuração em paredes com revestimentos especiais (mármore, azulejo, pedra, etc.)": {
     "fr": "Perçage de murs avec revêtements spéciaux (marbre, carrelage, pierre, etc.)",
     "es": "Taladrado en paredes con revestimientos especiales (mármol, azulejo, piedra, etc.)",
-    "en": "Drilling into walls with special coverings (marble, tiles, stone, etc.)",
+    "en": "Drilling into walls with special finishes (marble, tiles, stone, etc.)",
     "de": "Bohren in Wände mit speziellen Belägen (Marmor, Fliesen, Stein usw.)"
   },
   "Avaliação do estado da máquina de lavar loiça": {
@@ -4440,7 +4440,7 @@
     "de": "Austausch von Teilen"
   },
   "Avaliação do estado do esquentador (gás, elétrico ou ventilado)": {
-    "fr": "Évaluation de l'état du chauffe-eau (gaz, électrique ou à ventouse)",
+    "fr": "Évaluation de l'état du chauffe-eau (gaz, électrique ou à tirage forcé)",
     "es": "Evaluación del estado del calentador de agua (de gas, eléctrico o de tiro forzado)",
     "en": "Assessment of the condition of the water heater (gas, electric or fan-flued)",
     "de": "Beurteilung des Zustands des Warmwasserbereiters (Gas, elektrisch oder mit Abgasventilator)"
@@ -4472,7 +4472,7 @@
   "Avaliação do estado do fogão (gás, elétrico ou vitrocerâmica)": {
     "fr": "Évaluation de l'état de la cuisinière (gaz, électrique ou vitrocéramique)",
     "es": "Evaluación del estado de la cocina (de gas, eléctrica o vitrocerámica)",
-    "en": "Assessment of the condition of the cooker (gas, electric or ceramic hob)",
+    "en": "Assessment of the condition of the cooker (gas, electric or ceramic)",
     "de": "Beurteilung des Zustands des Herds (Gas, Elektro oder Glaskeramik)"
   },
   "Diagnóstico e reparação de avarias (ex.: problemas de ignição, termopar, resistências, botões de controlo, ligações elétricas ou de gás)": {
@@ -4590,7 +4590,7 @@
     "de": "Lieferung der Waschmaschine"
   },
   "Transporte da máquina até ao local": {
-    "fr": "Transport de la machine jusqu'au lieu d'installation",
+    "fr": "Transport de la machine sur place",
     "es": "Transporte de la máquina hasta el lugar",
     "en": "Carrying the machine to the location",
     "de": "Transport des Geräts zum Aufstellort"
@@ -4662,7 +4662,7 @@
     "de": "Anschluss an die vorhandenen Wasser- und Gasleitungen"
   },
   "Ligação elétrica (quando aplicável, em modelos ventilados ou eletrónicos)": {
-    "fr": "Branchement électrique (le cas échéant, sur les modèles à ventouse ou électroniques)",
+    "fr": "Branchement électrique (le cas échéant, sur les modèles à tirage forcé ou électroniques)",
     "es": "Conexión eléctrica (cuando proceda, en modelos ventilados o electrónicos)",
     "en": "Electrical connection (where applicable, on fan-flued or electronic models)",
     "de": "Elektrischer Anschluss (falls zutreffend, bei Geräten mit Gebläse oder elektronischer Steuerung)"
@@ -4736,13 +4736,13 @@
   "Remoção do termoacumulador antigo (se aplicável)": {
     "fr": "Dépose de l'ancien chauffe-eau à accumulation (le cas échéant)",
     "es": "Retirada del termo antiguo (si procede)",
-    "en": "Removal of the old storage water heater (if applicable)",
+    "en": "Removal of the old hot water cylinder (if applicable)",
     "de": "Ausbau des alten Warmwasserspeichers (falls zutreffend)"
   },
   "Fixação do novo termoacumulador na parede ou suporte adequado": {
     "fr": "Fixation du nouveau chauffe-eau à accumulation au mur ou sur un support adapté",
     "es": "Fijación del nuevo termo en la pared o en un soporte adecuado",
-    "en": "Fixing the new storage water heater to the wall or a suitable bracket",
+    "en": "Fixing the new hot water cylinder to the wall or a suitable bracket",
     "de": "Befestigung des neuen Warmwasserspeichers an der Wand oder an einer geeigneten Halterung"
   },
   "Conexão às entradas de água já existentes": {
@@ -4760,7 +4760,7 @@
   "Fornecimento do termoacumulador": {
     "fr": "Fourniture du chauffe-eau à accumulation",
     "es": "Suministro del termo",
-    "en": "Supply of the storage water heater",
+    "en": "Supply of the hot water cylinder",
     "de": "Lieferung des Warmwasserspeichers"
   },
   "Remoção da placa antiga (se aplicável)": {
@@ -4778,7 +4778,7 @@
   "Ligação elétrica ao ponto de energia já disponível": {
     "fr": "Branchement électrique sur le point d'alimentation déjà disponible",
     "es": "Conexión eléctrica al punto de corriente ya disponible",
-    "en": "Electrical connection to the power point already available",
+    "en": "Electrical connection to the existing power supply",
     "de": "Elektrischer Anschluss an die bereits vorhandene Stromversorgung"
   },
   "Fornecimento da placa de indução": {
@@ -4958,7 +4958,7 @@
   "Inspeção geral do estado do termoacumulador": {
     "fr": "Inspection générale de l'état du chauffe-eau à accumulation",
     "es": "Inspección general del estado del termo",
-    "en": "General inspection of the condition of the storage water heater",
+    "en": "General inspection of the condition of the hot water cylinder",
     "de": "Allgemeine Zustandsprüfung des Warmwasserspeichers"
   },
   "Limpeza do depósito (remoção de calcário e resíduos)": {
@@ -5046,7 +5046,7 @@
     "de": "Fehlerdiagnose an der Mikrowelle"
   },
   "Reparação de falhas elétricas, de resistência, painel de controlo, motor do prato ou iluminação interna": {
-    "fr": "Réparation des pannes électriques, de résistance, du panneau de commande, du moteur du plateau tournant ou de l'éclairage intérieur",
+    "fr": "Réparation des pannes électriques, de résistance, du bandeau de commande, du moteur du plateau tournant ou de l'éclairage intérieur",
     "es": "Reparación de fallos eléctricos, de resistencia, panel de control, motor del plato giratorio o iluminación interior",
     "en": "Repair of electrical, heating element, control panel, turntable motor or interior light faults",
     "de": "Reparatur von Fehlern an Elektrik, Heizelement, Bedienfeld, Drehtellermotor oder Innenbeleuchtung"
