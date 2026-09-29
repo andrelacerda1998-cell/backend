@@ -215,6 +215,30 @@ class CancelService
      * @throws ExceptionInterface
      * @throws \Exception
      */
+    /**
+     * Cancelar um pedido personalizado que ainda está em análise.
+     *
+     * Não há técnico (nenhum foi convidado), não há pagamento (a ordem só
+     * nasce no checkout) e não há política de cancelamento a aplicar. Por isso
+     * não é o `cancelOpenService`, que exige ACCEPTED/ARRIVED e fazia `return`
+     * silencioso aqui — o cliente carregava em cancelar e a API respondia que
+     * não era possível, sem lhe dar saída nenhuma.
+     */
+    public function customerCancelUnderReview(): void
+    {
+        $this->service->refresh();
+
+        if ($this->service->status !== ServiceStatus::PENDING_REVIEW) {
+            return;
+        }
+
+        \DB::transaction(function () {
+            $this->service->status = ServiceStatus::CANCELED;
+            $this->service->status_justification = 'internal/services.cancel.description';
+            $this->service->save();
+        });
+    }
+
     public function cancelOpenService(): void
     {
         $this->service->refresh();

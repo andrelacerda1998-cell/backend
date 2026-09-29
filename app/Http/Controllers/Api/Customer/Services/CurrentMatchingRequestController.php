@@ -32,22 +32,47 @@ class CurrentMatchingRequestController extends Controller
 
     public function __invoke()
     {
-        $service = auth()->user()->services()
+        $abertos = auth()->user()->services()
             ->whereIn('status', [
                 ServiceStatus::PENDING_REVIEW,
                 ServiceStatus::MATCHING,
                 ServiceStatus::AWAITING_PAYMENT,
             ])
             ->latest('id')
-            ->first();
+            ->get();
 
-        if (! $service) {
-            return new ApiSuccessResponse(['request' => null]);
+        if ($abertos->isEmpty()) {
+            return new ApiSuccessResponse(['request' => null, 'requests' => []]);
         }
+
+        // Pode haver MAIS DO QUE UM aberto ao mesmo tempo, e isso não era
+        // visível: o `startCustom` recusa um segundo personalizado enquanto
+        // houver um em análise, mas o `start()` de catálogo não olha para o
+        // PendingReview. Bastava o cliente pedir um serviço normal para o
+        // personalizado sumir daqui — invisível no ecrã e a bloquear na mesma.
+        $service = $abertos->first();
 
         $language = auth()->user()->language ?? 'pt-pt';
 
-        return new ApiSuccessResponse(['request' => [
+        return new ApiSuccessResponse([
+            // `request` fica como estava, para as versões da app já
+            // instaladas. `requests` é o que as novas leem.
+            'requests' => $abertos->map(fn (Service $s) => $this->payloadDoPedido($s, $language))->values(),
+            'request' => $this->payloadDoPedido($service, $language),
+        ]);
+    }
+
+    /**
+     * O que a app precisa de saber sobre UM pedido aberto.
+     *
+     * Extraído para o mesmo desenho servir o `request` (o mais recente,
+     * como sempre) e cada elemento de `requests`. Duas construções do mesmo
+     * payload divergiam à primeira alteração, e a app passava a ver coisas
+     * diferentes conforme o sítio onde olhasse.
+     */
+    private function payloadDoPedido(Service $service, string $language): array
+    {
+        return [
             'id' => $service->id,
             'status' => $service->status,
             'is_custom' => (bool) $service->is_custom,
@@ -80,7 +105,7 @@ class CurrentMatchingRequestController extends Controller
             // escolhido a espera dele. O preco vai congelado (o mesmo que viu
             // ao escolher) para o checkout se poder retomar sem recalcular.
             'selected' => $this->selectedQuote($service),
-        ]]);
+        ];
     }
 
     private function selectedQuote(Service $service): ?array

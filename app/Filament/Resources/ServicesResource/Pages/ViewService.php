@@ -18,6 +18,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\DB;
+use App\Notifications\Customer\CustomRequestDispatchedNotification;
 
 class ViewService extends ViewRecord
 {
@@ -78,6 +79,16 @@ class ViewService extends ViewRecord
                             $this->record->status = ServiceStatus::MATCHING;
                             $this->record->save();
                             $this->record->operationAreas()->sync(array_map('intval', $data['operation_areas']));
+
+                            // O cliente esteve à espera sem saber de nada:
+                            // entre descrever o problema e haver alguém para
+                            // escolher podem passar horas, e o push que já
+                            // existia só sai quando o primeiro profissional
+                            // aceita. Este marca o momento em que uma PESSOA
+                            // pegou no pedido dele.
+                            $this->record->customer?->notify(
+                                new CustomRequestDispatchedNotification($this->record)
+                            );
 
                             $candidates = app(MatchingService::class)->dispatchNextWave($this->record->refresh());
 
