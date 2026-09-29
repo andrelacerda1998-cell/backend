@@ -92,7 +92,7 @@ return [
      * no .env e o tipo de falha que nao da erro nenhum.
      */
     'locales' => array_filter(
-        explode(',', env('APP_LOCALES', 'en,pt-pt,fr,es'))
+        explode(',', env('APP_LOCALES', 'en,pt-pt,fr,es,de'))
     ),
 
     'locale' => env('APP_LOCALE', 'pt-pt'),
