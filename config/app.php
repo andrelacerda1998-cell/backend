@@ -78,8 +78,21 @@ return [
     |
     */
 
+    /*
+     * Os idiomas que o servidor sabe servir.
+     *
+     * O `Locale::normalize()` SO devolve tags que estejam aqui: tudo o resto
+     * cai no `pt-pt`. Por isso esta lista nao e cosmetica -- e o interruptor
+     * que decide se o catalogo traduzido e as mensagens em frances e espanhol
+     * chegam ao cliente ou se ficam na base de dados sem nunca sair.
+     *
+     * O omisso inclui `fr` e `es` de proposito, em vez de depender de alguem
+     * se lembrar de por a variavel no ambiente de producao. Traduzir 476
+     * chaves e 844 textos do catalogo e nao os servir por falta de uma linha
+     * no .env e o tipo de falha que nao da erro nenhum.
+     */
     'locales' => array_filter(
-        explode(',', env('APP_LOCALES', 'en,pt-pt'))
+        explode(',', env('APP_LOCALES', 'en,pt-pt,fr,es'))
     ),
 
     'locale' => env('APP_LOCALE', 'pt-pt'),
@@ -151,6 +164,6 @@ return [
             'android' => env('APP_MINIMUM_CUSTOMER_ANDROID_VERSION', '1.0.0'),
         ],
     ],
-    'MOCK_SMS' => (bool)env('MOCK_SMS', false),
+    'MOCK_SMS' => (bool) env('MOCK_SMS', false),
 
 ];

@@ -100,9 +100,15 @@ class IncompleteProfileReminderNotification extends Notification implements Shou
             'name' => $notifiable->first_name ?? $notifiable->name ?? '',
         ];
 
+        // trans_choice e não __: estes dois textos têm plural. Com __ o técnico
+        // recebia a frase inteira com a barra lá dentro ("Falta 1 passo|Faltam
+        // 1 passos"), e antes disso recebia "Faltam 1 passos".
+        //
+        // O título conta-se pelos PASSOS, a descrição pelos PEDIDOS — é o
+        // número que manda na concordância de cada frase.
         return [
-            'title' => __($key.'.title', $replace, $language),
-            'body' => __($key.'.description', $replace, $language),
+            'title' => trans_choice($key.'.title', $this->missingSteps, $replace, $language),
+            'body' => trans_choice($key.'.description', $this->waitingRequests, $replace, $language),
             'greeting' => __('notifications.incompleteProfile.greeting', $replace, $language),
             'action' => __('notifications.incompleteProfile.action', $replace, $language),
         ];
