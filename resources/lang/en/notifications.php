@@ -120,6 +120,10 @@ return [
         // feel cheated when they lose — and stop replying.
         'description' => 'Tell us if you are available. The customer picks from whoever replies.',
     ],
+    'customRequestDispatched' => [
+        'title' => 'Your request is with the professionals',
+        'description' => 'We read what you wrote and sent it out. We will let you know as soon as someone is available.',
+    ],
     'customRequest' => [
         'label' => 'your custom request',
     ],

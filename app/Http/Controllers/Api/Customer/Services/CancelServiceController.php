@@ -49,6 +49,22 @@ class CancelServiceController extends Controller
 
             $cancelService = new CancelService($service);
 
+            // Personalizado ainda em análise: sai limpo e sem custo. Nenhum
+            // profissional soube que existia, e não há pagamento nenhum para
+            // desfazer. Antes disto caía no `cancelOpenService`, que não faz
+            // nada fora de ACCEPTED/ARRIVED — o cliente ficava preso a um
+            // pedido que não controlava, sem sequer perceber porquê.
+            if ($service->status === ServiceStatus::PENDING_REVIEW) {
+                (new CancelService($service))->customerCancelUnderReview();
+                $service->refresh();
+
+                if ($service->status !== ServiceStatus::CANCELED) {
+                    throw new ServiceNotPossibleToCancel;
+                }
+
+                return new ApiSuccessResponse(['status' => ServiceStatus::CANCELED->value]);
+            }
+
             if ($canceledBeforePayment) {
                 // Vendor nunca soube deste serviço (só é notificado após o pagamento confirmar):
                 // status terminal próprio e SEM notificação de cancelamento.

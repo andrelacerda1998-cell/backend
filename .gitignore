@@ -26,3 +26,9 @@ yarn-error.log
 
 /AGENTS.md
 /CLAUDE.md
+
+# Relatórios e documentos de negócio guardados na pasta do projeto. Não são
+# código, não pertencem ao repositório, e um `git add -A` distraído empurra-os
+# para o GitHub — foi o que aconteceu a 29/09/2026 com uma due diligence para
+# investidores.
+/reports

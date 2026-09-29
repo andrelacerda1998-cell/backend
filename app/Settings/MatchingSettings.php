@@ -74,6 +74,20 @@ class MatchingSettings extends Settings
      */
     public int $customer_choice_seconds_custom;
 
+    /**
+     * Dias úteis até o backoffice ser avisado de um pedido personalizado
+     * esquecido em análise. Metade da promessa feita ao cliente, para ainda
+     * haver tempo de agir antes de ela ser quebrada.
+     */
+    public int $custom_review_alert_weekdays;
+
+    /**
+     * Dias úteis até um pedido personalizado em análise falhar sozinho. É o
+     * prazo que a app promete ao cliente; sem este número, um pedido que
+     * ninguém despachasse ficava vivo para sempre e em silêncio.
+     */
+    public int $custom_review_deadline_weekdays;
+
     /** Quanto tempo tem para pagar depois de escolher. */
     public int $checkout_seconds;
 

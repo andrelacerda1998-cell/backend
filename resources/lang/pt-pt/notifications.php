@@ -123,6 +123,13 @@ return [
     'customRequest' => [
         'label' => 'o teu pedido personalizado',
     ],
+    'customRequestDispatched' => [
+        'title' => 'O teu pedido já está com os profissionais',
+        // Não promete profissional nenhum, de propósito: aqui ainda não se
+        // sabe se algum vai aceitar. O que se diz é que uma pessoa pegou no
+        // pedido — que é exactamente a informação que faltava.
+        'description' => 'Vimos o que escreveste e já o enviámos. Avisamos-te assim que houver alguém disponível.',
+    ],
     'matchingCandidatesReady' => [
         'title' => 'Já há quem possa ir',
         // Diz o que falta FAZER, e não só o que aconteceu: quem recebe isto
