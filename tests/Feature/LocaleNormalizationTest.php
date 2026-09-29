@@ -46,7 +46,12 @@ class LocaleNormalizationTest extends TestCase
             'espanhol do Mexico' => ['es-MX', 'es'],
             'ausente (null)' => [null, 'pt-pt'],
             'vazio' => ['', 'pt-pt'],
-            'desconhecido' => ['de-DE', 'pt-pt'],
+            // O 'de-DE' era o desconhecido; passou a ser suportado.
+            'desconhecido' => ['it-IT', 'pt-pt'],
+            'alemao de' => ['de', 'de'],
+            'alemao de-DE' => ['de-DE', 'de'],
+            'alemao da Austria' => ['de-AT', 'de'],
+            'alemao da Suica' => ['de-CH', 'de'],
         ];
     }
 
@@ -113,7 +118,7 @@ class LocaleNormalizationTest extends TestCase
      */
     public function test_frances_e_espanhol_sao_servidos_por_omissao(): void
     {
-        foreach (['fr', 'es'] as $idioma) {
+        foreach (['fr', 'es', 'de'] as $idioma) {
             $this->assertContains(
                 $idioma,
                 config('app.locales'),
