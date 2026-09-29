@@ -542,6 +542,22 @@ class MatchingController extends Controller
                 // diferentes, e so uma delas tem relogio.
                 'is_custom' => (bool) $service->is_custom,
                 'custom' => $service->customPayload(),
+                // Ate quando pode escolher e pagar. null enquanto ninguem
+                // aceitou — nao ha relogio do cliente antes de haver decisao.
+                //
+                // Ja ia no `/matching/current` (o separador "Pedidos"), mas nao
+                // aqui, que e O ecra onde ele esta a decidir. O contador tinha
+                // de viver no sitio onde a decisao se toma, e nao so no atalho
+                // que leva la.
+                //
+                // Sai do MESMO metodo que o `matching:advance` usa para matar o
+                // pedido: se fossem duas contas, a contagem chegava a zero com
+                // o pedido vivo, ou o pedido morria com o relogio a andar.
+                'expires_at' => $this->matching->customerDeadline($service)?->toIso8601String(),
+                // O relogio do telemovel pode estar errado — e num prazo de
+                // cinco minutos um desvio de trinta segundos e um decimo do
+                // tempo. A app conta pela diferenca entre estes dois.
+                'server_time' => now()->toIso8601String(),
             ],
             'candidates' => $candidates->map(fn (ServiceCandidate $c) => [
                 'id' => $c->id,
