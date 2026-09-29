@@ -35,11 +35,23 @@ class TopicosTraduzidosTest extends TestCase
         $this->assertSame(['Deslocação do técnico'], TranslatableArrayCast::getTranslated($itens, 'fr'));
     }
 
-    public function test_sem_portugues_recua_para_o_primeiro_que_houver(): void
+    public function test_sem_portugues_recua_para_outro_idioma_da_app(): void
     {
         $itens = $this->topico(['en' => 'Travel to the site']);
 
         $this->assertSame(['Travel to the site'], TranslatableArrayCast::getTranslated($itens, 'fr'));
+    }
+
+    public function test_um_topico_so_num_idioma_que_a_app_nao_serve_sai_da_lista(): void
+    {
+        // Isto não é uma tradução em falta, é dado partido: alguém gravou um
+        // tópico num idioma que a app não tem. Mostrá-lo era pôr no ecrã de um
+        // cliente texto que ninguém escolheu pôr lá — e o formato do ecrã da
+        // agenda do técnico já contava com ele fora.
+        $itens = [['pt-pt' => 'Mão de obra'], ['xx_XX' => 'Sem tradução']];
+
+        $this->assertSame(['Mão de obra'], TranslatableArrayCast::getTranslated($itens, 'pt-pt'));
+        $this->assertSame(['Mão de obra'], TranslatableArrayCast::getTranslated($itens, 'fr'));
     }
 
     public function test_o_formato_antigo_de_texto_simples_continua_a_funcionar(): void

@@ -101,12 +101,12 @@ return [
         'greeting' => 'Hi :name,',
         'action' => 'Complete my profile',
         'default' => [
-            'title' => ':steps steps to go',
+            'title' => '{1} :steps step to go|[2,*] :steps steps to go',
             'description' => 'Complete your profile to start receiving requests in your area.',
         ],
         'with_requests' => [
             'title' => 'There are requests waiting for you',
-            'description' => 'There were :requests requests in your area this week. You are :steps steps away from being able to accept them.',
+            'description' => '{1} There was :requests request in your area this week. Finish your profile to accept it.|[2,*] There were :requests requests in your area this week. Finish your profile to accept them.',
         ],
     ],
     'newService' => [
@@ -240,13 +240,18 @@ return [
         'title' => 'Service canceled',
         'description' => ':vendor_name has canceled your :service_type service',
     ],
+        // O título é uma frase COMPLETA, com o nome do documento depois dos
+        // dois pontos. Antes era só "validado" e o código colava-lhe o nome à
+        // frente — "{nome} validado" — o que só concorda com nomes masculinos:
+        // "Declaração de Início de Atividade validado". O mesmo problema que o
+        // comentário do bloco 'expiring' aqui abaixo já assinalava.
     'documents' => [
         'accept' => [
-            'title' => 'validated',
+            'title' => 'Document approved: :type',
             'description' => 'Your document has been successfully validated.',
         ],
         'deny' => [
-            'title' => 'denied',
+            'title' => 'Document rejected: :type',
             'description' => 'Your document has been denied.',
         ],
         // Expiry reminders (30/15/7/3 days). Document type and deadline only — never document data.

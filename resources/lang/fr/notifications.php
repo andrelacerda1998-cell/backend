@@ -101,12 +101,12 @@ return [
         'greeting' => 'Bonjour :name,',
         'action' => 'Compléter mon profil',
         'default' => [
-            'title' => 'Il te reste :steps étapes',
+            'title' => 'Il te reste :steps étape|Il te reste :steps étapes',
             'description' => 'Complète ton profil pour commencer à recevoir des demandes dans ta zone.',
         ],
         'with_requests' => [
             'title' => 'Des demandes t\'attendent',
-            'description' => ':requests demandes dans ta zone cette semaine. Il te reste :steps étapes pour pouvoir les accepter.',
+            'description' => '{1} :requests demande dans ta zone cette semaine. Complète ton profil pour pouvoir l\'accepter.|[2,*] :requests demandes dans ta zone cette semaine. Complète ton profil pour pouvoir les accepter.',
         ],
     ],
     'newService' => [
@@ -243,13 +243,18 @@ return [
         'title' => 'Intervention annulée',
         'description' => ':vendor_name a annulé ton intervention :service_type',
     ],
+        // O título é uma frase COMPLETA, com o nome do documento depois dos
+        // dois pontos. Antes era só "validado" e o código colava-lhe o nome à
+        // frente — "{nome} validado" — o que só concorda com nomes masculinos:
+        // "Declaração de Início de Atividade validado". O mesmo problema que o
+        // comentário do bloco 'expiring' aqui abaixo já assinalava.
     'documents' => [
         'accept' => [
-            'title' => 'validé',
+            'title' => 'Document validé : :type',
             'description' => 'Ton document a bien été validé.',
         ],
         'deny' => [
-            'title' => 'refusé',
+            'title' => 'Document refusé : :type',
             'description' => 'Ton document a été refusé.',
         ],
         // Rappels d'expiration (30/15/7/3 jours). Seulement le type de document et le délai — jamais les données du document.

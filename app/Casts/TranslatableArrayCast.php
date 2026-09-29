@@ -31,9 +31,15 @@ class TranslatableArrayCast implements CastsAttributes
      * rebentava nada e não aparecia em lado nenhum: só um cliente é que a via.
      *
      * Agora cai por esta ordem: o idioma pedido, o idioma de recurso da app
-     * (português), e por fim o primeiro que existir. Um tópico em português no
-     * meio de uma lista francesa é mau; uma linha em branco é pior, porque
-     * parece que falta ali alguma coisa que ninguém sabe o que é.
+     * (português), e por fim qualquer outro que a app sirva. Um tópico em
+     * português no meio de uma lista francesa é mau; uma linha em branco é
+     * pior, porque parece que falta ali alguma coisa que ninguém sabe o que é
+     * — e pior ainda porque estas linhas são o registo do que foi combinado,
+     * e uma que desapareça é uma discussão à porta do cliente.
+     *
+     * Mas só idiomas que a app sirva. Um tópico gravado apenas num idioma que
+     * não existe na app é dado partido, não uma tradução em falta: esse sai
+     * mesmo da lista, que era o que este código já fazia bem.
      *
      * Os tópicos que ainda são texto simples — o formato antigo, sem idiomas —
      * continuam a sair tal e qual.
@@ -45,9 +51,10 @@ class TranslatableArrayCast implements CastsAttributes
         }
 
         $recurso = config('app.fallback_locale', 'pt-pt');
+        $suportados = (array) config('app.locales', ['pt-pt', 'en']);
 
         return collect($value)
-            ->map(function ($item) use ($locale, $recurso) {
+            ->map(function ($item) use ($locale, $recurso, $suportados) {
                 if (is_string($item)) {
                     return $item;
                 }
@@ -62,10 +69,13 @@ class TranslatableArrayCast implements CastsAttributes
                     }
                 }
 
-                // Último recurso: o primeiro idioma que este tópico tenha.
-                foreach ($item as $texto) {
-                    if (is_string($texto) && $texto !== '') {
-                        return $texto;
+                // Último recurso: qualquer idioma QUE A APP SIRVA. Um tópico
+                // gravado só num idioma que não existe na app é dado partido,
+                // não uma tradução em falta — mostrá-lo seria pôr no ecrã de
+                // um cliente texto que ninguém escolheu pôr lá.
+                foreach ($suportados as $tentativa) {
+                    if (isset($item[$tentativa]) && is_string($item[$tentativa]) && $item[$tentativa] !== '') {
+                        return $item[$tentativa];
                     }
                 }
 
