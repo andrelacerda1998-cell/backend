@@ -1,0 +1,64 @@
+name: Ler estado das migrações em produção
+
+# So por accionamento manual. NAO corre em push, nunca: existe para responder a
+# uma pergunta pontual -- "que migracoes e que a producao ainda nao correu?" --
+# antes de se deixar o deploy corre-las.
+#
+# A pergunta apareceu a 29/09: o pipeline de deploy NUNCA correu migracoes em
+# producao (o unico `migrate --force` do workflow esta no job de testes, contra
+# uma base descartavel da CI). Antes de acrescentar esse passo, e preciso saber
+# quantas estao em atraso -- ha 174 migracoes no repositorio, e algumas
+# escrevem DADOS, nao so esquema.
+on:
+  workflow_dispatch:
+
+# De proposito SEM o grupo de concorrencia `deploy-production`: isto e uma
+# leitura, nao deve segurar o lugar a um deploy nem ficar atras de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler estado das migrações
+    runs-on: ubuntu-latest
+    # Necessario para chegar aos mesmos segredos que o deploy usa, e traz de
+    # borla o portao de aprovacao manual. Abrir uma sessao SSH a producao
+    # merece uma aprovacao explicita, mesmo so para ler.
+    environment: production
+    steps:
+      - name: Listar as migrações pendentes
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # O comando e FIXO neste ficheiro, e NAO um input do workflow. Aceitar
+          # um comando por parametro transformava este botao numa shell remota
+          # para producao a espera de ser usada.
+          script: |
+            set -euo pipefail
+            cd ~/project-laravel
+
+            echo "=============================================="
+            echo " TOTAL de migracoes conhecidas pelo servidor"
+            echo "=============================================="
+            docker compose exec -T laravel-prod php artisan migrate:status \
+              | tail -n +4 | grep -c . || true
+
+            echo
+            echo "=============================================="
+            echo " PENDENTES (o que um deploy com migrate faria)"
+            echo "=============================================="
+            # `migrate:status` marca as pendentes com "Pending". Se nao houver
+            # nenhuma, o grep devolve 1 e o `|| echo` diz isso em vez de
+            # abortar o passo.
+            docker compose exec -T laravel-prod php artisan migrate:status \
+              | grep -i "pending" \
+              || echo "  NENHUMA — a producao esta em dia."
+
+            echo
+            echo "=============================================="
+            echo " Ultimas 10 que JA correram"
+            echo "=============================================="
+            docker compose exec -T laravel-prod php artisan migrate:status \
+              | grep -i "ran" | tail -10 || true
