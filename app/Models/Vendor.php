@@ -207,8 +207,71 @@ class Vendor extends Model implements Auditable
      * por uma coisa que não impede pagar-lhe. Se um dia isto for "simplificado"
      * para `invoicingBlocker() !== null`, é este parágrafo que se está a apagar.
      */
+    /**
+     * Dinheiro GANHO A TRABALHAR que ainda não lhe foi transferido, em cêntimos.
+     *
+     * A carteira é um número só, mas nem tudo o que lá está é salário: há crédito
+     * promocional de boas-vindas, que não é pagamento de trabalho nenhum. O que
+     * os distingue é o `meta` do depósito -- o `settle()` grava
+     * `class => Service::class` em cada crédito de serviço (ver
+     * `Service::getMetaProduct()`), e o crédito promocional não.
+     *
+     * Subtrai o que já saiu porque os levantamentos zeram a carteira INTEIRA, o
+     * que inclui a parte promocional. Sem a subtração, um técnico já pago
+     * continuava com "ganhos por pagar" para sempre, e o crédito promocional
+     * seguinte ficava travado por dinheiro que ele já tinha recebido.
+     */
+    public function ganhosPorPagar(): Attribute
+    {
+        return Attribute::make(get: function () {
+            /*
+             * Pela CARTEIRA dele, não pela relação `transactions()`.
+             *
+             * Essa relação liga users.id = transactions.payable_id e não filtra a
+             * carteira. A comissão da Piquet vai para a carteira do SISTEMA no
+             * mesmo fecho de serviço, e sempre que os dois donos partilhem o id
+             * entrava aqui dinheiro que não é dele -- media-se 10000 onde o
+             * técnico recebeu 7500. Apanhado por um teste que esperava 7500.
+             */
+            $carteira = $this->user?->wallet?->getKey();
+
+            if (! $carteira) {
+                return 0;
+            }
+
+            $deServicos = (int) Transaction::where('wallet_id', $carteira)
+                ->where('type', 'deposit')
+                ->where('confirmed', true)
+                ->whereJsonContains('meta->class', Service::class)
+                ->sum('amount');
+
+            $jaTransferido = (int) abs((int) Transaction::where('wallet_id', $carteira)
+                ->where('type', 'withdraw')
+                ->where('confirmed', true)
+                ->sum('amount'));
+
+            return max(0, $deServicos - $jaTransferido);
+        })->shouldCache();
+    }
+
     public function payoutBlocker(): ?string
     {
+        /*
+         * Sem dinheiro GANHO por pagar, não há nada a reter.
+         *
+         * A regra toda existe para não transferir dinheiro por trabalho que não
+         * se consegue faturar. Crédito promocional não é trabalho e não precisa
+         * de fatura -- travá-lo era aplicar uma regra de faturação a uma coisa
+         * que não se fatura.
+         *
+         * Medido em produção a 30/09: dos 25 técnicos com saldo, 8 tinham
+         * exactamente 20,00 EUR e ZERO serviços concluídos. Eram os 8 que esta
+         * saída antecipada liberta.
+         */
+        if ($this->ganhos_por_pagar <= 0) {
+            return null;
+        }
+
         if (! $this->iban) {
             return 'iban_missing';
         }
