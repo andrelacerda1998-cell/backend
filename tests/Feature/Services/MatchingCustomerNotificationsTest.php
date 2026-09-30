@@ -40,16 +40,16 @@ class MatchingCustomerNotificationsTest extends TestCase
             'wave_size' => 6,
             'wave_interval_seconds' => 45,
             'max_waves' => 3,
-            'vendor_response_seconds_immediate' => 60,
-            'vendor_response_seconds_scheduled' => 1800,
-            'customer_choice_seconds' => 200,
-            'customer_choice_seconds_scheduled' => 1800,
+            'vendor_response_seconds_immediate' => 120,
+            'vendor_response_seconds_scheduled' => 120,
+            'customer_choice_seconds' => 300,
+            'customer_choice_seconds_scheduled' => 300,
             'checkout_seconds' => 300,
             'rating_bands' => [4.5, 4.0, 3.0],
             'new_vendor_min_ratings' => 5,
             'require_recent_activity_minutes' => 15,
             'customer_choice_seconds_custom' => 3600,
-            'request_deadline_seconds' => 180,
+            'request_deadline_seconds' => 600,
         ]);
 
         Event::fake([
@@ -144,40 +144,66 @@ class MatchingCustomerNotificationsTest extends TestCase
     public function test_o_imediato_desiste_quando_a_janela_de_escolha_passa(): void
     {
         $service = $this->service();
-        $candidate = $this->candidate($service, 1);
-        app(MatchingService::class)->accept($candidate);
 
-        // 200 s é a janela do imediato; aos 201 já não há decisão a esperar.
-        // O relogio do cliente arranca no servico (`candidates_ready_at`,
-        // carimbado no primeiro aceite) e nao no candidato: quando o cliente
-        // escolhe, o aceite passa a SELECTED e o conjunto esvaziava-se. Recuar
-        // os dois mantem o cenario coerente com o que a producao grava.
-        $candidate->refresh()->update(['responded_at' => now()->subSeconds(201)]);
-        $service->forceFill(['candidates_ready_at' => now()->subSeconds(201)])->saveQuietly();
+        // 300 s e a janela do cliente; aos 301 ja nao ha decisao a esperar.
+        $this->comOSimCarimbadoHa($service, 301);
 
         $this->artisan('matching:advance')->assertSuccessful();
 
         $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
     }
 
-    public function test_o_agendado_tem_uma_janela_de_escolha_muito_maior(): void
+    /**
+     * O agendado tem a MESMA janela. Tinha meia hora, e a premissa caiu.
+     *
+     * Foi escrita a pensar num cliente que marcava para quinta-feira e fechava a
+     * app. Nao e o que acontece: ele espera pelo matching, escolhe, e so sai
+     * depois de pagar — a mesma situacao do imediato. Meia hora era um pedido
+     * aberto a ocupar a agenda de quem disse sim, sem ninguem a olhar para ele.
+     */
+    public function test_o_agendado_tem_a_mesma_janela_de_escolha_do_imediato(): void
     {
         $service = $this->service(scheduled: true);
-        $candidate = $this->candidate($service, 1);
-        app(MatchingService::class)->accept($candidate);
 
-        // O mesmo atraso que mata um pedido imediato. Aqui não pode matar: o
-        // cliente marcou para outro dia e fechou a app, e os convites continuam
-        // abertos durante meia hora.
-        // O relogio do cliente arranca no servico (`candidates_ready_at`,
-        // carimbado no primeiro aceite) e nao no candidato: quando o cliente
-        // escolhe, o aceite passa a SELECTED e o conjunto esvaziava-se. Recuar
-        // os dois mantem o cenario coerente com o que a producao grava.
-        $candidate->refresh()->update(['responded_at' => now()->subSeconds(201)]);
-        $service->forceFill(['candidates_ready_at' => now()->subSeconds(201)])->saveQuietly();
+        $this->comOSimCarimbadoHa($service, 301);
 
         $this->artisan('matching:advance')->assertSuccessful();
 
-        $this->assertSame(ServiceStatus::MATCHING, $service->refresh()->status);
+        $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
+    }
+
+    public function test_dentro_da_janela_os_dois_modos_continuam_vivos(): void
+    {
+        foreach ([false, true] as $agendado) {
+            $service = $this->service(scheduled: $agendado);
+
+            $this->comOSimCarimbadoHa($service, 270);
+
+            $this->artisan('matching:advance')->assertSuccessful();
+
+            $this->assertSame(
+                ServiceStatus::MATCHING,
+                $service->refresh()->status,
+                $agendado ? 'agendado' : 'imediato',
+            );
+        }
+    }
+
+    /**
+     * Um sim aceite ha N segundos, com o relogio do cliente carimbado no mesmo
+     * instante.
+     *
+     * O relogio arranca no SERVICO (`candidates_ready_at`, carimbado no primeiro
+     * aceite) e nao no candidato: quando o cliente escolhe, o aceite passa a
+     * SELECTED e o conjunto esvaziava-se. Recuar os dois mantem o cenario
+     * coerente com o que a producao grava.
+     */
+    private function comOSimCarimbadoHa(Service $service, int $segundos): void
+    {
+        $candidate = $this->candidate($service, 1);
+        app(MatchingService::class)->accept($candidate);
+
+        $candidate->refresh()->update(['responded_at' => now()->subSeconds($segundos)]);
+        $service->forceFill(['candidates_ready_at' => now()->subSeconds($segundos)])->saveQuietly();
     }
 }

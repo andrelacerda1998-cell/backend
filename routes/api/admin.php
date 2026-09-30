@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Admin\PaymentOrderController;
 use App\Http\Controllers\Api\Admin\VendorNoShowController;
 use App\Http\Controllers\Api\Admin\VendorNoShowListController;
 use App\Http\Controllers\Api\Admin\VendorPaymentController;
+use App\Http\Controllers\Api\Admin\SupportTicketController;
 use App\Http\Controllers\Api\Admin\VoucherController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +33,19 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
 
     // apiResource já só regista index/store/show/update/destroy (sem create/edit).
     Route::apiResource('vouchers', VoucherController::class);
+
+    /*
+     * Tickets de suporte dos TÉCNICOS.
+     *
+     * Existiam desde sempre e só se viam no Filament. O backoffice tem caixa
+     * de entrada de suporte, mas lia outra tabela (Supabase), onde caem os da
+     * app do CLIENTE -- dois sistemas paralelos, e o de quem trabalha para a
+     * Piquet era o invisível. Sem store: quem abre um ticket é o técnico, na
+     * app dele.
+     */
+    Route::get('/support-tickets', [SupportTicketController::class, 'index']);
+    Route::get('/support-tickets/{supportTicket}', [SupportTicketController::class, 'show']);
+    Route::put('/support-tickets/{supportTicket}', [SupportTicketController::class, 'update']);
 
     // Revisão de documentos KYC dos vendors — equivalente às ações do Filament
     // em VendorDocumentTextEntry (Verificar/Recusar).

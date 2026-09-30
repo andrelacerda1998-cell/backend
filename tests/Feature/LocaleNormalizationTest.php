@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\HandleLocale;
+use App\Models\GeneralSettings\OperationArea;
 use App\Models\User;
 use App\Support\Locale;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Tests\TestCase;
@@ -18,20 +20,38 @@ use Tests\TestCase;
  */
 class LocaleNormalizationTest extends TestCase
 {
+    use RefreshDatabase;
+
     public static function tagProvider(): array
     {
         return [
-            'exata pt-pt'          => ['pt-pt', 'pt-pt'],
-            'maiusculas pt-PT'     => ['pt-PT', 'pt-pt'],
-            'underscore pt_PT'     => ['pt_PT', 'pt-pt'],
-            'bare pt (o bug)'      => ['pt', 'pt-pt'],
-            'brasileiro pt-BR'     => ['pt-BR', 'pt-pt'],
-            'header com q-values'  => ['pt-PT,pt;q=0.9,en;q=0.8', 'pt-pt'],
-            'ingles en'            => ['en', 'en'],
-            'ingles en-US'         => ['en-US', 'en'],
-            'ausente (null)'       => [null, 'pt-pt'],
-            'vazio'                => ['', 'pt-pt'],
-            'desconhecido'         => ['de-DE', 'pt-pt'],
+            'exata pt-pt' => ['pt-pt', 'pt-pt'],
+            'maiusculas pt-PT' => ['pt-PT', 'pt-pt'],
+            'underscore pt_PT' => ['pt_PT', 'pt-pt'],
+            'bare pt (o bug)' => ['pt', 'pt-pt'],
+            'brasileiro pt-BR' => ['pt-BR', 'pt-pt'],
+            'header com q-values' => ['pt-PT,pt;q=0.9,en;q=0.8', 'pt-pt'],
+            'ingles en' => ['en', 'en'],
+            'ingles en-US' => ['en-US', 'en'],
+            // Frances e espanhol: sem estes em config('app.locales') o
+            // normalize() devolvia 'pt-pt', e o catalogo traduzido ficava na
+            // base sem nunca sair. Visto no simulador -- a app em frances, o
+            // catalogo em ingles.
+            'frances fr' => ['fr', 'fr'],
+            'frances fr-FR' => ['fr-FR', 'fr'],
+            'frances fr_FR' => ['fr_FR', 'fr'],
+            'frances do Canada' => ['fr-CA', 'fr'],
+            'espanhol es' => ['es', 'es'],
+            'espanhol es-ES' => ['es-ES', 'es'],
+            'espanhol do Mexico' => ['es-MX', 'es'],
+            'ausente (null)' => [null, 'pt-pt'],
+            'vazio' => ['', 'pt-pt'],
+            // O 'de-DE' era o desconhecido; passou a ser suportado.
+            'desconhecido' => ['it-IT', 'pt-pt'],
+            'alemao de' => ['de', 'de'],
+            'alemao de-DE' => ['de-DE', 'de'],
+            'alemao da Austria' => ['de-AT', 'de'],
+            'alemao da Suica' => ['de-CH', 'de'],
         ];
     }
 
@@ -83,6 +103,40 @@ class LocaleNormalizationTest extends TestCase
     {
         foreach (['pt', 'pt-BR', 'zz', '', null, 'en-GB'] as $tag) {
             $this->assertContains(Locale::normalize($tag), config('app.locales'));
+        }
+    }
+
+    /**
+     * O interruptor que faltava.
+     *
+     * Traduzimos 476 chaves do servidor e 844 textos do catalogo, e nada disso
+     * chegava ao cliente: `APP_LOCALES` nao estava definido, o omisso era
+     * `en,pt-pt`, e o `normalize('fr')` devolvia `pt-pt`. A app aparecia em
+     * frances com o catalogo em portugues -- sem erro nenhum, em lado nenhum.
+     *
+     * Este teste falha se alguem voltar a tirar `fr` ou `es` do omisso.
+     */
+    public function test_frances_e_espanhol_sao_servidos_por_omissao(): void
+    {
+        foreach (['fr', 'es', 'de'] as $idioma) {
+            $this->assertContains(
+                $idioma,
+                config('app.locales'),
+                "sem '$idioma' em config('app.locales') o catalogo traduzido nunca sai"
+            );
+        }
+    }
+
+    /** O nome traduzido do catalogo sai mesmo no idioma pedido. */
+    public function test_o_catalogo_sai_no_idioma_pedido(): void
+    {
+        $area = OperationArea::factory()->create([
+            'name' => ['pt-pt' => 'CANALIZAÇÃO', 'fr' => 'PLOMBERIE', 'es' => 'FONTANERÍA', 'en' => 'PLUMBING'],
+        ]);
+
+        foreach (['pt-pt' => 'CANALIZAÇÃO', 'fr' => 'PLOMBERIE', 'es' => 'FONTANERÍA'] as $tag => $esperado) {
+            app()->setLocale(Locale::normalize($tag));
+            $this->assertSame($esperado, $area->fresh()->name);
         }
     }
 

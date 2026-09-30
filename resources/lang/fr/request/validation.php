@@ -1,0 +1,61 @@
+<?php
+
+return [
+    'required' => 'Le champ :attribute est obligatoire.',
+    'unique' => 'Le champ :attribute est déjà utilisé.',
+    'email' => 'Le champ :attribute doit être une adresse e-mail valide.',
+    'string' => 'Le champ :attribute doit être une chaîne de caractères.',
+    'confirmed' => 'La confirmation du champ :attribute ne correspond pas.',
+    'min' => [
+        'string' => 'Le champ :attribute doit contenir au moins :min caractères.',
+    ],
+    'max' => [
+        'file' => 'Le champ :attribute ne peut pas dépasser :max kilo-octets.',
+    ],
+    'array' => 'Le champ :attribute doit être un tableau.',
+    'integer' => 'Le champ :attribute doit être un nombre entier.',
+    'exists' => 'Le champ :attribute sélectionné est invalide.',
+    'file' => 'Le champ :attribute doit être un fichier.',
+    'mimes' => 'Le champ :attribute doit être un fichier de type : :values.',
+    'numeric' => 'Le champ :attribute doit être un nombre.',
+    'date' => "Le champ :attribute n'est pas une date valide.",
+    'before_or_equal' => 'Le champ :attribute doit être une date antérieure ou égale à :date.',
+    'distinct' => [
+        'must_be_selected' => 'Sélectionne au moins un champ :attribute.',
+        'only_one_must_be_selected' => 'Un seul champ :attribute doit être sélectionné.',
+    ],
+    'cities' => [
+        'min' => 'Choisis au moins :min communes où tu veux travailler.',
+        'preferred_subset' => 'Les 3 villes prioritaires doivent faire partie de celles que tu as choisies.',
+    ],
+    'password' => [
+        'letters' => 'Le mot de passe doit contenir au moins une lettre.',
+        'mixed_case' => 'Le mot de passe doit contenir des majuscules et des minuscules.',
+        'numbers' => 'Le mot de passe doit contenir au moins un chiffre.',
+        'symbols' => 'Le mot de passe doit contenir au moins un symbole.',
+        'uncompromised' => "Ce mot de passe est apparu dans des fuites de données connues. Choisis-en un autre.",
+    ],
+    'custom' => [
+        'nif_rule' => "Le NIF (numéro fiscal portugais) n'est pas valide.",
+    ],
+    'attributes' => [
+        'email' => 'e-mail',
+        'nif' => 'NIF',
+        'phone_number' => 'numéro de téléphone',
+        'username' => "nom d'utilisateur",
+        'name' => 'nom',
+        'date_birthday' => 'date de naissance',
+        'document_id' => 'ID du document',
+        'document_file' => 'fichier du document',
+        'operation_areas' => "zones d'intervention",
+        'price_rate' => 'tarif',
+        'services_types' => "types d'intervention",
+        'password' => 'mot de passe',
+        'documents' => 'documents',
+        'today' => "aujourd'hui",
+        'avatar' => 'avatar',
+        'address' => 'adresse',
+        'postal_code' => 'code postal',
+        'locality' => 'district',
+    ],
+];

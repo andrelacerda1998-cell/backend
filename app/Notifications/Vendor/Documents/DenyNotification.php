@@ -40,7 +40,10 @@ class DenyNotification extends Notification implements ShouldQueue
     public function toExpo($notifiable): ExpoMessage
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
-        return ExpoMessage::create("{$this->document->type->getTranslation('name', $language)} ".__('notifications.documents.deny.title', [], $language))
+        // O título é uma frase completa e leva o tipo DENTRO, por :type.
+        // Colar o nome à frente de "validado" só funcionava com nomes
+        // masculinos — "Declaração de Início de Atividade validado".
+        return ExpoMessage::create(__('notifications.documents.deny.title', ['type' => $this->document->type->getTranslation('name', $language)], $language))
             ->body(__('notifications.documents.deny.description', ['type' => $this->document->type->getTranslation('name', $language)], $language))
             ->priority('high')
             ->playSound();

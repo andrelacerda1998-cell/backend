@@ -190,6 +190,16 @@ class MatchingInvitationsController extends Controller
             // duracao vem do backoffice. Vai sempre `duration_minutes` para a
             // app nao ter de saber de onde veio.
             'custom' => $service?->customPayload(auth()->user()->language ?? 'pt-pt'),
+            // O que o cliente escreveu sobre o problema, se escreveu.
+            //
+            // Num convite de catálogo o técnico só via o tipo de serviço, o
+            // valor e a distância — e decidia às cegas se aquilo lhe dava meia
+            // hora ou uma tarde. "A torneira da cozinha pinga há dois dias e já
+            // molhou o armário" é a diferença entre aceitar e não aceitar.
+            //
+            // Pode vir vazio: o campo é opcional de propósito, para não travar
+            // quem só quer carregar em "Pedir agora".
+            'customer_notes' => $service?->customer_notes,
             // Service::durationMinutes() já sabe distinguir personalizado de
             // catálogo — e, ao contrário disto, conta as unidades pedidas. O
             // técnico via "1 hora" num convite de três.

@@ -101,12 +101,19 @@ return [
         'greeting' => 'Olá :name,',
         'action' => 'Completar o meu perfil',
         'default' => [
-            'title' => 'Faltam :steps passos',
+            // Plural a sério: com :steps = 1 isto dizia "Faltam 1 passos".
+            // O verbo TAMBÉM concorda em português, por isso a forma singular
+            // tem de trazer "Falta" e não só "passo".
+            'title' => '{1} Falta :steps passo|[2,*] Faltam :steps passos',
             'description' => 'Completa o teu perfil para começares a receber pedidos na tua zona.',
         ],
         'with_requests' => [
             'title' => 'Há pedidos à tua espera',
-            'description' => 'Esta semana houve :requests pedidos na tua zona. Faltam-te :steps passos para os poderes aceitar.',
+            // Três concordâncias na mesma frase — o número de pedidos, o verbo
+            // e o pronome "os" que os retoma. Com um só pedido saía "houve 1
+            // pedidos ... para os poderes aceitar". Os passos saem daqui: já
+            // estão no botão, e uma frase com dois números conta-se pior.
+            'description' => '{1} Esta semana chegou :requests pedido à tua zona. Completa o perfil para o poderes aceitar.|[2,*] Esta semana chegaram :requests pedidos à tua zona. Completa o perfil para os poderes aceitar.',
         ],
     ],
     'newService' => [
@@ -120,8 +127,33 @@ return [
         // profissional sentir-se enganado quando perde — e deixar de responder.
         'description' => 'Diz se tens disponibilidade. O cliente escolhe entre quem responder.',
     ],
+    /**
+     * O desfecho de um convite aceite. SEM PUSH, de proposito.
+     *
+     * Tocar-lhe o telemovel para dizer que nao ganhou seria castiga-lo por ter
+     * aceitado. Mas o silencio absoluto era pior: o cartao desaparecia da lista
+     * sem explicacao nenhuma, e quem diz que sim e fica sem resposta aprende a
+     * nao responder mais. Fica no historico, para estar la quando ele abrir a app.
+     */
+    'matchingOutcome' => [
+        'lost' => [
+            'title' => 'O cliente escolheu outro profissional',
+            'description' => 'Este pedido foi para outra pessoa. Obrigado por teres respondido.',
+        ],
+        'closed' => [
+            'title' => 'O pedido foi cancelado',
+            'description' => 'O cliente não concluiu o pagamento a tempo. Já podes aceitar outros pedidos.',
+        ],
+    ],
     'customRequest' => [
         'label' => 'o teu pedido personalizado',
+    ],
+    'customRequestDispatched' => [
+        'title' => 'O teu pedido já está com os profissionais',
+        // Não promete profissional nenhum, de propósito: aqui ainda não se
+        // sabe se algum vai aceitar. O que se diz é que uma pessoa pegou no
+        // pedido — que é exactamente a informação que faltava.
+        'description' => 'Vimos o que escreveste e já o enviámos. Avisamos-te assim que houver alguém disponível.',
     ],
     'matchingCandidatesReady' => [
         'title' => 'Já há quem possa ir',
@@ -236,13 +268,18 @@ return [
         'title' => 'Serviço cancelado',
         'description' => ':vendor_name cancelou o teu serviço de :service_type',
     ],
+        // O título é uma frase COMPLETA, com o nome do documento depois dos
+        // dois pontos. Antes era só "validado" e o código colava-lhe o nome à
+        // frente — "{nome} validado" — o que só concorda com nomes masculinos:
+        // "Declaração de Início de Atividade validado". O mesmo problema que o
+        // comentário do bloco 'expiring' aqui abaixo já assinalava.
     'documents' => [
         'accept' => [
-            'title' => 'validado',
+            'title' => 'Documento validado: :type',
             'description' => 'O teu documento foi validado com sucesso.',
         ],
         'deny' => [
-            'title' => 'recusado',
+            'title' => 'Documento recusado: :type',
             'description' => 'O teu documento foi recusado.',
         ],
         // Avisos de expiração (30/15/7/3 dias). Só o tipo de documento e o prazo — nunca dados do documento.

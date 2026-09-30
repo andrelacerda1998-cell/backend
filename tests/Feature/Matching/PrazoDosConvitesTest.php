@@ -16,19 +16,27 @@ use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 /**
- * O pedido tem um fim conhecido desde que e criado.
+ * A FASE DE CONVITES tem um fim conhecido.
  *
- * Antes nao havia tecto: o relogio do cliente so arrancava no PRIMEIRO ACEITE,
- * e ate la o pedido ficava aberto o tempo que a janela dos profissionais
- * permitisse — meia hora no agendado. So depois disso arrancavam os 30 minutos
- * de escolha. Uma hora, no pior caso, entre pedir e ter profissional
- * confirmado, com a primeira metade em silencio.
+ * Antes do primeiro sim nao ha relogio do cliente a correr: ha um pedido aberto
+ * a espera de que alguem responda. Sem prazo nenhum, o unico fim possivel era o
+ * esgotar das ondas — e no agendado a janela de resposta era de meia hora.
  *
- * Agora ha `request_deadline_seconds` a contar da criacao, igual para imediato
- * e agendado. As janelas por modo continuam a valer, mas nenhuma leva o pedido
- * para alem deste prazo.
+ * O `request_deadline_seconds` fecha essa porta, a contar de quando o pedido
+ * entra em selecao (num personalizado, do envio pelo backoffice).
+ *
+ * O QUE ELE JA NAO FAZ: cortar o prazo do cliente. Era um tecto unico por cima
+ * das duas fases, e o que a fase dos convites gastasse saia do tempo de quem
+ * tinha de escolher — no pior caso sobravam-lhe zero segundos. As duas fases
+ * passaram a ter orcamentos proprios, em cadeia; o `DoisPrazosTest` prende essa
+ * cadeia inteira, e este ficheiro so a primeira metade.
+ *
+ * Por isso e tambem uma rede de seguranca e nao uma promessa: esta muito acima
+ * do que o calendario das ondas precisa, de proposito. Colado a esse calendario,
+ * o atraso do cron — que corre ao minuto — cortava a janela da ultima onda e o
+ * profissional convidado ao fim tinha menos tempo do que os outros.
  */
-class PrazoGlobalDoPedidoTest extends TestCase
+class PrazoDosConvitesTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -78,28 +86,42 @@ class PrazoGlobalDoPedidoTest extends TestCase
         ]);
     }
 
-    public function test_o_pedido_morre_ao_fim_do_prazo_mesmo_sem_ninguem_ter_respondido(): void
+    public function test_o_pedido_morre_ao_fim_do_prazo_sem_ninguem_ter_respondido(): void
     {
-        $service = $this->emMatching('4 minutes');
+        $service = $this->emMatching('11 minutes');
+        // Com um convite ainda de pé: sem candidatos vivos o pedido morreria por
+        // as ondas se esgotarem, que é outra regra e mascararia esta.
+        $this->candidato($service, CandidateStatus::NOTIFIED, null, now()->addMinutes(2));
 
         $this->artisan('matching:advance')->assertSuccessful();
 
         $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
     }
 
-    public function test_o_pedido_morre_ao_fim_do_prazo_mesmo_com_aceites_a_espera_de_escolha(): void
+    /**
+     * A FRONTEIRA, e a razão de este ficheiro ter mudado de nome.
+     *
+     * Havia aqui um teste a provar o contrário: que o prazo matava o pedido
+     * mesmo com aceites à espera de escolha. Era a consequência do tecto único —
+     * e era a consequência errada. Quem já disse sim não fica preso a uma
+     * decisão que não chega, mas o relógio que a limita é o do CLIENTE, e conta
+     * do primeiro sim. O tempo que os profissionais levaram a responder não sai
+     * do tempo dele.
+     */
+    public function test_a_partir_do_primeiro_sim_este_prazo_deixa_de_contar(): void
     {
-        // Este e o caso que a janela de escolha escondia: ela conta a partir do
-        // primeiro aceite e podia empurrar o desfecho para muito depois. Um
-        // cliente que nao escolheu em tres minutos nao esta a olhar para o
-        // ecra, e quem disse que sim nao pode ficar presa a isso.
-        $service = $this->emMatching('4 minutes');
+        // Onze minutos desde a criação: por este prazo, morto há muito.
+        $service = $this->emMatching('11 minutes');
 
-        $this->candidato($service, CandidateStatus::ACCEPTED, now()->subMinutes(3));
+        $this->candidato($service, CandidateStatus::ACCEPTED, now()->subSeconds(30));
 
         $this->artisan('matching:advance')->assertSuccessful();
 
-        $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
+        $this->assertSame(
+            ServiceStatus::MATCHING,
+            $service->refresh()->status,
+            'com um sim carimbado há 30 s, o cliente tem os minutos dele por inteiro',
+        );
     }
 
     public function test_dentro_do_prazo_o_pedido_continua_vivo(): void

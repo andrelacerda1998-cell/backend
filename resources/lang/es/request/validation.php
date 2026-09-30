@@ -1,0 +1,61 @@
+<?php
+
+return [
+    'required' => 'El campo :attribute es obligatorio.',
+    'unique' => 'El campo :attribute ya está en uso.',
+    'email' => 'El campo :attribute debe ser una dirección de correo electrónico válida.',
+    'string' => 'El campo :attribute debe ser texto.',
+    'confirmed' => 'La confirmación del campo :attribute no coincide.',
+    'min' => [
+        'string' => 'El campo :attribute debe tener al menos :min caracteres.',
+    ],
+    'max' => [
+        'file' => 'El campo :attribute no puede superar :max kilobytes.',
+    ],
+    'array' => 'El campo :attribute debe ser un array.',
+    'integer' => 'El campo :attribute debe ser un número entero.',
+    'exists' => 'El campo :attribute seleccionado no es válido.',
+    'file' => 'El campo :attribute debe ser un archivo.',
+    'mimes' => 'El campo :attribute debe ser un archivo de tipo: :values.',
+    'numeric' => 'El campo :attribute debe ser un número.',
+    'date' => 'El campo :attribute no es una fecha válida.',
+    'before_or_equal' => 'El campo :attribute debe ser una fecha anterior o igual a :date.',
+    'distinct' => [
+        'must_be_selected' => 'Debes seleccionar al menos un campo :attribute.',
+        'only_one_must_be_selected' => 'Solo puedes seleccionar un campo :attribute.',
+    ],
+    'cities' => [
+        'min' => 'Elige al menos :min municipios donde quieras trabajar.',
+        'preferred_subset' => 'Las 3 ciudades prioritarias tienen que estar entre las que has elegido.',
+    ],
+    'password' => [
+        'letters' => 'La contraseña debe contener al menos una letra.',
+        'mixed_case' => 'La contraseña debe contener letras mayúsculas y minúsculas.',
+        'numbers' => 'La contraseña debe contener al menos un número.',
+        'symbols' => 'La contraseña debe contener al menos un símbolo.',
+        'uncompromised' => 'Esta contraseña ha aparecido en filtraciones de datos conocidas. Elige otra.',
+    ],
+    'custom' => [
+        'nif_rule' => 'El NIF (número de identificación fiscal portugués) no es válido.',
+    ],
+    'attributes' => [
+        'email' => 'correo electrónico',
+        'nif' => 'NIF',
+        'phone_number' => 'número de teléfono',
+        'username' => 'nombre de usuario',
+        'name' => 'nombre',
+        'date_birthday' => 'fecha de nacimiento',
+        'document_id' => 'ID del documento',
+        'document_file' => 'archivo del documento',
+        'operation_areas' => 'áreas de operación',
+        'price_rate' => 'tarifa de precio',
+        'services_types' => 'tipos de servicio',
+        'password' => 'contraseña',
+        'documents' => 'documentos',
+        'today' => 'hoy',
+        'avatar' => 'avatar',
+        'address' => 'dirección',
+        'postal_code' => 'código postal',
+        'locality' => 'distrito',
+    ],
+];
