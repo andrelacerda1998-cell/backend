@@ -125,7 +125,23 @@ trait ProcessesServicePayment
 
                 $service->payment_order_id = $paymentOrder->id;
 
-                app(WalletPayment::class)->pay($paymentOrder->uuid, $wallet, $payload, $customerIp);
+                /*
+                 * O Payshop quer o payload como STRING, não como objeto aninhado.
+                 *
+                 * O exemplo que eles mandaram (30/09) traz `"payload": "{...}"` --
+                 * um JSON dentro de uma string. A app manda o `PaymentData` como
+                 * objeto, que é o natural em JSON, e sem esta linha ele seguia
+                 * aninhado no corpo do pedido. Daí o "payload está incorreto" e o
+                 * `validation_hash` vazio.
+                 *
+                 * Só se codifica o que vem como array: o Apple Pay manda uma
+                 * string e essa passa intacta.
+                 */
+                $payloadParaPayshop = is_array($payload)
+                    ? json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                    : $payload;
+
+                app(WalletPayment::class)->pay($paymentOrder->uuid, $wallet, $payloadParaPayshop, $customerIp);
 
                 $service->payment_status = PaymentStatus::PAID;
             } catch (CreditCardValidationRequired $e) {
