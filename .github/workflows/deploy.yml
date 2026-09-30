@@ -13,6 +13,26 @@ on:
         type: boolean
         default: false
 
+# Um deploy de cada vez, e um que ja comecou nunca e interrompido a meio --
+# `docker compose up` cortado ao meio deixa o servidor num estado que ninguem
+# pediu.
+#
+# O PRECO disto: a fila tem UM lugar so. Enquanto uma corrida ocupa o grupo,
+# a seguinte espera, e quando uma terceira chega a que estava a espera e
+# CANCELADA. `cancel-in-progress: false` protege quem ja arrancou, nao quem
+# esta na fila.
+#
+# A 29/09 as 21:04 uma corrida ficou em `waiting` -- a espera da aprovacao do
+# ambiente, que nunca veio -- e ocupou o grupo. A partir daí TODOS os deploys
+# ficaram pela fila: 30 cancelados, zero sucessos em 24h, com sete merges por
+# publicar. Ninguem deu por isso porque uma corrida cancelada nao avisa
+# ninguem, e o ultimo sucesso era recente o suficiente para nao levantar
+# suspeitas.
+#
+# Daí os `timeout-minutes` em cada job abaixo e o limpar-corridas-presas.yml:
+# o primeiro impede que um job pendurado segure o grupo para sempre, o segundo
+# trata do caso que aconteceu de verdade -- uma corrida à espera de uma
+# aprovação que ninguém vai dar.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -30,6 +50,7 @@ jobs:
   test:
     name: Testes (PHPUnit)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.0
@@ -92,6 +113,7 @@ jobs:
     name: Build golden image (base)
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       base-tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -139,6 +161,7 @@ jobs:
     name: Build + push app image
     needs: build-base
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       app-tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -186,6 +209,7 @@ jobs:
     needs: build-app
     if: github.event_name == 'push' || inputs.deploy == true
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     steps:
       - name: Escrever .env de produção a partir do secret
