@@ -47,6 +47,30 @@ class VendorDocumentController extends Controller
         ]);
     }
 
+    /**
+     * GET /v1/admin/vendor-documents/{vendorDocument} — um documento, seja
+     * qual for o estado.
+     *
+     * O `index` é uma FILA: filtra por estado e pagina. Isso serve para rever,
+     * mas não para voltar a um documento concreto -- e era o que faltava.
+     *
+     * Sem isto, quem quisesse reabrir um documento já validado tinha de o
+     * procurar percorrendo as páginas de `?status=approved`. Com centenas de
+     * documentos aprovados, o backoffice pedia `per_page=200`, o controlador
+     * travava em 100 (`min($perPage, 100)`) e calava-se -- e o documento
+     * ficava inalcançável a partir da segunda centena. Foi o que aconteceu
+     * com o da Danúbia Trintrim: aprová-lo fazia-o desaparecer.
+     *
+     * Devolve o documento pedido e mais nada. Não filtra por estado de
+     * propósito: um documento recusado ou expirado também tem de se poder ver.
+     */
+    public function show(VendorDocuments $vendorDocument): ApiSuccessResponse
+    {
+        return ApiSuccessResponse::make(
+            $this->present($vendorDocument->load(['vendor.user', 'type']))
+        );
+    }
+
     public function approve(ApproveVendorDocumentRequest $request, VendorDocuments $vendorDocument): ApiSuccessResponse|ApiErrorResponse
     {
         if ($vendorDocument->status !== 'pending') {

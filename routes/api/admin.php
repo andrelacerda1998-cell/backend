@@ -50,6 +50,10 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // Revisão de documentos KYC dos vendors — equivalente às ações do Filament
     // em VendorDocumentTextEntry (Verificar/Recusar).
     Route::get('/vendor-documents', [VendorDocumentController::class, 'index']);
+    // Um documento por id, seja qual for o estado. O index é uma fila paginada
+    // e não servia para voltar a um documento concreto -- ver o comentário no
+    // controlador (caso Danúbia Trintrim).
+    Route::get('/vendor-documents/{vendorDocument}', [VendorDocumentController::class, 'show']);
     Route::put('/vendor-documents/{vendorDocument}/approve', [VendorDocumentController::class, 'approve']);
     Route::put('/vendor-documents/{vendorDocument}/decline', [VendorDocumentController::class, 'decline']);
 
