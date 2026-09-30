@@ -301,6 +301,23 @@ class Vendor extends Model implements Auditable
         return null;
     }
 
+    /** A versão dos termos que este técnico aceitou, ou `null`. */
+    public function versaoDosTermosAceite(): ?string
+    {
+        return TermsAcceptance::where('user_id', $this->user_id)
+            ->where('document', TermsAcceptance::DOCUMENTO_PRESTADORES)
+            ->orderByDesc('accepted_at')
+            ->value('version');
+    }
+
+    /** Aceitou a versão que está em vigor? */
+    public function aceitouOsTermosEmVigor(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->versaoDosTermosAceite() === config('legal.provider_terms.version')
+        )->shouldCache();
+    }
+
     /** Dias que o técnico tem para dar a AT antes de perder o que ganhou. */
     public const DIAS_DE_PRAZO_DA_AT = 5;
 
@@ -317,6 +334,21 @@ class Vendor extends Model implements Auditable
     public function comecarPrazoDaAtSeNecessario(): void
     {
         if ($this->at_deadline_started_at !== null) {
+            return;
+        }
+
+        /*
+         * SEM ACEITAÇÃO REGISTADA, O RELÓGIO NÃO ARRANCA.
+         *
+         * O prazo acaba em perda do saldo, e uma cláusula que retira dinheiro a
+         * alguém só o vincula se ele a tiver aceitado. Amarrar as duas coisas
+         * aqui significa que não há caminho no código que faça alguém perder
+         * dinheiro por um texto que nunca lhe foi mostrado.
+         *
+         * A RETENÇÃO não depende disto e continua a valer: não pagar o que não
+         * se consegue faturar não é uma penalização, é a ausência de um ato.
+         */
+        if (! $this->aceitou_os_termos_em_vigor) {
             return;
         }
 

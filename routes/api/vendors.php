@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Common\GetServiceRouteController;
 use App\Http\Controllers\Api\Vendor\AddressController;
 use App\Http\Controllers\Api\Vendor\Cities\CitiesController;
 use App\Http\Controllers\Api\Vendor\DocumentController;
+use App\Http\Controllers\Api\Vendor\Legal\AceitarTermosController;
 use App\Http\Controllers\Api\Vendor\Location\UpdateLocationController;
 use App\Http\Controllers\Api\Vendor\NoShowController;
 use App\Http\Controllers\Api\Vendor\ReviewsController;
@@ -119,6 +120,15 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::put('/price-rate', UpdatePriceRateController::class);
         Route::put('/update/payment', [UpdatePaymentController::class, 'update']);
     });
+
+    /*
+     * Termos: o que falta aceitar, e a aceitação.
+     *
+     * Fora do `wallet` e das agendas de propósito -- isto não é uma
+     * funcionalidade do produto, é a prova de que uma cláusula foi mostrada.
+     */
+    Route::get('/terms', [AceitarTermosController::class, 'estado']);
+    Route::post('/terms/accept', [AceitarTermosController::class, 'aceitar']);
 
     Route::group(['prefix' => 'wallet'], function () {
         Route::get('/', WalletController::class);
