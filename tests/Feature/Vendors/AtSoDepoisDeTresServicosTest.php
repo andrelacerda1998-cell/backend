@@ -199,6 +199,76 @@ class AtSoDepoisDeTresServicosTest extends TestCase
         $this->assertSame('at_user_missing', $vendor->fresh()->invoicingBlocker());
     }
 
+    // ------------------------------------------ o formato do at_user
+
+    /**
+     * Um `at_user` sem barra NÃO é um acesso à AT.
+     *
+     * O subutilizador da AT é "NIF/N" — o número do contribuinte, uma barra, e o
+     * número do subutilizador. Um técnico que escreva só o NIF ficaria com a AT
+     * dada aos olhos da base de dados e a faturação a falhar em silêncio no
+     * primeiro serviço. É por isso que a barra é verificada em todo o lado.
+     */
+    public function test_at_user_sem_barra_nao_conta_como_dada(): void
+    {
+        $vendor = $this->semAt();
+        $vendor->update(['at_user' => '999999999']);
+        $vendor->forceFill(['at_valid' => true])->save();
+
+        $this->assertFalse($vendor->fresh()->at_ready);
+    }
+
+    /** Validada pela AT mas sem utilizador escrito: também não serve. */
+    public function test_at_valid_sozinho_nao_chega(): void
+    {
+        $vendor = $this->semAt();
+        $vendor->forceFill(['at_valid' => true, 'at_user' => null])->save();
+
+        $this->assertFalse($vendor->fresh()->at_ready);
+    }
+
+    /** Escrita mas ainda por validar pela AT: também não. */
+    public function test_at_user_certo_mas_por_validar_nao_chega(): void
+    {
+        $vendor = $this->semAt();
+        $vendor->update(['at_user' => '999999999/1']);
+
+        $this->assertFalse($vendor->fresh()->at_ready);
+    }
+
+    /** `at_user` vazio não pode rebentar o `str_contains`. */
+    public function test_at_user_vazio_nao_rebenta(): void
+    {
+        $vendor = $this->semAt();
+        $vendor->forceFill(['at_user' => '', 'at_valid' => true])->save();
+
+        $this->assertFalse($vendor->fresh()->at_ready);
+    }
+
+    // ---------------------------------------------- contagens independentes
+
+    /** Os serviços de um profissional não contam para outro. */
+    public function test_os_servicos_de_um_nao_contam_para_outro(): void
+    {
+        $trabalhador = $this->semAt();
+        $novato = $this->semAt();
+
+        $this->concluidos($trabalhador, 5);
+
+        $this->assertTrue($trabalhador->fresh()->at_required);
+        $this->assertFalse($novato->fresh()->at_required, 'o novato não herda os serviços de ninguém');
+        $this->assertSame(3, $novato->fresh()->services_until_at_required);
+    }
+
+    /** Muito acima dos três, o que falta continua a ser zero e não negativo. */
+    public function test_com_muitos_servicos_o_que_falta_nunca_e_negativo(): void
+    {
+        $vendor = $this->semAt();
+        $this->concluidos($vendor, 12);
+
+        $this->assertSame(0, $vendor->fresh()->services_until_at_required);
+    }
+
     // ------------------------------------------ a fronteira que não muda
 
     /**
