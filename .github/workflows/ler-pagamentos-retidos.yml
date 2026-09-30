@@ -1,0 +1,101 @@
+name: Ler pagamentos retidos em produção
+
+# So por accionamento manual. NAO corre em push, nunca.
+#
+# A pergunta que responde: a partir de 30/09 um tecnico so pode ser pago se
+# tiver IBAN, morada fiscal e -- a partir do 3.o servico -- o subutilizador da
+# AT (ver `Vendor::payoutBlocker()`). Quem tiver saldo e lhe faltar uma destas
+# tres coisas deixa de poder receber no dia em que isto for para producao.
+#
+# Este workflow diz QUEM, antes de a regra la chegar. E uma leitura: um SELECT,
+# sem escritas e sem locks de escrita.
+on:
+  workflow_dispatch:
+
+# Sem o grupo de concorrencia `deploy-production`: e uma leitura, nao deve
+# segurar o lugar a um deploy nem ficar atras de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler quem fica com o pagamento retido
+    runs-on: ubuntu-latest
+    # Traz os mesmos segredos do deploy e, de borla, o portao de aprovacao
+    # manual. Abrir uma sessao SSH a producao merece uma aprovacao explicita,
+    # mesmo so para ler.
+    environment: production
+    steps:
+      - name: Listar os técnicos com pagamento retido
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # O comando e FIXO aqui, e NAO um input do workflow. Aceitar SQL por
+          # parametro transformava este botao numa consola de base de dados de
+          # producao a espera de ser usada.
+          script: |
+            set -euo pipefail
+            cd ~/project-laravel
+
+            # A query vai por stdin para dentro do container -- assim nao ha
+            # aspas de SQL a lutar com as do bash nem com as do PHP.
+            docker compose exec -T laravel-prod sh -c 'cat > /tmp/retidos.sql' <<'SQL'
+            SELECT
+                v.id AS vendor_id,
+                CONCAT(u.first_name, ' ', u.last_name) AS tecnico,
+                u.email,
+                ROUND(w.balance / 100, 2) AS saldo_eur,
+                CASE
+                    WHEN v.iban IS NULL OR v.iban = '' THEN 'iban_missing'
+                    WHEN fa.user_id IS NULL THEN 'fiscal_address_missing'
+                    WHEN COALESCE(sc.concluidos, 0) >= 3
+                         AND (v.at_valid = 0 OR v.at_user IS NULL OR v.at_user NOT LIKE '%/%')
+                         THEN 'at_user_missing'
+                    ELSE NULL
+                END AS motivo,
+                COALESCE(sc.concluidos, 0) AS servicos
+            FROM vendors v
+            JOIN users u ON u.id = v.user_id
+            JOIN wallets w
+              ON w.holder_type = 'App\\Models\\User' AND w.holder_id = u.id AND w.deleted_at IS NULL
+            LEFT JOIN (
+                SELECT DISTINCT user_id FROM addresses
+                WHERE address_type = 'fiscal_address' AND deleted_at IS NULL
+            ) fa ON fa.user_id = u.id
+            LEFT JOIN (
+                SELECT vendor_id, COUNT(*) AS concluidos FROM services
+                WHERE status IN ('Closed', 'ClosedPendingPayment', 'Archived')
+                GROUP BY vendor_id
+            ) sc ON sc.vendor_id = v.id
+            WHERE w.balance > 0 AND v.deleted_at IS NULL AND u.deleted_at IS NULL
+            HAVING motivo IS NOT NULL
+            ORDER BY saldo_eur DESC
+            SQL
+
+            echo "==========================================================="
+            echo " TÉCNICOS COM SALDO QUE FICAM COM O PAGAMENTO RETIDO"
+            echo "==========================================================="
+            docker compose exec -T laravel-prod php artisan tinker --execute='
+              $linhas = DB::select(file_get_contents("/tmp/retidos.sql"));
+              if (! $linhas) { echo "  NENHUM — ninguem fica travado.\n"; }
+              foreach ($linhas as $l) {
+                  printf("  #%-5s %-28s %-34s %9s EUR  %-24s %s servicos\n",
+                      $l->vendor_id, mb_substr($l->tecnico ?? "-", 0, 26),
+                      mb_substr($l->email ?? "-", 0, 32), $l->saldo_eur, $l->motivo, $l->servicos);
+              }
+              echo "\n  TOTAL: ".count($linhas)." tecnico(s) afetado(s).\n";
+            '
+
+            echo
+            echo "==========================================================="
+            echo " CONTEXTO: total de tecnicos com saldo"
+            echo "==========================================================="
+            docker compose exec -T laravel-prod php artisan tinker --execute='
+              echo "  ".DB::table("wallets")
+                  ->where("holder_type", "App\\Models\\User")
+                  ->where("balance", ">", 0)->whereNull("deleted_at")->count()." carteiras com saldo.\n";
+            '
+
+            docker compose exec -T laravel-prod rm -f /tmp/retidos.sql
