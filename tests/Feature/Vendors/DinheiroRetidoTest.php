@@ -7,6 +7,7 @@ use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\GeneralSettings\Gender;
 use App\Models\Address;
+use App\Models\Document;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
@@ -41,7 +42,7 @@ class DinheiroRetidoTest extends TestCase
 
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
-        'services', 'services_types', 'operation_areas', 'addresses',
+        'services', 'services_types', 'operation_areas', 'addresses', 'documents',
         'transactions', 'transfers',
     ];
 
@@ -397,9 +398,14 @@ class DinheiroRetidoTest extends TestCase
         $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
         $vendor->user->wallet->deposit(5000);
 
+        // Sem nenhum documento OBRIGATORIO definido, `all_documents_verified` e
+        // true e o teste passaria sem provar nada. E preciso existir um por
+        // entregar para o cenario ser o que o nome diz.
+        Document::create(['name' => 'Cartao de Cidadao', 'required' => true]);
+
         $vendor = $vendor->fresh();
 
-        $this->assertFalse($vendor->all_documents_verified, 'este tecnico nao tem documentos validados');
+        $this->assertFalse($vendor->all_documents_verified, 'ha um documento obrigatorio por validar');
         $this->assertNull($vendor->payoutBlocker(), 'e mesmo assim o dinheiro sai');
 
         $this->withAuth()

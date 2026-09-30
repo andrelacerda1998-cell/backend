@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Services\AddressType;
 use App\Mail\Vendor\PaymentSentMail;
+use App\Models\Address;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\Vendor\PaymentSentNotification;
@@ -30,7 +32,7 @@ class AdminVendorPaymentsApiTest extends TestCase
     // referência semeados uma única vez no arranque da suite (ex.: genders,
     // documents) e nunca mais repostos, partindo outros testes que corram
     // depois desta classe.
-    protected array $tablesToTruncate = ['users', 'vendors', 'wallets', 'transactions', 'transfers', 'schedule_available'];
+    protected array $tablesToTruncate = ['users', 'vendors', 'wallets', 'transactions', 'transfers', 'schedule_available', 'addresses'];
 
     protected function setUp(): void
     {
@@ -57,6 +59,29 @@ class AdminVendorPaymentsApiTest extends TestCase
             'username' => 'carlos_'.$user->id,
             'iban' => 'PT50000201231234567890154',
         ]);
+
+        // Morada fiscal: desde 30/09/2026 um tecnico sem ela nao pode ser pago
+        // (`Vendor::payoutBlocker()` -- nao se transfere dinheiro por trabalho
+        // que nao se consegue faturar). Sem esta linha estes testes passam a
+        // medir a retencao em vez do pagamento.
+        Address::forceCreate([
+            'user_id' => $user->id,
+            'address_type' => AddressType::FISCAL_ADDRESS,
+            'name' => 'Rua de Teste 1, Porto',
+            'address_name' => 'Escritorio',
+            'street_name' => 'Rua de Teste',
+            'street_number' => '1',
+            'additional_info' => '',
+            'postal_code' => '4000-001',
+            'city' => 'Porto',
+            'municipality' => 'Porto',
+            'state' => 'Porto',
+            'country' => 'Portugal',
+            'latitude' => 41.1579,
+            'longitude' => -8.6291,
+            'main_address' => true,
+        ]);
+
         if ($cents > 0) {
             $user->wallet->deposit($cents);
         }
