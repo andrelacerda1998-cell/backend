@@ -5,9 +5,9 @@ namespace Tests\Feature\Vendors;
 use App\Enums\Services\AddressType;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
-use App\Models\GeneralSettings\Gender;
 use App\Models\Address;
 use App\Models\GeneralSettings\Document;
+use App\Models\GeneralSettings\Gender;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
@@ -107,6 +107,23 @@ class DinheiroRetidoTest extends TestCase
         ]);
     }
 
+    /**
+     * Credita como o `settle()` credita: com o `meta` de serviço.
+     *
+     * Um `deposit()` a seco conta como CRÉDITO PROMOCIONAL desde 30/09, e o
+     * promocional não trava pagamentos. Estes testes falavam de salário e
+     * depositavam boas-vindas -- passavam a dizer o contrário do que o nome
+     * prometia.
+     */
+    private function creditaComoServico(Vendor $vendor, int $centimos): void
+    {
+        $vendor->user->wallet->deposit($centimos, [
+            'class' => Service::class,
+            'id' => 0,
+            'type' => 'internal/services.transactions_type.service',
+        ]);
+    }
+
     /** Serviços já concluídos, para pôr o técnico numa determinada contagem. */
     private function jaConcluiu(Vendor $vendor, int $quantos): void
     {
@@ -181,7 +198,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 2);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         $vendor = $vendor->fresh();
 
@@ -193,7 +210,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 3);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         $vendor = $vendor->fresh();
 
@@ -205,7 +222,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 3);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
         $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
 
         $vendor = $vendor->fresh();
@@ -215,15 +232,22 @@ class DinheiroRetidoTest extends TestCase
         $this->assertSame(0, $vendor->payout_on_hold_amount);
     }
 
-    /** Retido com saldo a zero não é 0 por acaso — é 0 porque não há nada. */
-    public function test_retido_com_carteira_vazia_e_zero(): void
+    /**
+     * Carteira vazia não trava nada, mesmo com a AT em falta.
+     *
+     * Antes de 30/09 isto dava "retido" com 0 EUR -- tecnicamente verdade e
+     * praticamente absurdo: marcava-se como travado quem não tinha nada a
+     * receber. Sem ganhos por pagar não há o que reter.
+     */
+    public function test_carteira_vazia_nao_trava_nada(): void
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 3);
 
         $vendor = $vendor->fresh();
 
-        $this->assertTrue($vendor->payout_blocked);
+        $this->assertSame(0, $vendor->ganhos_por_pagar);
+        $this->assertFalse($vendor->payout_blocked);
         $this->assertSame(0, $vendor->payout_on_hold_amount);
     }
 
@@ -233,7 +257,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 3);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         $this->withAuth()
             ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
@@ -250,7 +274,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 3);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
 
@@ -267,7 +291,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 2);
-        $vendor->user->wallet->deposit(3000);
+        $this->creditaComoServico($vendor, 3000);
 
         $this->withAuth()
             ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
@@ -280,7 +304,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $retido = $this->tecnicoSemAt();
         $this->jaConcluiu($retido, 3);
-        $retido->user->wallet->deposit(5000);
+        $this->creditaComoServico($retido, 5000);
 
         $this->withAuth()
             ->getJson('/api/v1/admin/vendor-payments')
@@ -305,6 +329,8 @@ class DinheiroRetidoTest extends TestCase
             'at_valid' => false,
         ]);
         $this->jaConcluiu($vendor, 3);
+        $this->comMoradaFiscal($vendor);
+        $this->creditaComoServico($vendor, 5000);
 
         $this->actingAs($user, 'api')
             ->getJson('/api/v1/auth/me')
@@ -317,7 +343,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $this->jaConcluiu($vendor, 3);
-        $vendor->user->wallet->deposit(4200);
+        $this->creditaComoServico($vendor, 4200);
 
         $this->actingAs($vendor->user, 'api')
             ->getJson('/api/v1/vendor/stats')
@@ -340,7 +366,7 @@ class DinheiroRetidoTest extends TestCase
         Address::where('user_id', $vendor->user_id)->forceDelete();
         $this->jaConcluiu($vendor, 3);
         $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         $vendor = $vendor->fresh();
 
@@ -360,7 +386,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $vendor->update(['iban' => null, 'at_user' => '123456789/1', 'at_valid' => true]);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         $vendor = $vendor->fresh();
 
@@ -378,8 +404,9 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         Address::where('user_id', $vendor->user_id)->forceDelete();
-        $vendor->update(['iban' => null]);
         $this->jaConcluiu($vendor, 3);
+        $this->creditaComoServico($vendor, 5000);
+        $vendor->update(['iban' => null]);
 
         $this->assertSame('iban_missing', $vendor->fresh()->payoutBlocker());
     }
@@ -396,7 +423,7 @@ class DinheiroRetidoTest extends TestCase
     {
         $vendor = $this->tecnicoSemAt();
         $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
-        $vendor->user->wallet->deposit(5000);
+        $this->creditaComoServico($vendor, 5000);
 
         // Sem nenhum documento OBRIGATORIO definido, `all_documents_verified` e
         // true e o teste passaria sem provar nada. E preciso existir um por
@@ -413,5 +440,95 @@ class DinheiroRetidoTest extends TestCase
             ->assertOk();
 
         $this->assertSame(0, $vendor->user->refresh()->balanceInt);
+    }
+
+    // ------------------------------------- credito promocional nao e salario
+
+    /**
+     * O caso dos 8 tecnicos medidos em producao a 30/09.
+     *
+     * Saldo de 20 EUR, ZERO servicos concluidos: e o credito de boas-vindas, nao
+     * e pagamento de trabalho. Travar isto era aplicar uma regra de faturacao a
+     * uma coisa que nao se fatura -- e travava 8 pessoas por uma razao que nao
+     * lhes dizia respeito.
+     */
+    public function test_credito_promocional_sozinho_nao_trava_o_pagamento(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        Address::where('user_id', $vendor->user_id)->forceDelete(); // nem morada fiscal tem
+        $vendor->user->wallet->deposit(2000);                        // 20 EUR de boas-vindas
+
+        $vendor = $vendor->fresh();
+
+        $this->assertSame(0, $vendor->completedServices()->count());
+        $this->assertSame(0, $vendor->ganhos_por_pagar, 'nada disto foi ganho a trabalhar');
+        $this->assertNull($vendor->payoutBlocker(), 'e por isso nao ha nada a reter');
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
+            ->assertOk();
+
+        $this->assertSame(0, $vendor->user->refresh()->balanceInt);
+    }
+
+    /** Mas basta um euro ganho a trabalhar para a regra voltar a valer. */
+    public function test_com_dinheiro_de_servicos_a_regra_volta_a_travar(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        $this->jaConcluiu($vendor, 3);
+        $vendor->user->wallet->deposit(2000);                        // promocional
+
+        $servico = Service::factory()->create([
+            'vendor_id' => $vendor->id,
+            'status' => ServiceStatus::FINISHED,
+            'payment_status' => PaymentStatus::PAID,
+            'amount' => 10000,
+            'amount_for_vendor' => 7500,
+        ]);
+        (new CloseService($servico))->close();
+
+        $vendor = $vendor->fresh();
+
+        $this->assertSame(7500, $vendor->ganhos_por_pagar, 'so a parte do servico conta');
+        $this->assertSame('at_user_missing', $vendor->payoutBlocker());
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
+            ->assertStatus(409);
+    }
+
+    /**
+     * Depois de pago, o credito promocional SEGUINTE nao fica preso.
+     *
+     * Os levantamentos zeram a carteira inteira. Sem subtrair o que ja saiu, os
+     * depositos de servicos antigos mantinham "ganhos por pagar" para sempre e
+     * o proximo credito ficava travado por dinheiro que ele ja recebeu.
+     */
+    public function test_depois_de_pago_o_credito_seguinte_nao_fica_preso(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        $this->jaConcluiu($vendor, 3);
+        $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
+
+        $servico = Service::factory()->create([
+            'vendor_id' => $vendor->id,
+            'status' => ServiceStatus::FINISHED,
+            'payment_status' => PaymentStatus::PAID,
+            'amount' => 10000,
+            'amount_for_vendor' => 7500,
+        ]);
+        (new CloseService($servico))->close();
+
+        // O backoffice paga-lhe tudo.
+        $this->withAuth()->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")->assertOk();
+
+        // E agora tira-se-lhe a AT e da-se-lhe credito novo.
+        $vendor->update(['at_user' => null, 'at_valid' => false]);
+        $vendor->user->wallet->deposit(2000);
+
+        $vendor = $vendor->fresh();
+
+        $this->assertSame(0, $vendor->ganhos_por_pagar, 'o que ganhou ja lhe foi transferido');
+        $this->assertNull($vendor->payoutBlocker());
     }
 }
