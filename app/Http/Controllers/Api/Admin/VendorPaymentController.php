@@ -25,11 +25,23 @@ use Illuminate\Support\Facades\Mail;
  */
 class VendorPaymentController extends Controller
 {
+    /** O código vem do modelo (`Vendor::payoutBlocker()`); a frase é deste ecrã. */
+    private const RAZAO_DA_RETENCAO = [
+        'iban_missing' => 'Pagamento retido: este técnico não tem IBAN. Não há para onde transferir.',
+        'fiscal_address_missing' => 'Pagamento retido: falta a morada fiscal do técnico, '
+            .'sem a qual não se emite fatura. O saldo fica na carteira dele.',
+        'at_user_missing' => 'Pagamento retido: o técnico ainda não deu o acesso de subutilizador da AT. '
+            .'O saldo fica na carteira dele até isso ser preenchido.',
+    ];
+
     public function index(Request $request): ApiSuccessResponse
     {
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
         $vendors = Vendor::whereHas('user.wallet', fn ($q) => $q->where('balance', '>', 0))
+            // `payoutBlocker()` le colunas do proprio vendor e, no pior caso, faz
+            // duas queries por tecnico (moradas + contagem de servicos). So chega la
+            // quem tem IBAN e morada; os outros saem antes.
             ->with(['user.wallet'])
             ->paginate($perPage);
 
@@ -73,6 +85,22 @@ class VendorPaymentController extends Controller
 
         if ($wallet->balance <= 0) {
             return new ApiErrorResponse(null, 'Este vendor não tem saldo por pagar.', 409);
+        }
+
+        /*
+         * Não se transfere dinheiro por trabalho que não se consegue faturar.
+         *
+         * O dinheiro está na carteira dele de propósito -- o trabalho foi feito e o
+         * cliente foi cobrado -- mas fica retido até o impedimento sair. A app
+         * avisa-o disso; este guarda é o que torna o aviso verdadeiro. Sem ele, o
+         * aviso é uma promessa que um clique distraído no backoffice desmente.
+         *
+         * 409 e não 422: o pedido está bem formado, o estado do técnico é que não
+         * permite. A mensagem é para o admin, na terceira pessoa -- a app fala com
+         * o técnico e tem as suas próprias palavras para a mesma regra.
+         */
+        if ($blocker = $vendor->payoutBlocker()) {
+            return new ApiErrorResponse(null, self::RAZAO_DA_RETENCAO[$blocker], 409);
         }
 
         $amount = $wallet->balance_float;
@@ -121,6 +149,11 @@ class VendorPaymentController extends Controller
             // zero seria indistinguível de "faturou 0 €".
             'total_invoiced' => $totais ? round(((int) $totais->faturado) / 100, 2) : null,
             'commission' => $totais ? round(((int) $totais->comissao) / 100, 2) : null,
+            // Porque e que este saldo nao se pode pagar. O dashboard tem de poder
+            // marcar a linha em vez de o admin descobrir pelo 409 depois de clicar --
+            // e o CODIGO diz-lhe qual dos tres impedimentos e, nao so que ha um.
+            'payout_blocked' => $vendor->payout_blocked,
+            'payout_blocker' => $vendor->payoutBlocker(),
         ];
     }
 }

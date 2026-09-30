@@ -114,9 +114,137 @@ class Vendor extends Model implements Auditable
                 ! $this->openServices()->exists() &&
                 $this->iban != null &&
                 $this->invoice_workspace != null &&
-                $this->at_valid &&
-                str_contains($this->at_user, '/');
+                // A AT SO A PARTIR DO QUARTO SERVICO — ver `atRequired()`.
+                //
+                // A ordem importa: `at_ready` primeiro, para quem ja a deu nao
+                // pagar a contagem de servicos. O `||` do PHP faz curto-circuito.
+                ($this->at_ready || ! $this->at_required);
         })->shouldCache();
+    }
+
+    /**
+     * Quantos serviços o profissional leva até ao fim antes de a AT ser exigida.
+     *
+     * Três, por decisão do André (30/09/2026). O acesso à AT obriga-o a sair da
+     * app, entrar no Portal das Finanças e criar um subutilizador — é o passo de
+     * maior fricção do registo inteiro, e estava a travar gente ANTES de ela ter
+     * ganho um único euro. Deixa de ser um portão à entrada e passa a ser uma
+     * condição para continuar.
+     *
+     * NÃO se aplica aos outros documentos. Cartão de Cidadão, Registo Criminal e
+     * Declaração de Início de Atividade continuam obrigatórios desde o dia zero:
+     * são de identidade e idoneidade, e sem eles não se manda ninguém a casa de
+     * um cliente. O acesso à AT é de FATURAÇÃO — só é preciso quando há mesmo o
+     * que faturar.
+     */
+    public const SERVICOS_ANTES_DA_AT = 3;
+
+    /**
+     * Serviços que o profissional levou até ao fim.
+     *
+     * Conta o trabalho FEITO, não o dinheiro recebido: `ClosedPendingPayment` é
+     * um serviço executado à espera de cobrança, e `Archived` é um fechado que o
+     * backoffice arrumou depois. Excluí-los deixaria o técnico a trabalhar de
+     * graça para lá dos três por uma razão administrativa que não é dele.
+     */
+    public function completedServices(): HasMany
+    {
+        return $this->services()->whereIn('status', [
+            ServiceStatus::CLOSED,
+            ServiceStatus::CLOSED_PENDING_PAYMENT,
+            ServiceStatus::ARCHIVED,
+        ]);
+    }
+
+    /** O acesso à AT está dado E validado. */
+    public function atReady(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => (bool) $this->at_valid && str_contains($this->at_user ?? '', '/')
+        )->shouldCache();
+    }
+
+    /**
+     * A AT já é exigida — os três primeiros serviços acabaram.
+     *
+     * Ao TERCEIRO concluído passa a ser: o quarto pedido já não chega a quem não
+     * a tiver dado.
+     */
+    public function atRequired(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->completedServices()->count() >= self::SERVICOS_ANTES_DA_AT
+        )->shouldCache();
+    }
+
+    /** Quantos serviços ainda pode fazer antes de a AT o travar. 0 = já trava. */
+    public function servicesUntilAtRequired(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => max(0, self::SERVICOS_ANTES_DA_AT - $this->completedServices()->count())
+        )->shouldCache();
+    }
+
+    /**
+     * O que impede a Piquet de transferir o dinheiro que já é dele. `null` = pode pagar.
+     *
+     * O trabalho conta, o cliente é cobrado e o técnico VÊ o dinheiro no saldo
+     * — só não o recebe enquanto isto não estiver resolvido. A regra é uma:
+     * **não se transfere dinheiro por trabalho que não se consegue faturar**.
+     *
+     * Três razões, por ordem de quem se resolve primeiro:
+     *
+     *  - `iban_missing` — não há para onde transferir. Literal.
+     *  - `fiscal_address_missing` — sem morada fiscal a conta de faturação não
+     *    se cria (rebenta no InvoiceXpress), e sem ela não há fatura.
+     *  - `at_user_missing` — sem o subutilizador não se comunica a fatura à AT.
+     *    Só a partir do 3.º serviço concluído (ver `atRequired()`).
+     *
+     * O QUE NÃO ENTRA, de propósito: `documents_pending` e `contact_unverified`.
+     * Estão no `invoicingBlocker()` porque travam o técnico de TRABALHAR, mas não
+     * travam a fatura de trabalho já feito. Reter o dinheiro de alguém porque o
+     * cartão de cidadão está a ser revalidado seria castigá-lo financeiramente
+     * por uma coisa que não impede pagar-lhe. Se um dia isto for "simplificado"
+     * para `invoicingBlocker() !== null`, é este parágrafo que se está a apagar.
+     */
+    public function payoutBlocker(): ?string
+    {
+        if (! $this->iban) {
+            return 'iban_missing';
+        }
+
+        if (! $this->addresses()->where('address_type', AddressType::FISCAL_ADDRESS)->exists()) {
+            return 'fiscal_address_missing';
+        }
+
+        // A AT só a partir do quarto serviço — ver `atRequired()`.
+        if ($this->at_required && ! $this->at_ready) {
+            return 'at_user_missing';
+        }
+
+        return null;
+    }
+
+    /** Atalho booleano do `payoutBlocker()`, para quem só precisa de sim/não. */
+    public function payoutBlocked(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->payoutBlocker() !== null)->shouldCache();
+    }
+
+    /**
+     * Quanto é que está retido por causa da AT, em cêntimos.
+     *
+     * É o saldo todo: a carteira do técnico só guarda a parte dele, e se o
+     * pagamento está travado está travado por inteiro. 0 quando não há nada
+     * retido -- seja porque não há bloqueio, seja porque a carteira está a zero.
+     */
+    public function payoutOnHoldAmount(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->payout_blocked
+                ? max(0, (int) ($this->user?->wallet?->balance ?? 0))
+                : 0
+        );
     }
 
     /**
@@ -195,12 +323,17 @@ class Vendor extends Model implements Auditable
             $reasons->push(__('backoffice/vendor.infolist.eligibility.no_workspace'));
         }
 
-        if (! $this->at_valid) {
-            $reasons->push(__('backoffice/vendor.infolist.eligibility.at_invalid'));
-        }
+        // A AT so conta como razao depois dos tres primeiros servicos. Antes
+        // disso nao e um impedimento, e listar-lha no backoffice fazia parecer
+        // que o processo dele estava parado quando nao estava.
+        if ($this->at_required) {
+            if (! $this->at_valid) {
+                $reasons->push(__('backoffice/vendor.infolist.eligibility.at_invalid'));
+            }
 
-        if (! str_contains($this->at_user ?? '', '/')) {
-            $reasons->push(__('backoffice/vendor.infolist.eligibility.at_user_invalid'));
+            if (! str_contains($this->at_user ?? '', '/')) {
+                $reasons->push(__('backoffice/vendor.infolist.eligibility.at_user_invalid'));
+            }
         }
 
         return $reasons;
@@ -439,7 +572,10 @@ class Vendor extends Model implements Auditable
             $this->all_documents_verified &&
             $this->iban != null &&
             $this->invoice_workspace != null &&
-            str_contains($this->at_user ?? '', '/');
+            // Mesma regra do portao: sem ela, quem ainda esta nos tres
+            // primeiros servicos podia aceitar pedidos mas nao aparecia na
+            // pesquisa — elegivel e invisivel ao mesmo tempo.
+            ($this->at_ready || ! $this->at_required);
     }
 
     public function toSearchableArray(): array
@@ -843,6 +979,12 @@ class Vendor extends Model implements Auditable
 
         if (! $this->addresses()->where('address_type', AddressType::FISCAL_ADDRESS)->exists()) {
             return 'fiscal_address_missing';
+        }
+
+        // Ultimo da lista de proposito: e o unico que aparece DEPOIS de o
+        // tecnico ja ter trabalhado. Os outros sao de entrada.
+        if ($this->at_required && ! $this->at_ready) {
+            return 'at_user_missing';
         }
 
         return null;

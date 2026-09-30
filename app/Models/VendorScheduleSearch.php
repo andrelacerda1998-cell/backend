@@ -168,7 +168,10 @@ class VendorScheduleSearch extends Model
             $vendor->all_documents_verified &&
             $vendor->iban != null &&
             $vendor->invoice_workspace != null &&
-            str_contains($vendor->at_user ?? '', '/') &&
+            // A AT so a partir do quarto servico (Vendor::SERVICOS_ANTES_DA_AT).
+            // Sem isto, quem esta nos tres primeiros aparecia no imediato mas
+            // nao no agendado — meio visivel, que e pior do que invisivel.
+            ($vendor->at_ready || ! $vendor->at_required) &&
             $hasScheduleAddress &&
             $hasScheduleAvailability;
     }

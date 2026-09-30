@@ -71,7 +71,9 @@ class UserController extends Controller
                  * com o técnico na segunda pessoa e tem as suas traduções. O
                  * backoffice traduz o mesmo código para a terceira pessoa.
                  * Valores: contact_unverified, documents_pending, iban_missing,
-                 * fiscal_address_missing, ou null quando está tudo pronto.
+                 * fiscal_address_missing, at_user_missing, ou null quando está
+                 * tudo pronto. O último é o único que aparece DEPOIS de ele já
+                 * ter trabalhado -- ver `Vendor::invoicingBlocker()`.
                  */
                 'account_blocker' => $vendor->invoicingBlocker(),
                 'iban' => $vendor->iban,
@@ -93,6 +95,32 @@ class UserController extends Controller
                     ->where('address_type', AddressType::SCHEDULE_ADDRESS)
                     ->first()?->name,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
+                /*
+                 * Os tres primeiros servicos nao exigem o acesso a AT.
+                 *
+                 * A app precisa dos dois para dizer a verdade ao tecnico em vez
+                 * de o mandar ao Portal das Financas no primeiro dia:
+                 *
+                 *  - `at_required` false  -> o passo e adiavel, e diz-se quantos
+                 *    servicos ainda pode fazer;
+                 *  - `at_required` true   -> passa a travar, e o `account_blocker`
+                 *    devolve `at_user_missing`.
+                 *
+                 * Ver `Vendor::SERVICOS_ANTES_DA_AT` para o porque dos tres.
+                 */
+                'at_required' => $vendor->at_required,
+                'services_until_at_required' => $vendor->services_until_at_required,
+                /*
+                 * O dinheiro dos serviços já feitos está retido, e porquê.
+                 *
+                 * Vai à parte do `account_blocker` de propósito: o blocker responde
+                 * "o que te falta para trabalhares", que é uma lista maior. Reter o
+                 * dinheiro de alguém porque o cartão de cidadão está a ser revalidado
+                 * seria castigá-lo por uma coisa que não impede pagar-lhe -- ver
+                 * `Vendor::payoutBlocker()`. Perguntas diferentes, respostas diferentes.
+                 */
+                'payout_blocked' => $vendor->payout_blocked,
+                'payout_blocker' => $vendor->payoutBlocker(),
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;
                 //  - aprovado mas com a semana a zero: dizer-lhe que há

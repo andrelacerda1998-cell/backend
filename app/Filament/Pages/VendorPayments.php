@@ -50,7 +50,20 @@ class VendorPayments extends Page implements HasForms, HasTable
                     ->copyable(),
                 TextColumn::make('user.wallet.balanceFloatNum')->label('Amount')->formatStateUsing(function ($state) {
                     return number_format($state, 2).'€';
-                })
+                }),
+                // Porque e que o botao esta desligado. Sem esta coluna o admin ve um
+                // "pay" cinzento e nao tem como saber que falta a AT ao tecnico.
+                TextColumn::make('payout_blocker')
+                    ->label('Retido')
+                    ->badge()
+                    ->state(fn (Vendor $record) => $record->payoutBlocker())
+                    ->formatStateUsing(fn (?string $state) => match ($state) {
+                        'iban_missing' => 'Sem IBAN',
+                        'fiscal_address_missing' => 'Sem morada fiscal',
+                        'at_user_missing' => 'Falta AT',
+                        default => '—',
+                    })
+                    ->color(fn (?string $state) => $state ? 'danger' : 'gray'),
             ])
             ->filters([
                 // ...
@@ -58,7 +71,38 @@ class VendorPayments extends Page implements HasForms, HasTable
             ->actions([
                 Action::make('pay')
                 ->requiresConfirmation()
+                /*
+                 * Nao se transfere dinheiro por trabalho que nao se consegue faturar.
+                 * O saldo fica na carteira do tecnico (o trabalho foi feito, o cliente
+                 * foi cobrado) e a app dele explica-lhe porque e que ainda nao recebeu.
+                 *
+                 * Desligar o botao E verificar dentro da acao: o botao e para o admin
+                 * ver, a verificacao e para o dinheiro. Um record que fique em cache no
+                 * ecra aberto enquanto o tecnico muda de estado passa pelo primeiro e
+                 * nao passa pelo segundo.
+                 */
+                ->disabled(fn (Vendor $record) => $record->payout_blocked)
+                ->tooltip(fn (Vendor $record) => match ($record->payoutBlocker()) {
+                    'iban_missing' => 'Retido: este tecnico nao tem IBAN.',
+                    'fiscal_address_missing' => 'Retido: falta a morada fiscal deste tecnico.',
+                    'at_user_missing' => 'Retido: falta o subutilizador da AT deste tecnico.',
+                    default => null,
+                })
                 ->action(function (Vendor $record) {
+                    if ($record->payout_blocked) {
+                        Notification::make()
+                            ->title('Pagamento retido')
+                            ->body(match ($record->payoutBlocker()) {
+                                'iban_missing' => 'Este tecnico nao tem IBAN. Nao ha para onde transferir.',
+                                'fiscal_address_missing' => 'Falta a morada fiscal, sem a qual nao se emite fatura. O saldo fica na carteira dele.',
+                                default => 'O tecnico ainda nao deu o acesso de subutilizador da AT. O saldo fica na carteira dele.',
+                            })
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
                     Mail::to($record->user->email)->send(new PaymentSentMail($record, $record->user->wallet->balanceFloat));
                     $record->user->notify(new PaymentSentNotification($record->user->wallet->balanceFloat));
                     $record->user->wallet->withdraw($record->user->wallet->balance, [
