@@ -322,6 +322,24 @@ class AdminVendorsApiTest extends TestCase
             'O modelo diz que pode aceitar; a métrica tem de dizer o mesmo.');
     }
 
+    /**
+     * O estado dos documentos vai por técnico, e não só na contagem agregada.
+     *
+     * Sem este campo, quem consome a API deduzia-o do `account_blocker` -- que
+     * devolve só o primeiro problema. Quem tem os contactos por verificar
+     * ficava por classificar, e o backoffice anunciava uma margem de erro de
+     * 220 quando a verdadeira eram 6.
+     */
+    public function test_it_says_whether_each_vendor_has_all_documents_verified(): void
+    {
+        $vendor = $this->makeVendor();
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors')
+            ->assertOk()
+            ->assertJsonPath('data.items.0.all_documents_verified', $vendor->all_documents_verified);
+    }
+
     public function test_metrics_computes_real_indicators(): void
     {
         $eligible = $this->makeEligibleVendor();
