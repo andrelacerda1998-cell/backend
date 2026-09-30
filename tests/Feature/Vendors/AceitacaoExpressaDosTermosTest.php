@@ -259,4 +259,50 @@ class AceitacaoExpressaDosTermosTest extends TestCase
         $this->assertSame('1.0', $dados['terms_version_required']);
         $this->assertNull($dados['terms_version_accepted']);
     }
+
+    // ------------------------ um relogio ja a correr, sem aceitacao
+
+    /**
+     * A JANELA REAL DE 30/09.
+     *
+     * O prazo foi para producao as 17:29 e a aceitacao so depois. Qualquer
+     * terceiro servico fechado nesse intervalo deixou um relogio a correr
+     * contra alguem que nunca viu a clausula.
+     *
+     * Verificar no arranque protege os casos novos. Este teste guarda os que ja
+     * existem: mesmo com o relogio a correr e o prazo expirado, sem aceitacao
+     * nao se tira dinheiro nenhum.
+     */
+    public function test_um_relogio_ja_a_correr_nao_executa_sem_aceitacao(): void
+    {
+        $vendor = $this->tecnico();
+        $this->aceitou($vendor);
+        $this->fecharTerceiroServico($vendor);
+
+        $this->assertNotNull($vendor->fresh()->at_deadline_started_at);
+
+        // Simula o estado da janela: relogio a correr, aceitacao inexistente.
+        TermsAcceptance::where('user_id', $vendor->user_id)->delete();
+
+        $this->travel(6)->days();
+        $this->artisan('vendors:executar-prazo-da-at')->assertSuccessful();
+
+        $this->assertSame(7500, $vendor->user->refresh()->balanceInt, 'o dinheiro fica');
+        $this->assertNull($vendor->fresh()->at_forfeited_at);
+    }
+
+    /** E tambem nao se avisa de uma perda que nao vai acontecer. */
+    public function test_nao_avisa_quem_nao_aceitou(): void
+    {
+        $vendor = $this->tecnico();
+        $this->aceitou($vendor);
+        $this->fecharTerceiroServico($vendor);
+        TermsAcceptance::where('user_id', $vendor->user_id)->delete();
+
+        Notification::fake();
+        $this->travel(4)->days(); // marco de 1 dia
+        $this->artisan('vendors:executar-prazo-da-at')->assertSuccessful();
+
+        Notification::assertNothingSent();
+    }
 }
