@@ -7,7 +7,7 @@ use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\GeneralSettings\Gender;
 use App\Models\Address;
-use App\Models\Document;
+use App\Models\GeneralSettings\Document;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
