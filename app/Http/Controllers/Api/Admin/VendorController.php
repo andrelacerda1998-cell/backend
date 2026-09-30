@@ -658,6 +658,20 @@ class VendorController extends Controller
              */
             'services_types' => $vendor->servicesTypes->pluck('name')->all(),
             'can_accept_service' => (bool) $vendor->can_accept_service,
+            /*
+             * Os documentos obrigatórios estão todos aprovados.
+             *
+             * Existia só numa contagem agregada (metrics.docComplete) e não
+             * por técnico. Sem isto, quem consome a API tinha de o DEDUZIR do
+             * `account_blocker` -- e esse devolve só o primeiro problema, por
+             * isso quem tem os contactos por verificar ficava por classificar.
+             *
+             * O backoffice andou a mostrar "o perfil completo pode estar até
+             * 220 abaixo do real" quando a margem verdadeira eram 6. Um número
+             * derivado obriga a anunciar uma incerteza, e a incerteza anunciada
+             * assusta mais do que o erro que esconde.
+             */
+            'all_documents_verified' => (bool) $vendor->all_documents_verified,
             'at_valid' => (bool) $vendor->at_valid,
             'at_validated_at' => $vendor->at_validated_at?->toIso8601String(),
             // Dados da empresa -- os mesmos do CompanySection do Filament. Sem
