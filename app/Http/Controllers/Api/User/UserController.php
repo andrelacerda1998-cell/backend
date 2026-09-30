@@ -93,6 +93,21 @@ class UserController extends Controller
                     ->where('address_type', AddressType::SCHEDULE_ADDRESS)
                     ->first()?->name,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
+                /*
+                 * Os tres primeiros servicos nao exigem o acesso a AT.
+                 *
+                 * A app precisa dos dois para dizer a verdade ao tecnico em vez
+                 * de o mandar ao Portal das Financas no primeiro dia:
+                 *
+                 *  - `at_required` false  -> o passo e adiavel, e diz-se quantos
+                 *    servicos ainda pode fazer;
+                 *  - `at_required` true   -> passa a travar, e o `account_blocker`
+                 *    devolve `at_user_missing`.
+                 *
+                 * Ver `Vendor::SERVICOS_ANTES_DA_AT` para o porque dos tres.
+                 */
+                'at_required' => $vendor->at_required,
+                'services_until_at_required' => $vendor->services_until_at_required,
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;
                 //  - aprovado mas com a semana a zero: dizer-lhe que há
