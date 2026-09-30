@@ -14,6 +14,7 @@ use App\Models\ServiceCandidate;
 use App\Notifications\Customer\MatchingCandidatesReadyNotification;
 use App\Notifications\Customer\MatchingFailedNotification;
 use App\Notifications\Vendor\MatchingInvitationNotification;
+use App\Notifications\Vendor\MatchingOutcomeNotification;
 use App\Settings\MatchingSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -439,11 +440,37 @@ class MatchingService
         ]);
 
         // Só o convite leva push. Os outros eventos (perdeu, pedido fechou) são
-        // informação de desfecho e chegam quando ele abrir a app — tocar-lhe o
-        // telemóvel para dizer que não ganhou seria castigá-lo por ter aceitado.
+        // informação de desfecho — tocar-lhe o telemóvel para dizer que não
+        // ganhou seria castigá-lo por ter aceitado.
         //
         // O websocket acima chega a quem tem a app aberta; este push é para
         // quem a tem fechada, que é a maioria enquanto trabalha.
+        //
+        // Mas o desfecho tem de FICAR REGISTADO. Este comentário dizia que
+        // chegava "quando ele abrir a app" e nada o levava lá: a função saía
+        // aqui sem escrever notificação nenhuma, e quem tivesse a app fechada
+        // no momento do evento abria-a e encontrava o cartão desaparecido da
+        // lista, sem explicação. Quem diz que sim e fica sem resposta aprende a
+        // não responder mais — que é exactamente o que os três eventos existem
+        // para evitar.
+        $outcome = match ($event) {
+            MatchingCandidateLostEvent::class => 'lost',
+            MatchingRequestClosedEvent::class => 'closed',
+            default => null,
+        };
+
+        if ($outcome !== null) {
+            try {
+                $candidate->vendor?->user?->notify(
+                    new MatchingOutcomeNotification($candidate, $outcome)
+                );
+            } catch (\Throwable $e) {
+                // O registo do desfecho não pode impedir o desfecho: quem perdeu
+                // já está marcado LOST na base de dados, e é isso que manda.
+                report($e);
+            }
+        }
+
         if ($event !== MatchingInvitationEvent::class) {
             return;
         }
@@ -477,13 +504,19 @@ class MatchingService
      * O prazo do CLIENTE: ate quando pode escolher e pagar.
      *
      * `null` enquanto ninguem aceitou — nao ha nada para escolher, e por isso
-     * nao ha relogio do cliente a correr. Ate la quem manda e o prazo global
-     * do pedido.
+     * nao ha relogio do cliente a correr. Ate la quem manda e o prazo da fase
+     * de convites (`request_deadline_seconds`).
      *
      * Conta do PRIMEIRO aceite, e nao da criacao: e esse o momento em que o
      * cliente passa a ter alguma coisa para decidir. Num personalizado pode
      * haver muito tempo entre uma coisa e outra — o backoffice tem de definir
      * a duracao e as categorias antes de alguem ser chamado.
+     *
+     * NAO E CORTADO pela fase de convites, em nenhum dos tres modos. O tempo
+     * que os profissionais levaram a responder e problema deles, nao do
+     * cliente: descontar-lho dava-lhe menos do que os 5 minutos prometidos, e
+     * quanto mais depressa alguem aceitasse mais tempo ele teria — o incentivo
+     * ao contrario. As duas fases tem orcamentos proprios, em cadeia.
      *
      * Um so metodo para os tres modos porque este valor e lido em tres sitios
      * — o `matching:advance` a decidir se mata o pedido, o mesmo comando a
@@ -507,33 +540,23 @@ class MatchingService
             return null;
         }
 
-        $deadline = Carbon::parse($readyAt)->addSeconds($this->customerWindowSeconds($service));
-
-        // No personalizado a hora do cliente manda sobre o tecto global — e a
-        // excepcao, e esta escrita no `matching:advance`.
-        if ($service->is_custom) {
-            return $deadline;
-        }
-
-        // Nos outros dois, o tecto corta primeiro e e ele que mata o pedido.
-        // Devolver a janela por modo sem o tecto era anunciar tempo que o
-        // cliente nao tem: a contagem no ecra mostrava 200 s enquanto o cron
-        // fechava o pedido aos 180 s a contar da criacao. Um contador que
-        // promete mais do que existe e pior do que nao ter contador.
-        $ceiling = $service->matchingStartedAt()?->copy()->addSeconds($this->settings->request_deadline_seconds);
-
-        return $ceiling && $ceiling->lt($deadline) ? $ceiling : $deadline;
+        return Carbon::parse($readyAt)->addSeconds($this->customerWindowSeconds($service));
     }
 
     /**
-     * Janela por modo — um TECTO por modo, nao o prazo real.
+     * Quanto tempo o cliente tem, por modo. E o prazo real, nao um tecto.
      *
-     * No imediato e no agendado quem manda e o prazo global do pedido: em
-     * ambos o cliente fica a espera do matching, escolhe, e so sai depois de
-     * pagar. Sao a mesma situacao, e nenhum destes numeros chega a morder.
+     * Cobre escolher E pagar, nos tres modos. Nao ha um segundo relogio a
+     * arrancar na escolha: um cliente que escolhe ao ultimo segundo nao ganha
+     * tempo por isso, e o contador que ele ve no ecra vale ate ao fim.
      *
-     * O personalizado e o unico diferente: a notificacao chega quando o
-     * cliente ja nao esta a espera dela, por isso ali este valor E o prazo.
+     * Imediato e agendado tem hoje o mesmo numero — em ambos o cliente fica a
+     * espera do matching, escolhe, e so sai depois de pagar. Ficam separados
+     * para poderem voltar a divergir se o trafego o justificar.
+     *
+     * O personalizado e o unico com razao para ser diferente: a notificacao
+     * chega quando o cliente ja nao esta a espera dela, e cinco minutos a
+     * partir de um push que ele pode nem ver matavam o pedido.
      */
     private function customerWindowSeconds(Service $service): int
     {
@@ -695,12 +718,19 @@ class MatchingService
                 : $this->settings->vendor_response_seconds_immediate
         );
 
-        // O prazo do convite nunca passa o PRAZO GLOBAL do pedido.
+        // O prazo do convite nunca passa o prazo da FASE DE CONVITES.
         //
-        // Sem isto, um convite agendado ficava de pe 20 minutos sobre um
-        // pedido que morre aos 3 — o profissional via um contador a dizer que
-        // tinha tempo, respondia, e recebia um erro porque o pedido ja tinha
-        // fechado. Pior do que nao ter sido convidado.
+        // Sem isto, um convite ficava de pe mais tempo do que o pedido — o
+        // profissional via um contador a dizer que tinha tempo, respondia, e
+        // recebia um erro porque o pedido ja tinha fechado. Pior do que nao ter
+        // sido convidado.
+        //
+        // Hoje o tecto (600 s) e muito mais largo do que o calendario das ondas
+        // (3 x 120 s) precisa, de proposito: e uma rede de seguranca, e nao um
+        // prazo. Se fosse colado ao calendario, o atraso do cron — que corre ao
+        // minuto — cortava a janela da ultima onda e o profissional convidado
+        // ao fim tinha menos de 120 s.
+        //
         // Do momento em que entrou em seleccao — num personalizado e o envio
         // pelo backoffice, nao a criacao.
         $deadline = $service->matchingStartedAt()?->copy()->addSeconds($this->settings->request_deadline_seconds);

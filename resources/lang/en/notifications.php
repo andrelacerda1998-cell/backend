@@ -120,6 +120,16 @@ return [
         // feel cheated when they lose — and stop replying.
         'description' => 'Tell us if you are available. The customer picks from whoever replies.',
     ],
+    'matchingOutcome' => [
+        'lost' => [
+            'title' => 'The customer chose someone else',
+            'description' => 'This request went to another professional. Thanks for replying.',
+        ],
+        'closed' => [
+            'title' => 'The request was cancelled',
+            'description' => 'The customer did not complete the payment in time. You are free to take other requests.',
+        ],
+    ],
     'customRequestDispatched' => [
         'title' => 'Your request is with the professionals',
         'description' => 'We read what you wrote and sent it out. We will let you know as soon as someone is available.',

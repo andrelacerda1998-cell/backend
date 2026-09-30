@@ -127,6 +127,24 @@ return [
         // profissional sentir-se enganado quando perde — e deixar de responder.
         'description' => 'Diz se tens disponibilidade. O cliente escolhe entre quem responder.',
     ],
+    /**
+     * O desfecho de um convite aceite. SEM PUSH, de proposito.
+     *
+     * Tocar-lhe o telemovel para dizer que nao ganhou seria castiga-lo por ter
+     * aceitado. Mas o silencio absoluto era pior: o cartao desaparecia da lista
+     * sem explicacao nenhuma, e quem diz que sim e fica sem resposta aprende a
+     * nao responder mais. Fica no historico, para estar la quando ele abrir a app.
+     */
+    'matchingOutcome' => [
+        'lost' => [
+            'title' => 'O cliente escolheu outro profissional',
+            'description' => 'Este pedido foi para outra pessoa. Obrigado por teres respondido.',
+        ],
+        'closed' => [
+            'title' => 'O pedido foi cancelado',
+            'description' => 'O cliente não concluiu o pagamento a tempo. Já podes aceitar outros pedidos.',
+        ],
+    ],
     'customRequest' => [
         'label' => 'o teu pedido personalizado',
     ],

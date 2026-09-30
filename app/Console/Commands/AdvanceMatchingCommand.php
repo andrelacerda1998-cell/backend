@@ -67,22 +67,21 @@ class AdvanceMatchingCommand extends Command
 
             $customerDeadline = $matching->customerDeadline($service);
 
-            // PRAZO GLOBAL — o pedido tem um fim conhecido desde que e criado.
+            // FASE DE CONVITES — enquanto ninguem aceitou, o pedido tem um fim
+            // conhecido a contar de quando entrou em seleccao.
             //
-            // Continua a cortar por cima de tudo, INCLUSIVE da janela de
-            // escolha, no imediato e no agendado: ali o cliente esta a olhar
-            // para o ecra, e quem disse que sim nao pode ficar preso a uma
-            // decisao que nao chega.
+            // Existe porque sem ele o pedido nao tinha fim nenhum antes do
+            // primeiro sim: o relogio do cliente so arranca ai, e ate la nada
+            // o matava a nao ser o esgotar das ondas.
             //
-            // A excepcao e o PERSONALIZADO depois do primeiro aceite. Ali
-            // podem passar horas entre pedir e haver profissionais — o
-            // backoffice tem de definir a duracao e as categorias antes de
-            // alguem ser chamado — e este tecto conta da criacao. A
-            // notificacao chegava ao telemovel com o pedido ja morto. Um prazo
-            // que comeca a contar antes de haver alguma coisa para decidir nao
-            // e um prazo de decisao: a partir dai manda o relogio do cliente,
-            // que e o mesmo que ele ve a contar no ecra.
-            $customerClockRules = $service->is_custom && $customerDeadline !== null;
+            // DEPOIS do primeiro sim manda o relogio do cliente, nos tres
+            // modos — e o mesmo que ele ve a contar no ecra. Este prazo deixa
+            // de contar, e nao lhe e descontado: o tempo que os profissionais
+            // levaram a responder e problema deles. Antes cortava por cima da
+            // escolha no imediato e no agendado, e a conta nao fechava — uma
+            // janela de resposta larga consumia o prazo inteiro e o cliente
+            // ficava com o que sobrasse, que no pior caso era nada.
+            $customerClockRules = $customerDeadline !== null;
 
             if (! $customerClockRules) {
                 $deadline = $service->matchingStartedAt()?->copy()->addSeconds($settings->request_deadline_seconds);
@@ -157,18 +156,21 @@ class AdvanceMatchingCommand extends Command
     /**
      * Serviços escolhidos que nunca chegaram a ser pagos.
      *
-     * Duas contas, porque sao duas promessas diferentes.
+     * UMA conta, porque e uma so promessa: o prazo do cliente cobre escolher E
+     * pagar. Nos tres modos.
      *
-     * Num pedido personalizado dissemos ao cliente que tem UMA HORA para
-     * escolher e pagar, e o relogio esta a andar no ecra dele desde o primeiro
-     * aceite. Um prazo proprio a comecar na escolha davas-lhe mais tempo do que
-     * o contador mostra — e um contador que chega a zero sem nada acontecer
-     * ensina o cliente a nao acreditar nele.
+     * Antes eram duas. No personalizado dissemos ao cliente que tem uma hora
+     * para as duas coisas, e o relogio anda no ecra dele desde o primeiro
+     * aceite; nos outros dois arrancava aqui um relogio novo na escolha, que
+     * somava por cima. Quem escolhesse ao ultimo segundo dos seus minutos
+     * ganhava cinco de bonus que o contador nunca mostrou — e um contador que
+     * chega a zero sem nada acontecer ensina o cliente a nao acreditar nele.
      *
-     * Nos outros, o prazo conta da escolha (`updated_at` do serviço, gravado no
-     * momento em que passou a AwaitingPayment). Não há coluna própria para isso
-     * e não vale a pena acrescentar uma: o serviço não muda por mais nenhuma
-     * razão enquanto está neste estado.
+     * O `checkout_seconds` sobrevive como tecto da fase de pagamento: continua
+     * a contar da escolha (`updated_at` do serviço, gravado no momento em que
+     * passou a AwaitingPayment — não há coluna própria para isso e não vale a
+     * pena acrescentar uma, o serviço não muda por mais nenhuma razão neste
+     * estado), mas só corta se for mais curto do que o que resta ao cliente.
      */
     /**
      * Pedidos personalizados esquecidos em análise.
@@ -250,9 +252,23 @@ class AdvanceMatchingCommand extends Command
         $count = 0;
 
         foreach ($stuck as $service) {
-            $deadline = $service->is_custom
-                ? $matching->customerDeadline($service)
-                : $service->updated_at?->copy()->addSeconds($settings->checkout_seconds);
+            $deadline = $matching->customerDeadline($service);
+
+            // O `checkout_seconds` e o TECTO da fase de pagamento, e nao um
+            // prazo proprio: se for mais curto do que o que sobra ao cliente,
+            // corta primeiro. Aos 300 s de hoje nunca corta — e por isso que
+            // esta a seguir e nao no lugar do prazo do cliente.
+            //
+            // No personalizado nao se aplica: ali a promessa e uma hora para
+            // escolher e pagar, e cinco minutos a contar da escolha eram um
+            // prazo que o cliente nunca viu em sitio nenhum.
+            if (! $service->is_custom) {
+                $checkout = $service->updated_at?->copy()->addSeconds($settings->checkout_seconds);
+
+                if ($checkout && (! $deadline || $checkout->lt($deadline))) {
+                    $deadline = $checkout;
+                }
+            }
 
             if (! $deadline || $deadline->isFuture()) {
                 continue;

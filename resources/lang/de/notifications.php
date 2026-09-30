@@ -117,6 +117,16 @@ return [
         'title' => 'Anfrage: ',
         'description' => 'Sag, ob du Zeit hast. Der Kunde wählt unter den Antworten aus.',
     ],
+    'matchingOutcome' => [
+        'lost' => [
+            'title' => 'Der Kunde hat jemand anderen gewählt',
+            'description' => 'Dieser Auftrag ging an eine andere Person. Danke für deine Antwort.',
+        ],
+        'closed' => [
+            'title' => 'Der Auftrag wurde storniert',
+            'description' => 'Der Kunde hat nicht rechtzeitig bezahlt. Du kannst wieder andere Aufträge annehmen.',
+        ],
+    ],
     'customRequest' => [
         'label' => 'deine individuelle Anfrage',
     ],

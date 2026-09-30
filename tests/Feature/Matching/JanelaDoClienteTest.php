@@ -29,10 +29,14 @@ use Tests\TestCase;
  * telemovel de um pedido que o cron ja tinha matado. Um prazo que comeca a
  * contar antes de haver alguma coisa para decidir nao e um prazo de decisao.
  *
- * Agora, no personalizado, a partir do primeiro aceite manda o relogio do
- * cliente — o mesmo que ele ve a contar no ecra. O que estes testes prendem e
- * isso, e a fronteira: nos outros dois modos o tecto global continua a cortar
- * por cima de tudo, que e o que o `PrazoGlobalDoPedidoTest` prova.
+ * A partir do primeiro aceite manda o relogio do cliente — o mesmo que ele ve a
+ * contar no ecra. O personalizado foi o primeiro modo a funcionar assim, e e o
+ * que estes testes prendem; hoje os tres funcionam assim (ver `DoisPrazosTest`).
+ *
+ * O que continua a distinguir o personalizado e o TAMANHO da janela: uma hora,
+ * em vez dos cinco minutos dos outros dois. A notificacao chega quando o cliente
+ * ja nao esta a espera dela, e cinco minutos a partir de um push que ele pode nem
+ * ver matavam o pedido.
  */
 class JanelaDoClienteTest extends TestCase
 {
@@ -47,13 +51,13 @@ class JanelaDoClienteTest extends TestCase
             'wave_size' => 6,
             'wave_interval_seconds' => 45,
             'max_waves' => 3,
-            'vendor_response_seconds_immediate' => 60,
-            'vendor_response_seconds_scheduled' => 1800,
-            'customer_choice_seconds' => 200,
-            'customer_choice_seconds_scheduled' => 1800,
+            'vendor_response_seconds_immediate' => 120,
+            'vendor_response_seconds_scheduled' => 120,
+            'customer_choice_seconds' => 300,
+            'customer_choice_seconds_scheduled' => 300,
             'customer_choice_seconds_custom' => 3600,
             'checkout_seconds' => 300,
-            'request_deadline_seconds' => 180,
+            'request_deadline_seconds' => 600,
             'rating_bands' => [4.5, 4.0, 3.0],
             'new_vendor_min_ratings' => 5,
             'require_recent_activity_minutes' => 15,
@@ -160,12 +164,12 @@ class JanelaDoClienteTest extends TestCase
     /**
      * O prazo ANUNCIADO ao cliente tem de ser o prazo a serio.
      *
-     * Num imediato ou agendado quem mata o pedido e o tecto global, que conta
-     * da criacao. A janela por modo conta do primeiro aceite — sempre mais
-     * tarde — por isso devolve-la sozinha anunciava tempo que nao existe: a
-     * contagem no ecra mostrava 200 s enquanto o cron fechava o pedido aos 180.
+     * Num imediato ou agendado sao os cinco minutos a contar do primeiro sim, e
+     * nada os encurta: o tempo que os profissionais levaram a responder e
+     * problema deles. Aqui o pedido foi criado ha 60 s e o sim chegou ha 30 —
+     * faltam 270.
      */
-    public function test_num_pedido_normal_o_prazo_anunciado_e_o_tecto_global(): void
+    public function test_num_pedido_normal_o_prazo_anunciado_sao_os_minutos_do_cliente(): void
     {
         $service = Service::factory()->create(['status' => ServiceStatus::MATCHING]);
         $service->forceFill([
@@ -177,9 +181,7 @@ class JanelaDoClienteTest extends TestCase
 
         $deadline = app(MatchingService::class)->customerDeadline($service->refresh());
 
-        // Tecto: criacao + 180 s => faltam 120 s.
-        // Janela do imediato: aceite + 180 s => faltaria mais. Ganha o tecto.
-        $this->assertEqualsWithDelta(now()->addSeconds(120)->timestamp, $deadline->timestamp, 2);
+        $this->assertEqualsWithDelta(now()->addSeconds(270)->timestamp, $deadline->timestamp, 2);
     }
 
     /**
@@ -190,11 +192,11 @@ class JanelaDoClienteTest extends TestCase
     {
         $service = Service::factory()->create(['status' => ServiceStatus::MATCHING]);
         $service->forceFill([
-            'created_at' => now()->subSeconds(181),
-            'candidates_ready_at' => now()->subSeconds(60),
+            'created_at' => now()->subSeconds(340),
+            'candidates_ready_at' => now()->subSeconds(301),
         ])->saveQuietly();
 
-        $this->aceite($service->refresh(), '60 seconds');
+        $this->aceite($service->refresh(), '301 seconds');
 
         $this->assertTrue(app(MatchingService::class)->customerDeadline($service->refresh())->isPast());
 

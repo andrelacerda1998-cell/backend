@@ -26,41 +26,51 @@ class MatchingSettings extends Settings
     /** Até onde vai antes de desistir e dizer "tenta outra vez". */
     public int $max_waves;
 
-    /** Janela de resposta do profissional num pedido imediato (igual à de hoje). */
+    /**
+     * Janela de resposta do profissional, em segundos.
+     *
+     * Os dois modos tem hoje o MESMO numero: a pergunta que se faz muda
+     * ("podes agora?" ou "podes quinta as 15h?"), o tempo para responder nao.
+     * Ficam separados para poderem voltar a divergir se o trafego o justificar.
+     */
     public int $vendor_response_seconds_immediate;
 
-    /** Janela de resposta num pedido agendado — há tempo, não há pressa. */
+    /** O mesmo, num pedido agendado. Ver acima: hoje é o mesmo valor. */
     public int $vendor_response_seconds_scheduled;
 
-    /** Quanto tempo o cliente tem para escolher, num pedido imediato. */
     /**
-     * Prazo GLOBAL do pedido, em segundos, a contar de quando o cliente o faz.
+     * Prazo da FASE DE CONVITES, em segundos, a contar de quando o pedido entra
+     * em seleção.
      *
-     * Vale para imediato e agendado. E um tecto: as janelas por modo
-     * (`vendor_response_seconds_*`, `customer_choice_seconds*`) continuam a
-     * valer, mas nenhuma pode levar o pedido para alem disto.
+     * Vale enquanto ninguém aceitou. Depois do primeiro sim manda o relógio do
+     * cliente (`customer_choice_seconds*`), que não é cortado por este número:
+     * as duas fases têm orçamentos próprios, em cadeia.
      *
-     * Existe porque o relogio do cliente so arrancava no primeiro aceite — ate
-     * la o pedido nao tinha fim conhecido, e no agendado podia ficar meia hora
-     * em silencio antes de a escolha sequer comecar.
+     * Existe porque o relógio do cliente só arranca no primeiro aceite — até lá
+     * o pedido não tinha fim conhecido a não ser o esgotar das ondas.
+     *
+     * É uma REDE DE SEGURANÇA, e não uma promessa. Está deliberadamente muito
+     * acima do que o calendário das ondas precisa: colá-lo a esse calendário
+     * fazia o atraso do cron (corre ao minuto) cortar a janela da última onda, e
+     * o profissional convidado ao fim tinha menos tempo do que os outros.
      */
     public int $request_deadline_seconds;
 
+    /**
+     * Quanto tempo o cliente tem para escolher E pagar, num pedido imediato.
+     *
+     * É o prazo a sério: nem é cortado pela fase de convites, nem lhe é somado
+     * um segundo relógio na escolha. É o número que o contador mostra no ecrã.
+     */
     public int $customer_choice_seconds;
 
     /**
-     * O mesmo, num pedido agendado.
+     * O mesmo, num pedido agendado — e hoje é o MESMO valor do imediato.
      *
-     * ATENCAO: hoje este valor nao chega a morder, tal como o do imediato. A
-     * escolha conta do primeiro aceite, que e sempre DEPOIS da criacao, por
-     * isso qualquer valor >= `request_deadline_seconds` e cortado pelo tecto.
-     * Sao tectos por modo, nao prazos — mexer aqui so tem efeito depois de
-     * mexer no tecto.
-     *
-     * A razao de existir separado ja nao se aplica. Foi escrito a pensar num
-     * cliente que marcava para quinta-feira e fechava a app; mas no agendado
-     * ele espera pelo matching, escolhe e so fecha depois de pagar — a mesma
-     * situacao do imediato.
+     * A razão de existir separado já não se aplica. Foi escrito a pensar num
+     * cliente que marcava para quinta-feira e fechava a app; mas no agendado ele
+     * espera pelo matching, escolhe e só fecha depois de pagar — a mesma
+     * situação do imediato. Fica para poder voltar a divergir.
      */
     public int $customer_choice_seconds_scheduled;
 
@@ -88,7 +98,16 @@ class MatchingSettings extends Settings
      */
     public int $custom_review_deadline_weekdays;
 
-    /** Quanto tempo tem para pagar depois de escolher. */
+    /**
+     * TECTO da fase de pagamento, a contar da escolha — não um prazo próprio.
+     *
+     * O prazo do cliente (`customer_choice_seconds*`) já cobre escolher E pagar.
+     * Este número só corta se for MAIS CURTO do que o que resta ao cliente; ao
+     * valor de hoje nunca corta primeiro.
+     *
+     * Não se aplica ao personalizado, onde a promessa feita ao cliente é uma
+     * hora para as duas coisas.
+     */
     public int $checkout_seconds;
 
     /**
