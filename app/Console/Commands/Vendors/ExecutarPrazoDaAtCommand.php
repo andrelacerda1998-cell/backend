@@ -65,6 +65,12 @@ class ExecutarPrazoDaAtCommand extends Command
                 continue;
             }
 
+            // Não se avisa de uma perda que não vai acontecer: sem aceitação a
+            // execução ignora-o, e o aviso seria uma ameaça vazia.
+            if (! $vendor->aceitou_os_termos_em_vigor) {
+                continue;
+            }
+
             $this->line("  aviso a {$dias} dia(s): vendor #{$vendor->id} ({$vendor->payout_on_hold_amount} cent)");
             $avisados++;
 
@@ -83,6 +89,26 @@ class ExecutarPrazoDaAtCommand extends Command
 
         foreach ($this->comPrazoACorrer() as $vendor) {
             if (! $vendor->prazo_da_at_expirado) {
+                continue;
+            }
+
+            /*
+             * SEGUNDA VERIFICAÇÃO DA ACEITAÇÃO, e não é redundante.
+             *
+             * O `comecarPrazoDaAtSeNecessario()` já não arranca o relógio a
+             * quem não aceitou. Mas um relógio que já esteja a correr não
+             * desaparece — e houve uma janela real em que isso aconteceu: o
+             * prazo foi para produção às 17:29 de 30/09 e a aceitação só
+             * depois. Qualquer terceiro serviço fechado nesse intervalo deixou
+             * um relógio a correr contra alguém que nunca viu a cláusula.
+             *
+             * Verificar no arranque protege os casos novos; verificar AQUI
+             * protege os que já existem. É aqui que o dinheiro sai, e é aqui
+             * que a pergunta tem de voltar a ser feita.
+             */
+            if (! $vendor->aceitou_os_termos_em_vigor) {
+                $this->line("  ignorado (sem aceitação dos Termos): vendor #{$vendor->id}");
+
                 continue;
             }
 
