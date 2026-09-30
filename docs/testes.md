@@ -140,3 +140,35 @@ desaparecem antes de alguém as ler.
 `RefreshDatabase` antes de qualquer coisa que leia a base. Hoje põe (os Unit
 puros correm primeiro). Se algum dia aparecer um teste a ler dados sem
 estratégia e a correr cedo, vai ler o lixo da corrida anterior.
+
+## A fila local fica com código velho
+
+Sintoma: uma notificação nova aparece no histórico com a CHAVE de tradução em
+vez do texto.
+
+```
+titulo: notifications.matchingOutcome.lost.title
+corpo:  notifications.matchingOutcome.lost.description
+```
+
+Não é bug de código nem chave em falta — o `__()` resolve bem se o correres no
+tinker. É o worker da fila: as notificações implementam `ShouldQueue`, correm
+no worker, e um `php artisan queue:work` lançado à mão fica de pé com o código
+(e os ficheiros de idioma) que existiam quando arrancou. Apanhado a 30/09 com
+um worker de dois dias antes.
+
+```bash
+docker compose exec -T laravel.test pkill -f "queue:work"
+docker compose exec -T -d laravel.test php artisan queue:work --tries=1
+```
+
+**Em produção isto não acontece**, e vale a pena saber porquê para não se andar
+à procura: lá a fila é o Horizon sob supervisor, e o deploy troca a tag da
+imagem e faz `docker compose up -d laravel-prod` — o contentor é recriado, o
+supervisor arranca de novo e o Horizon nasce com o código novo. Não é preciso
+`queue:restart` nem `horizon:terminate` no entrypoint (e ali seria inútil: no
+momento em que o entrypoint corre, o Horizon ainda não arrancou).
+
+O que quebraria isto seria um deploy que atualizasse o código SEM recriar o
+contentor. O pipeline não faz isso; se algum dia passar a fazer, este parágrafo
+deixa de ser verdade.
