@@ -966,10 +966,23 @@ class Vendor extends Model implements Auditable
                     $missingFiles->add([
                         'id' => $document->id,
                         'name' => $document->name,
-                        'reason' => VendorDocuments::where('document_id', $document->id)
+                        /*
+                         * O motivo de recusa DESTE técnico, e não de outro
+                         * qualquer.
+                         *
+                         * Faltava o `where('vendor_id')`. A consulta apanhava
+                         * a recusa mais recente de QUALQUER técnico para
+                         * aquele tipo de documento -- e isto vai para a app
+                         * do próprio, no GET /me. Um técnico que nunca
+                         * submeteu nada via o motivo escrito à mão a outra
+                         * pessoa ("foto ilegível", "documento de terceiro"),
+                         * como se fosse sobre ele.
+                         */
+                        'reason' => VendorDocuments::where('vendor_id', $this->id)
+                            ->where('document_id', $document->id)
                             ->where('status', 'declined')
-                            ?->latest()
-                            ?->value('reason') ?? null,
+                            ->latest()
+                            ->value('reason'),
                     ]);
                 }
             });
