@@ -1,67 +1,66 @@
+# Resposta ao Payshop — Google Pay (enviada a 30/09/2026)
+
+Este ficheiro é o que foi ENVIADO, palavra por palavra. Houve um rascunho mais
+longo, com cinco pedidos e a explicação detalhada de cada correção; ficou em
+git (commit `85a1fc9`) e não foi enviado. Guarda-se a versão real para que
+daqui a semanas ninguém confunda o que foi pedido com o que ficou por pedir.
+
+O que foi cortado face ao rascunho, e que continua por perguntar ao Payshop:
+
+- se o `cardFundingSource` do exemplo deles é obrigatório (não existe no
+  `CardInfo` documentado pelo Google, não temos de onde o preencher);
+- o detalhe do cálculo do `validation_hash` — campos excluídos, ordem de
+  serialização, codificação — que vai abaixo numa linha só, sem detalhe;
+- a identificação do terceiro serviço do sandbox, `A33E…8214`.
+
+---
+
 Boa tarde,
 
-Obrigado pelo exemplo — foi o que permitiu encontrar o problema. Tinham razão:
-o payload estava incorreto. Encontrámos **três** diferenças face ao exemplo que
-enviaram e corrigimo-las todas.
+Obrigado pelo exemplo — foi com ele que encontrámos o problema. Tinham razão,
+o payload estava errado, e já está corrigido:
 
-## O que estava errado do nosso lado
+1. **Faltava o envelope** — enviávamos só o `token` em vez do objeto
+   `PaymentData` completo.
+2. **O token ia reformatado** — a biblioteca que usamos fazia `JSON.parse` do
+   `signedMessage`, o que quebra a assinatura do Google. Passámos a enviar a
+   string original intacta.
+3. **O `payload` ia como objeto** — agora vai como string, e sem escapar as
+   barras.
 
-**1. Faltava o envelope.** Estávamos a enviar apenas o conteúdo de
-`paymentMethodData.tokenizationData.token`, em vez do objeto `PaymentData`
-completo. A biblioteca que usamos na app expõe um campo com nome enganador
-(`androidPayToken`) que contém só o token, não o objeto que o Google devolve.
-
-**2. O token ia reformatado.** Esta foi a mais subtil, e agradecemos que o
-vosso exemplo a tenha exposto. A mesma biblioteca faz `JSON.parse` dos campos
-`signedMessage` e `intermediateSigningKey.signedKey` e devolve-os como objetos.
-Como a assinatura do Google é calculada sobre aquelas strings exactas, voltar a
-serializá-las produzia bytes diferentes — e a verificação teria falhado do vosso
-lado mesmo com o envelope correto. Passámos a usar a string original intacta.
-
-**3. O payload ia como objeto, não como string.** No vosso exemplo o campo é
-`"payload": "{...}"`, ou seja um JSON serializado dentro de uma string. Nós
-enviávamo-lo aninhado no corpo do pedido. Corrigido, e a serializar sem escapar
-as barras (`/` e não `\/`), uma vez que o token traz base64 com barras.
-
-## O que enviamos agora
+É este o formato que enviamos agora:
 
 ```
 {
+  "signature": "<a nossa>",
   "order_uuid": "...",
   "wallet": "GOOGLEPAY",
-  "payload": "{\"apiVersion\":2,\"apiVersionMinor\":0,\"paymentMethodData\":{\"description\":\"VISA •••• 4000\",\"info\":{\"billingAddress\":{...},\"cardDetails\":\"4000\",\"cardNetwork\":\"VISA\"},\"tokenizationData\":{\"token\":\"<a string original do Google, intacta>\",\"type\":\"PAYMENT_GATEWAY\"},\"type\":\"CARD\"}}"
+  "payload": "{\"apiVersion\":2,...,\"tokenizationData\":{\"token\":\"<string original do Google>\",\"type\":\"PAYMENT_GATEWAY\"},\"type\":\"CARD\"}"
 }
 ```
 
-**Podem confirmar que é este o formato que esperam?** Se houver algum campo
-obrigatório que não estejamos a preencher, agradecemos que o indiquem.
+**Precisamos de três coisas para fechar isto:**
 
-## O que continua a bloquear-nos
+**1. Os identificadores.** Dizem que "o valor é fixo e igual para todos os
+comerciantes", mas não indicam qual. Precisamos do valor literal do
+`gatewayMerchantId` (Google Pay) e do `merchant id` da Apple Pay. Sem eles as
+carteiras ficam paradas, e não os queremos adivinhar.
 
-Na vossa mensagem indicam que "o valor é fixo e igual para todos os
-comerciantes", mas não nos indicam **qual é esse valor**.
+**2. O `payment/wallet` devolve `validation_hash`?** O sintoma que reportámos
+foi a ausência desse campo. Assumimos que era do payload — mas se aquele
+endpoint simplesmente não assina as respostas, a nossa correção não muda nada.
+Uma resposta sim/não poupa-nos outra ronda.
 
-Assumimos que se refere ao **`gatewayMerchantId`** que o Google Pay exige na
-configuração do gateway (a par de `gateway: "paynopain"`). Não queremos
-adivinhá-lo: hoje temos esse campo com um valor deliberadamente inválido, porque
-um valor plausível mas errado passaria despercebido na app e só falharia do
-vosso lado, depois de o cliente já ter autenticado o pagamento.
+**3. Como testamos?** Em `environment: TEST` a biblioteca devolve o token
+**vazio** — não conseguimos sequer construir um payload. O vosso sandbox aceita
+tokens TEST, ou devemos usar `PRODUCTION` contra ele?
 
-**Pedimos que nos indiquem, em texto, o valor literal a usar em:**
+Continuam também por responder os pontos sobre o cálculo do `validation_hash`
+da mensagem anterior, e o PAN de teste para autorização recusada.
 
-1. `gatewayMerchantId` — para a configuração do Google Pay;
-2. `merchant id` da **Apple Pay** — para registar nas credenciais da app.
-
-Sem estes dois, as carteiras ficam paradas do nosso lado, mesmo com o payload
-corrigido.
-
-## A seguir
-
-Assim que tivermos o `gatewayMerchantId`, fazemos um pagamento real com Google
-Pay no sandbox e confirmamos convosco se a resposta passa a trazer o
-`validation_hash` preenchido. Até lá, a correção está feita mas não está
-provada contra o vosso ambiente — e não a damos por fechada sem isso.
+Assim que tivermos o `gatewayMerchantId`, fazemos um pagamento real e
+confirmamos convosco.
 
 Obrigado,
 André Lacerda
-Piquet
+Piquet Technologies Lda
