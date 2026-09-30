@@ -125,6 +125,31 @@ class CheckoutComCarteiraTest extends TestCase
         ];
     }
 
+    /**
+     * Uma string ja pronta passa intacta.
+     *
+     * E o caso real do Apple Pay. Codifica-la outra vez dava um JSON dentro de
+     * um JSON, e o Payshop recusaria -- o mesmo erro que acabamos de corrigir,
+     * so que ao contrario.
+     */
+    public function test_um_payload_que_ja_e_string_nao_e_codificado_outra_vez(): void
+    {
+        $falsa = $this->carteiraFalsa();
+        $cru = '{"data":"abc","version":"EC_v1"}';
+
+        $this->cobrador()->processWalletPayment(
+            $this->clienteFalso(),
+            Service::factory()->create(),
+            null,
+            $this->totais(),
+            Wallet::APPLE_PAY,
+            $cru,
+            '62.43.214.55',
+        );
+
+        $this->assertSame($cru, $falsa->recebido['payload']);
+    }
+
     public function test_paga_a_ordem_com_o_payload_da_carteira(): void
     {
         $falsa = $this->carteiraFalsa();
@@ -143,7 +168,9 @@ class CheckoutComCarteiraTest extends TestCase
         $this->assertNull($url, 'O Apple Pay não pede 3DS.');
         $this->assertSame('1F405EA3-9798-42A6-9E87-BD347EF67F55', $falsa->recebido['orderUuid']);
         $this->assertSame(Wallet::APPLE_PAY, $falsa->recebido['wallet']);
-        $this->assertSame(['paymentData' => ['data' => 'cifrado']], $falsa->recebido['payload']);
+        // O Payshop quer o payload como STRING, nao como objeto aninhado (resposta
+        // deles de 30/09). Este teste fixava o formato antigo.
+        $this->assertSame('{"paymentData":{"data":"cifrado"}}', $falsa->recebido['payload']);
         $this->assertSame('62.43.214.55', $falsa->recebido['customerIp']);
 
         $this->assertSame(PaymentStatus::PAID, $servico->fresh()->payment_status);
