@@ -1,0 +1,75 @@
+name: Limpar corridas de deploy presas
+
+# Cancela corridas do deploy que ficaram na fila ou à espera de aprovação
+# durante horas, porque uma corrida nesse estado OCUPA o grupo de concorrência
+# `deploy-production` e impede todas as seguintes de correr.
+#
+# O QUE ACONTECEU, e que motivou isto: a 29/09 às 21:04 uma corrida ficou em
+# `waiting` -- à espera da aprovação do ambiente `production`, que nunca veio.
+# A partir daí nenhum deploy passou. Em 24 horas foram 30 corridas canceladas,
+# zero sucessos, e sete merges ficaram por publicar sem ninguém dar por isso:
+# uma corrida cancelada não avisa ninguém, e quem olhasse para a lista via
+# "cancelled" e assumia que alguém tinha cancelado de propósito.
+#
+# Só cancela o que está em `queued` ou `waiting`. NUNCA toca numa corrida
+# `in_progress`: essa está a fazer `docker compose up` no servidor, e cortá-la
+# a meio deixa produção num estado que ninguém pediu -- que é a razão de o
+# workflow de deploy ter `cancel-in-progress: false`.
+
+on:
+  schedule:
+    # Uma vez por dia, de manhã. Não precisa de ser mais: o que isto apanha
+    # são corridas paradas há horas, não soluços de minutos.
+    - cron: "40 7 * * *"
+  workflow_dispatch:
+
+# De propósito SEM o grupo `deploy-production`: isto existe para DESTRAVAR
+# esse grupo. Se entrasse nele, ficava atrás da corrida que vem destravar.
+permissions:
+  actions: write
+
+jobs:
+  limpar:
+    name: Cancelar as que estão paradas há muito tempo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Cancelar corridas em fila ou à espera há mais de 6 horas
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Seis horas: folgado o suficiente para nunca apanhar uma aprovação
+          # que alguém vá dar no mesmo dia de trabalho, e curto o suficiente
+          # para o estrago não passar de uma noite.
+          LIMITE=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "A cancelar corridas de deploy criadas antes de ${LIMITE}."
+
+          total=0
+          for estado in queued waiting; do
+            # O `--jq` filtra do lado do gh; nada aqui vem de input do
+            # utilizador, por isso não há nada a interpolar às cegas.
+            ids=$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?status=${estado}&per_page=100" \
+              --jq ".workflow_runs[] | select(.created_at < \"${LIMITE}\") | .id")
+
+            for id in $ids; do
+              echo "  cancelar ${id} (${estado})"
+              gh api --method POST "repos/${REPO}/actions/runs/${id}/cancel" --silent || \
+                echo "    não deu para cancelar ${id} (pode já ter mudado de estado)" >&2
+              total=$((total + 1))
+            done
+          done
+
+          if [ "$total" -eq 0 ]; then
+            echo "Nenhuma presa. A fila está livre."
+          else
+            echo "Canceladas ${total}."
+          fi
+
+          {
+            echo "### Corridas de deploy presas"
+            echo ""
+            echo "Canceladas: **${total}**"
+          } >> "$GITHUB_STEP_SUMMARY"
