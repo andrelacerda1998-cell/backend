@@ -89,15 +89,54 @@ docker compose exec -T -e DB_DATABASE=piquet_test laravel.test \
 
 ## As três estratégias de base de dados
 
-Convive lá dentro mais do que uma, e vale a pena saber qual é qual:
+Convive lá dentro mais do que uma:
 
 | estratégia | classes | o que faz |
 |---|---|---|
 | `RefreshDatabase` | 94 | transação por teste, revertida no fim |
-| `DatabaseTruncation` | 19 | `TRUNCATE` a tudo antes de cada teste |
-| nenhuma | 21 | **grava em definitivo** |
+| `DatabaseTruncation` | 19 | `TRUNCATE` a tudo ANTES de cada teste |
+| nenhuma | 21 | não tocam na base — são testes puros |
 
-As 21 sem estratégia nenhuma deixam dados para trás entre corridas. Não é o que
-causava o problema acima, mas é dívida a sério: um teste que dependa do que
-outro deixou passa a falhar conforme a ordem. Quem mexer numa delas, aproveite
-e ponha-lhe `RefreshDatabase`.
+### Não converter as 19 para `RefreshDatabase`
+
+Parece dívida técnica. **Não é.** Foi tentado e medido em 30/09/2026:
+
+```
+Tests: 31 failed (0 assertions)
+
+SQLSTATE[42S01]: Base table or view already exists: 1050
+  Table 'users' already exists   ← create table a colidir consigo próprio
+SQLSTATE[42S02]: Table 'piquet_test.migrations' doesn't exist
+```
+
+Estes testes exercitam código que faz **commit** (carteiras, transações,
+liquidações). Um commit fecha a transação que o `RefreshDatabase` abriu, e o
+framework reage assim:
+
+```php
+// RefreshDatabase.php
+if ($connection->getPdo() && ! $connection->getPdo()->inTransaction()) {
+    RefreshDatabaseState::$migrated = false;   // força migrate:fresh no seguinte
+}
+```
+
+Resultado: um `migrate:fresh` por teste, a derrubar e recriar 79 tabelas de
+cada vez, a colidir consigo próprio e a deixar o esquema partido.
+
+`DatabaseTruncation` existe exactamente para isto: limpa sem transação nenhuma,
+por isso não há transação para partir.
+
+### O que elas deixam para trás, e porque não faz mal
+
+O `DatabaseTruncation` limpa ANTES de cada teste, nunca depois do último. No fim
+de uma corrida ficam ~11 tabelas com as linhas do último teste a correr (hoje,
+o `ServiceExtrasFlowTest`).
+
+Não faz mal porque a corrida seguinte começa com um `migrate:fresh` — o
+`RefreshDatabase` dispara-o no primeiro teste de cada processo. As sobras
+desaparecem antes de alguém as ler.
+
+É frágil, isso sim: a segurança depende de a ordem de execução pôr um teste de
+`RefreshDatabase` antes de qualquer coisa que leia a base. Hoje põe (os Unit
+puros correm primeiro). Se algum dia aparecer um teste a ler dados sem
+estratégia e a correr cedo, vai ler o lixo da corrida anterior.
