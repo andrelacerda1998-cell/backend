@@ -432,11 +432,26 @@ class VendorController extends Controller
      */
     private function eligibleVendorIds()
     {
+        /*
+         * O PRÉ-FILTRO EM SQL SÓ PODE CONTER O QUE `canAcceptService` EXIGE
+         * SEMPRE. Serve para não carregar 460 vendors da base de dados e
+         * avaliar o atributo em cada um -- é performance, não é a regra.
+         *
+         * Tinha aqui `at_valid = true` e `at_user like '%/%'`. Era verdade até
+         * 30/09/2026, quando a AT passou a ser exigida só a partir do quarto
+         * serviço (`at_ready || ! at_required`). O filtro ficou para trás, e
+         * passou a ESCONDER técnicos que já podem trabalhar: o backoffice
+         * mostrava 41 elegíveis onde havia 69, e uma taxa de elegibilidade de
+         * 8,9% em vez de 15%.
+         *
+         * A lição não é "faltou atualizar": é que duplicar uma regra em SQL
+         * para ir mais depressa cria uma segunda cópia que ninguém se lembra
+         * de mudar. O que sobra aqui são as condições que não dependem de
+         * contagens nem de datas.
+         */
         $candidates = $this->baseQuery()
             ->whereNotNull('iban')
             ->where('invoice_workspace', '!=', '')
-            ->where('at_valid', true)
-            ->where('at_user', 'like', '%/%')
             ->whereDoesntHave('services', fn ($q) => $q
                 ->whereIn('status', [ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED])
                 ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING])

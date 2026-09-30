@@ -293,6 +293,35 @@ class AdminVendorsApiTest extends TestCase
         ]);
     }
 
+    /**
+     * O contador de elegíveis tem de seguir a regra da AT, não uma cópia dela.
+     *
+     * A AT passou a ser exigida só a partir do quarto serviço (30/09/2026),
+     * mas o pré-filtro SQL do `eligibleVendorIds()` continuava a exigir
+     * `at_user like '%/%'`. Resultado: o backoffice mostrava 41 elegíveis onde
+     * havia 69, e escondia 28 técnicos que já podiam trabalhar.
+     *
+     * Este teste existe para a cópia não voltar: quem mexer no pré-filtro tem
+     * de o manter compatível com `canAcceptService`.
+     */
+    public function test_a_vendor_without_at_counts_as_eligible_before_the_fourth_service(): void
+    {
+        // Tudo aprovado menos a AT, e sem serviços concluídos.
+        $semAt = $this->makeVendor([], [
+            'invoice_workspace' => 'ws-'.uniqid(),
+            'at_valid' => false,
+            'at_user' => null,
+        ]);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.eligible', 1);
+
+        $this->assertTrue($semAt->fresh()->can_accept_service,
+            'O modelo diz que pode aceitar; a métrica tem de dizer o mesmo.');
+    }
+
     public function test_metrics_computes_real_indicators(): void
     {
         $eligible = $this->makeEligibleVendor();
