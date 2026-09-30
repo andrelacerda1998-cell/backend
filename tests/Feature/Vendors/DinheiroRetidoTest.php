@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Vendors;
 
+use App\Enums\Services\AddressType;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\GeneralSettings\Gender;
+use App\Models\Address;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
@@ -15,7 +17,7 @@ use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
- * O trabalho conta, o dinheiro entra na carteira, e não sai até a AT ser dada.
+ * O trabalho conta, o dinheiro entra na carteira, e não sai até se poder faturar.
  *
  * Esta é a regra que o dono do produto pediu, por palavras dele: os três
  * primeiros serviços fazem-se sem o subutilizador da AT, o cliente é cobrado na
@@ -33,13 +35,13 @@ use Tests\TestCase;
  * AdminVendorPaymentsApiTest). Com RefreshDatabase o saldo nunca aparece na
  * coluna e metade destes testes passaria a medir zero contra zero.
  */
-class DinheiroRetidoPelaAtTest extends TestCase
+class DinheiroRetidoTest extends TestCase
 {
     use DatabaseTruncation;
 
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
-        'services', 'services_types', 'operation_areas',
+        'services', 'services_types', 'operation_areas', 'addresses',
         'transactions', 'transfers',
     ];
 
@@ -66,12 +68,41 @@ class DinheiroRetidoPelaAtTest extends TestCase
     {
         $user = User::factory()->create(['first_name' => 'Rui', 'last_name' => 'Tavares']);
 
-        return Vendor::create([
+        $vendor = Vendor::create([
             'user_id' => $user->id,
             'username' => 'rui_'.$user->id,
             'iban' => 'PT50000201231234567890154',
             'at_user' => null,
             'at_valid' => false,
+        ]);
+
+        // IBAN e morada fiscal preenchidos DE PROPOSITO: sem eles o pagamento
+        // ficaria retido por outra razao e estes testes passariam pelo motivo
+        // errado -- verdes a medir uma coisa que nao e a que dizem medir.
+        $this->comMoradaFiscal($vendor);
+
+        return $vendor;
+    }
+
+    /** Nao ha AddressFactory; `state`/`municipality` sao NOT NULL sem default. */
+    private function comMoradaFiscal(Vendor $vendor): void
+    {
+        Address::forceCreate([
+            'user_id' => $vendor->user_id,
+            'address_type' => AddressType::FISCAL_ADDRESS,
+            'name' => 'Rua de Teste 1, Porto',
+            'address_name' => 'Escritorio',
+            'street_name' => 'Rua de Teste',
+            'street_number' => '1',
+            'additional_info' => '',
+            'postal_code' => '4000-001',
+            'city' => 'Porto',
+            'municipality' => 'Porto',
+            'state' => 'Porto',
+            'country' => 'Portugal',
+            'latitude' => 41.1579,
+            'longitude' => -8.6291,
+            'main_address' => true,
         ]);
     }
 
@@ -153,7 +184,7 @@ class DinheiroRetidoPelaAtTest extends TestCase
 
         $vendor = $vendor->fresh();
 
-        $this->assertFalse($vendor->payout_blocked_by_at);
+        $this->assertFalse($vendor->payout_blocked);
         $this->assertSame(0, $vendor->payout_on_hold_amount);
     }
 
@@ -165,7 +196,7 @@ class DinheiroRetidoPelaAtTest extends TestCase
 
         $vendor = $vendor->fresh();
 
-        $this->assertTrue($vendor->payout_blocked_by_at);
+        $this->assertTrue($vendor->payout_blocked);
         $this->assertSame(5000, $vendor->payout_on_hold_amount, 'é o saldo todo que fica retido');
     }
 
@@ -179,7 +210,7 @@ class DinheiroRetidoPelaAtTest extends TestCase
         $vendor = $vendor->fresh();
 
         $this->assertTrue($vendor->at_required, 'continua a ser exigida');
-        $this->assertFalse($vendor->payout_blocked_by_at, 'mas já está dada');
+        $this->assertFalse($vendor->payout_blocked, 'mas já está dada');
         $this->assertSame(0, $vendor->payout_on_hold_amount);
     }
 
@@ -191,7 +222,7 @@ class DinheiroRetidoPelaAtTest extends TestCase
 
         $vendor = $vendor->fresh();
 
-        $this->assertTrue($vendor->payout_blocked_by_at);
+        $this->assertTrue($vendor->payout_blocked);
         $this->assertSame(0, $vendor->payout_on_hold_amount);
     }
 
@@ -254,7 +285,7 @@ class DinheiroRetidoPelaAtTest extends TestCase
             ->getJson('/api/v1/admin/vendor-payments')
             ->assertOk()
             ->assertJsonPath('data.items.0.id', $retido->id)
-            ->assertJsonPath('data.items.0.payout_blocked_by_at', true);
+            ->assertJsonPath('data.items.0.payout_blocked', true);
     }
 
     // ------------------------------------------------------- o que a app lê
@@ -277,7 +308,7 @@ class DinheiroRetidoPelaAtTest extends TestCase
         $this->actingAs($user, 'api')
             ->getJson('/api/v1/auth/me')
             ->assertSuccessful()
-            ->assertJsonPath('data.payout_blocked_by_at', true)
+            ->assertJsonPath('data.payout_blocked', true)
             ->assertJsonPath('data.at_required', true);
     }
 
@@ -290,7 +321,91 @@ class DinheiroRetidoPelaAtTest extends TestCase
         $this->actingAs($vendor->user, 'api')
             ->getJson('/api/v1/vendor/stats')
             ->assertSuccessful()
-            ->assertJsonPath('data.payout_blocked_by_at', true)
+            ->assertJsonPath('data.payout_blocked', true)
             ->assertJsonPath('data.payout_on_hold_amount', 4200);
+    }
+
+    // ------------------------------------------- as outras razoes de retencao
+
+    /**
+     * A brecha que este ficheiro nao apanhava: AT dada e validada, morada fiscal
+     * em falta. O dinheiro nao esta retido PELA AT -- e tem de ficar retido na
+     * mesma, porque sem morada fiscal nao se emite fatura. Antes disto o
+     * backoffice transferia 225 EUR por trabalho que a Piquet nao podia faturar.
+     */
+    public function test_sem_morada_fiscal_o_pagamento_fica_retido_mesmo_com_a_at_dada(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        Address::where('user_id', $vendor->user_id)->forceDelete();
+        $this->jaConcluiu($vendor, 3);
+        $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
+        $vendor->user->wallet->deposit(5000);
+
+        $vendor = $vendor->fresh();
+
+        $this->assertTrue($vendor->at_ready, 'a AT esta dada');
+        $this->assertSame('fiscal_address_missing', $vendor->payoutBlocker());
+        $this->assertTrue($vendor->payout_blocked);
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
+            ->assertStatus(409);
+
+        $this->assertSame(5000, $vendor->user->refresh()->balanceInt);
+    }
+
+    /** Sem IBAN nao ha para onde transferir. Literal. */
+    public function test_sem_iban_o_pagamento_fica_retido(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        $vendor->update(['iban' => null, 'at_user' => '123456789/1', 'at_valid' => true]);
+        $vendor->user->wallet->deposit(5000);
+
+        $vendor = $vendor->fresh();
+
+        $this->assertSame('iban_missing', $vendor->payoutBlocker());
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
+            ->assertStatus(409);
+
+        $this->assertSame(5000, $vendor->user->refresh()->balanceInt);
+    }
+
+    /** A ordem importa: o IBAN e o primeiro a resolver-se, por isso e o que se diz. */
+    public function test_com_tudo_em_falta_diz_a_razao_mais_a_montante(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        Address::where('user_id', $vendor->user_id)->forceDelete();
+        $vendor->update(['iban' => null]);
+        $this->jaConcluiu($vendor, 3);
+
+        $this->assertSame('iban_missing', $vendor->fresh()->payoutBlocker());
+    }
+
+    /**
+     * Documentos por validar NAO retem o dinheiro.
+     *
+     * Estao no `invoicingBlocker()` porque travam o tecnico de TRABALHAR, mas nao
+     * travam a fatura de trabalho ja feito. Reter o dinheiro de alguem porque o
+     * cartao de cidadao esta a ser revalidado e castiga-lo por uma coisa que nao
+     * impede pagar-lhe.
+     */
+    public function test_documentos_por_validar_nao_retem_o_dinheiro(): void
+    {
+        $vendor = $this->tecnicoSemAt();
+        $vendor->update(['at_user' => '123456789/1', 'at_valid' => true]);
+        $vendor->user->wallet->deposit(5000);
+
+        $vendor = $vendor->fresh();
+
+        $this->assertFalse($vendor->all_documents_verified, 'este tecnico nao tem documentos validados');
+        $this->assertNull($vendor->payoutBlocker(), 'e mesmo assim o dinheiro sai');
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")
+            ->assertOk();
+
+        $this->assertSame(0, $vendor->user->refresh()->balanceInt);
     }
 }

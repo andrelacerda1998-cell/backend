@@ -111,15 +111,16 @@ class UserController extends Controller
                 'at_required' => $vendor->at_required,
                 'services_until_at_required' => $vendor->services_until_at_required,
                 /*
-                 * O dinheiro dos serviços já feitos está retido por falta da AT.
+                 * O dinheiro dos serviços já feitos está retido, e porquê.
                  *
-                 * Vai à parte do `account_blocker` de propósito. O blocker devolve a
-                 * PRIMEIRA coisa que falta; se a este técnico também faltar a morada
-                 * fiscal, o blocker diz `fiscal_address_missing` e o aviso do dinheiro
-                 * nunca apareceria -- apesar de o dinheiro estar retido do mesmo modo.
-                 * Aqui a pergunta é outra e a resposta é só sobre ela.
+                 * Vai à parte do `account_blocker` de propósito: o blocker responde
+                 * "o que te falta para trabalhares", que é uma lista maior. Reter o
+                 * dinheiro de alguém porque o cartão de cidadão está a ser revalidado
+                 * seria castigá-lo por uma coisa que não impede pagar-lhe -- ver
+                 * `Vendor::payoutBlocker()`. Perguntas diferentes, respostas diferentes.
                  */
-                'payout_blocked_by_at' => $vendor->payout_blocked_by_at,
+                'payout_blocked' => $vendor->payout_blocked,
+                'payout_blocker' => $vendor->payoutBlocker(),
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;
                 //  - aprovado mas com a semana a zero: dizer-lhe que há

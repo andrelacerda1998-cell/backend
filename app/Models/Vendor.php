@@ -186,23 +186,49 @@ class Vendor extends Model implements Auditable
     }
 
     /**
-     * O dinheiro está na carteira mas não sai: falta o acesso à AT.
+     * O que impede a Piquet de transferir o dinheiro que já é dele. `null` = pode pagar.
      *
-     * O trabalho dos três primeiros serviços conta, o cliente é cobrado e o
-     * técnico VÊ o dinheiro dele no saldo — só não o recebe enquanto não der o
-     * subutilizador da AT. Sem isto não se emite fatura, e não se transfere
-     * dinheiro por trabalho que não se consegue faturar.
+     * O trabalho conta, o cliente é cobrado e o técnico VÊ o dinheiro no saldo
+     * — só não o recebe enquanto isto não estiver resolvido. A regra é uma:
+     * **não se transfere dinheiro por trabalho que não se consegue faturar**.
      *
-     * É a MESMA condição do `at_required && ! $this->at_ready` do
-     * `invoicingBlocker()`, mas com nome próprio e independente da ordem dessa
-     * lista: aqui interessa esta razão em concreto, não "a primeira que aparecer".
-     * Quem paga (backoffice) e quem avisa (app do técnico) leem daqui.
+     * Três razões, por ordem de quem se resolve primeiro:
+     *
+     *  - `iban_missing` — não há para onde transferir. Literal.
+     *  - `fiscal_address_missing` — sem morada fiscal a conta de faturação não
+     *    se cria (rebenta no InvoiceXpress), e sem ela não há fatura.
+     *  - `at_user_missing` — sem o subutilizador não se comunica a fatura à AT.
+     *    Só a partir do 3.º serviço concluído (ver `atRequired()`).
+     *
+     * O QUE NÃO ENTRA, de propósito: `documents_pending` e `contact_unverified`.
+     * Estão no `invoicingBlocker()` porque travam o técnico de TRABALHAR, mas não
+     * travam a fatura de trabalho já feito. Reter o dinheiro de alguém porque o
+     * cartão de cidadão está a ser revalidado seria castigá-lo financeiramente
+     * por uma coisa que não impede pagar-lhe. Se um dia isto for "simplificado"
+     * para `invoicingBlocker() !== null`, é este parágrafo que se está a apagar.
      */
-    public function payoutBlockedByAt(): Attribute
+    public function payoutBlocker(): ?string
     {
-        return Attribute::make(
-            get: fn () => $this->at_required && ! $this->at_ready
-        )->shouldCache();
+        if (! $this->iban) {
+            return 'iban_missing';
+        }
+
+        if (! $this->addresses()->where('address_type', AddressType::FISCAL_ADDRESS)->exists()) {
+            return 'fiscal_address_missing';
+        }
+
+        // A AT só a partir do quarto serviço — ver `atRequired()`.
+        if ($this->at_required && ! $this->at_ready) {
+            return 'at_user_missing';
+        }
+
+        return null;
+    }
+
+    /** Atalho booleano do `payoutBlocker()`, para quem só precisa de sim/não. */
+    public function payoutBlocked(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->payoutBlocker() !== null)->shouldCache();
     }
 
     /**
@@ -210,12 +236,12 @@ class Vendor extends Model implements Auditable
      *
      * É o saldo todo: a carteira do técnico só guarda a parte dele, e se o
      * pagamento está travado está travado por inteiro. 0 quando não há nada
-     * retido -- seja porque já deu a AT, seja porque a carteira está a zero.
+     * retido -- seja porque não há bloqueio, seja porque a carteira está a zero.
      */
     public function payoutOnHoldAmount(): Attribute
     {
         return Attribute::make(
-            get: fn () => $this->payout_blocked_by_at
+            get: fn () => $this->payout_blocked
                 ? max(0, (int) ($this->user?->wallet?->balance ?? 0))
                 : 0
         );
