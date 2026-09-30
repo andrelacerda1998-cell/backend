@@ -124,6 +124,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // Aba "Visão geral" -- indicadores reais (sem avgApprovalTime, ver nota
     // em VendorController::metrics()).
     Route::get('/vendors/metrics', [VendorController::class, 'metrics']);
+    // Porque é que a documentação está incompleta: expirada, recusada, por
+    // rever ou nunca submetida. Ver a nota no controlador.
+    Route::get('/vendors/documents-summary', [VendorController::class, 'documentsSummary']);
     Route::get('/vendors/by-category', [VendorController::class, 'byCategory']);
     Route::get('/vendors/by-location', [VendorController::class, 'byLocation']);
     Route::get('/vendors/top', [VendorController::class, 'top']);

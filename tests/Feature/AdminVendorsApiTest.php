@@ -340,6 +340,54 @@ class AdminVendorsApiTest extends TestCase
             ->assertJsonPath('data.items.0.all_documents_verified', $vendor->all_documents_verified);
     }
 
+    /**
+     * O motivo de recusa é do PRÓPRIO técnico.
+     *
+     * A consulta não filtrava por `vendor_id`: apanhava a recusa mais recente
+     * de qualquer técnico para aquele tipo de documento -- e isto vai para a
+     * app do próprio, no GET /me. Um técnico que nunca submeteu via o motivo
+     * escrito a outra pessoa.
+     */
+    public function test_the_decline_reason_belongs_to_the_vendor_who_asks(): void
+    {
+        $documento = Document::create(['name' => 'Cartão de Cidadão', 'required' => true]);
+
+        $outro = $this->makeVendor();
+        VendorDocuments::create([
+            'vendor_id' => $outro->id, 'document_id' => $documento->id,
+            'status' => 'declined', 'reason' => 'Foto de outra pessoa',
+        ]);
+
+        // Este nunca submeteu nada.
+        $proprio = $this->makeVendor();
+
+        $motivos = $proprio->fresh()->missing_documents->pluck('reason')->filter()->all();
+        $this->assertSame([], $motivos, 'Não pode ver o motivo de recusa de outro técnico.');
+    }
+
+    public function test_documents_summary_separates_expired_from_never_submitted(): void
+    {
+        $documento = Document::create(['name' => 'Registo Criminal', 'required' => true]);
+
+        $expirado = $this->makeVendor();
+        VendorDocuments::create([
+            'vendor_id' => $expirado->id, 'document_id' => $documento->id,
+            'status' => 'approved', 'expiration_date' => now()->subDay(),
+        ]);
+
+        $this->makeVendor(); // nunca submeteu
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/documents-summary')
+            ->assertOk()
+            ->assertJsonPath('data.total', 2)
+            // Um com o documento fora de validade, outro que nunca submeteu.
+            // É esta separação que interessa: o primeiro já trabalhou e parou
+            // sem dar por isso; o segundo nunca chegou a começar.
+            ->assertJsonPath('data.com_expirado', 1)
+            ->assertJsonPath('data.nunca_submeteram', 1);
+    }
+
     public function test_metrics_computes_real_indicators(): void
     {
         $eligible = $this->makeEligibleVendor();

@@ -47,6 +47,91 @@ use Illuminate\Support\Str;
  */
 class VendorController extends Controller
 {
+    /**
+     * GET /v1/admin/vendors/documents-summary — porque é que a documentação
+     * está incompleta, repartido.
+     *
+     * "158 com documentação incompleta" não diz o que fazer: nunca submeteram,
+     * foram recusados, ou têm um documento EXPIRADO? São três problemas
+     * diferentes, e o terceiro é o mais caro -- são técnicos que já
+     * trabalharam e pararam sem dar por isso.
+     *
+     * Agregado, e não campo por técnico na listagem: `all_documents_verified`
+     * já faz uma consulta por documento obrigatório e por técnico; repetir
+     * esse padrão numa página de 100 acrescentava centenas de consultas por
+     * pedido. Aqui carrega-se tudo uma vez e conta-se em memória.
+     */
+    public function documentsSummary(): ApiSuccessResponse
+    {
+        $hoje = now()->toDateString();
+
+        // `certifications` é um ATRIBUTO da OperationArea, não uma relação --
+        // eager-load dele rebenta com "Call to undefined method
+        // Attribute::addEagerConstraints()". Carregam-se só as relações.
+        $vendors = $this->baseQuery()->with(['documents', 'operationAreas'])->get();
+
+        $contagem = [
+            'total' => $vendors->count(),
+            'completos' => 0,
+            'com_expirado' => 0,
+            'com_recusado' => 0,
+            'com_por_rever' => 0,
+            'nunca_submeteram' => 0,
+        ];
+
+        foreach ($vendors as $vendor) {
+            $estados = [];
+
+            foreach ($vendor->required_documents as $obrigatorio) {
+                $doVendor = $vendor->documents->where('document_id', $obrigatorio->id);
+
+                /*
+                 * `expiration_date` NÃO tem cast no modelo -- vem como string.
+                 * Chamar-lhe `->toDateString()` rebenta. Compara-se texto com
+                 * texto, que em `Y-m-d` ordena igual à data.
+                 */
+                $dia = fn ($d) => $d->expiration_date === null ? null : substr((string) $d->expiration_date, 0, 10);
+
+                $valido = $doVendor->first(fn ($d) => $d->status === 'approved'
+                    && ($dia($d) === null || $dia($d) >= $hoje));
+                if ($valido) { $estados[] = 'ok'; continue; }
+
+                if ($doVendor->firstWhere('status', 'pending')) { $estados[] = 'por_rever'; continue; }
+
+                // Aprovado mas fora de validade: já esteve bom, deixou de estar.
+                $expirado = $doVendor->first(fn ($d) => $d->status === 'approved'
+                    && $dia($d) !== null && $dia($d) < $hoje);
+                if ($expirado) { $estados[] = 'expirado'; continue; }
+
+                if ($doVendor->firstWhere('status', 'declined')) { $estados[] = 'recusado'; continue; }
+
+                $estados[] = 'em_falta';
+            }
+
+            /*
+             * Cada técnico conta UMA vez, no problema mais grave que tem --
+             * pela mesma razão que os degraus: somar por documento dava um
+             * total maior do que o número de pessoas e ninguém saberia
+             * quantas afinal eram.
+             */
+            if (in_array('expirado', $estados, true)) {
+                $contagem['com_expirado']++;
+            } elseif (in_array('recusado', $estados, true)) {
+                $contagem['com_recusado']++;
+            } elseif (in_array('por_rever', $estados, true)) {
+                $contagem['com_por_rever']++;
+            } elseif (in_array('em_falta', $estados, true)) {
+                $contagem['nunca_submeteram']++;
+            } else {
+                // Só chega aqui quem tem tudo 'ok' -- ou quem não tem
+                // documentos obrigatórios nenhuns, que conta como completo.
+                $contagem['completos']++;
+            }
+        }
+
+        return ApiSuccessResponse::make($contagem);
+    }
+
     private function baseQuery()
     {
         return Vendor::query()
