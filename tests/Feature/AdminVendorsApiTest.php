@@ -388,6 +388,36 @@ class AdminVendorsApiTest extends TestCase
             ->assertJsonPath('data.nunca_submeteram', 1);
     }
 
+    /**
+     * Os dois grupos accionáveis vão com nomes; os 337 que nunca submeteram
+     * ficam só na contagem -- uma lista desse tamanho não é trabalho, é um
+     * relatório.
+     */
+    public function test_documents_summary_names_who_expired_and_who_was_declined(): void
+    {
+        $documento = Document::create(['name' => 'Registo Criminal', 'required' => true]);
+
+        $expirado = $this->makeVendor(['first_name' => 'Rita', 'last_name' => 'Nunes']);
+        VendorDocuments::create([
+            'vendor_id' => $expirado->id, 'document_id' => $documento->id,
+            'status' => 'approved', 'expiration_date' => now()->subDays(5),
+        ]);
+
+        $recusado = $this->makeVendor(['first_name' => 'Hugo', 'last_name' => 'Dias']);
+        VendorDocuments::create([
+            'vendor_id' => $recusado->id, 'document_id' => $documento->id,
+            'status' => 'declined', 'reason' => 'Foto cortada',
+        ]);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/documents-summary')
+            ->assertOk()
+            ->assertJsonPath('data.expirados.0.name', 'Rita Nunes')
+            ->assertJsonPath('data.expirados.0.documentos.0.nome', 'Registo Criminal')
+            ->assertJsonPath('data.recusados.0.name', 'Hugo Dias')
+            ->assertJsonPath('data.recusados.0.documentos.0.motivo', 'Foto cortada');
+    }
+
     public function test_metrics_computes_real_indicators(): void
     {
         $eligible = $this->makeEligibleVendor();

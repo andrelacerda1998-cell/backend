@@ -79,8 +79,22 @@ class VendorController extends Controller
             'nunca_submeteram' => 0,
         ];
 
+        /*
+         * Os dois grupos accionáveis vão COM NOMES, e os outros não.
+         *
+         * Um expirado é alguém que já teve tudo aprovado -- provavelmente já
+         * trabalhou -- e cujo documento caducou; um recusado submeteu e foi-lhe
+         * dito que não. Os dois resolvem-se com um telefonema a UMA pessoa.
+         *
+         * Os "nunca submeteram" são 337: uma lista desse tamanho não é uma
+         * lista de trabalho, é um relatório, e por isso fica só na contagem.
+         */
+        $expirados = [];
+        $recusados = [];
+
         foreach ($vendors as $vendor) {
             $estados = [];
+            $porDocumento = ['expirado' => [], 'recusado' => []];
 
             foreach ($vendor->required_documents as $obrigatorio) {
                 $doVendor = $vendor->documents->where('document_id', $obrigatorio->id);
@@ -101,9 +115,18 @@ class VendorController extends Controller
                 // Aprovado mas fora de validade: já esteve bom, deixou de estar.
                 $expirado = $doVendor->first(fn ($d) => $d->status === 'approved'
                     && $dia($d) !== null && $dia($d) < $hoje);
-                if ($expirado) { $estados[] = 'expirado'; continue; }
+                if ($expirado) {
+                    $estados[] = 'expirado';
+                    $porDocumento['expirado'][] = ['nome' => $obrigatorio->name, 'em' => $dia($expirado)];
+                    continue;
+                }
 
-                if ($doVendor->firstWhere('status', 'declined')) { $estados[] = 'recusado'; continue; }
+                $recusa = $doVendor->firstWhere('status', 'declined');
+                if ($recusa) {
+                    $estados[] = 'recusado';
+                    $porDocumento['recusado'][] = ['nome' => $obrigatorio->name, 'motivo' => $recusa->reason];
+                    continue;
+                }
 
                 $estados[] = 'em_falta';
             }
@@ -114,10 +137,26 @@ class VendorController extends Controller
              * total maior do que o número de pessoas e ninguém saberia
              * quantas afinal eram.
              */
+            // Mesma regra do `present()`: first_name/last_name são as colunas
+            // reais -- `name`/`fullName` delegam para um `full_name` que não
+            // existe no User.
+            $u = $vendor->user;
+            $nome = trim(($u->first_name ?? '').' '.($u->last_name ?? '')) ?: null;
+
             if (in_array('expirado', $estados, true)) {
                 $contagem['com_expirado']++;
+                $expirados[] = [
+                    'id' => $vendor->id,
+                    'name' => $nome,
+                    'documentos' => $porDocumento['expirado'],
+                ];
             } elseif (in_array('recusado', $estados, true)) {
                 $contagem['com_recusado']++;
+                $recusados[] = [
+                    'id' => $vendor->id,
+                    'name' => $nome,
+                    'documentos' => $porDocumento['recusado'],
+                ];
             } elseif (in_array('por_rever', $estados, true)) {
                 $contagem['com_por_rever']++;
             } elseif (in_array('em_falta', $estados, true)) {
@@ -129,7 +168,14 @@ class VendorController extends Controller
             }
         }
 
-        return ApiSuccessResponse::make($contagem);
+        // Os mais antigos primeiro: caducaram há mais tempo.
+        usort($expirados, fn ($a, $b) => ($a['documentos'][0]['em'] ?? '') <=> ($b['documentos'][0]['em'] ?? ''));
+
+        return ApiSuccessResponse::make([
+            ...$contagem,
+            'expirados' => $expirados,
+            'recusados' => $recusados,
+        ]);
     }
 
     private function baseQuery()
