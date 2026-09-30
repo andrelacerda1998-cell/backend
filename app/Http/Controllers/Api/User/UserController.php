@@ -132,6 +132,16 @@ class UserController extends Controller
                  * `null` quando não há prazo a correr.
                  */
                 'at_deadline_ends_at' => $vendor->prazoDaAtTerminaEm()?->toIso8601String(),
+                /*
+                 * Termos por aceitar.
+                 *
+                 * Vai no perfil e não só no endpoint próprio porque a app já lê
+                 * isto ao arrancar: uma chamada a menos, e o passo aparece sem
+                 * esperar por um segundo pedido.
+                 */
+                'terms_version_required' => config('legal.provider_terms.version'),
+                'terms_version_accepted' => $vendor->versaoDosTermosAceite(),
+                'terms_acceptance_required' => ! $vendor->aceitou_os_termos_em_vigor,
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;
                 //  - aprovado mas com a semana a zero: dizer-lhe que há

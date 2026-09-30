@@ -8,6 +8,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Models\Address;
 use App\Models\GeneralSettings\Gender;
 use App\Models\Service;
+use App\Models\TermsAcceptance;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\Vendor\AtDeadlineForfeitedNotification;
@@ -38,7 +39,7 @@ class PrazoDeCincoDiasDaAtTest extends TestCase
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
         'services', 'services_types', 'operation_areas', 'addresses',
-        'transactions', 'transfers',
+        'transactions', 'transfers', 'terms_acceptances',
     ];
 
     protected function setUp(): void
@@ -67,6 +68,19 @@ class PrazoDeCincoDiasDaAtTest extends TestCase
             'street_number' => '1', 'additional_info' => '', 'postal_code' => '4000-001',
             'city' => 'Porto', 'municipality' => 'Porto', 'state' => 'Porto', 'country' => 'Portugal',
             'latitude' => 41.1579, 'longitude' => -8.6291, 'main_address' => true,
+        ]);
+
+        /*
+         * Aceitação registada: desde 30/09 o relógio da perda só arranca para
+         * quem aceitou os Termos que a preveem. Sem esta linha estes testes
+         * passariam a medir a AUSÊNCIA do prazo, com os nomes a prometer o
+         * contrário.
+         */
+        TermsAcceptance::create([
+            'user_id' => $user->id,
+            'document' => TermsAcceptance::DOCUMENTO_PRESTADORES,
+            'version' => config('legal.provider_terms.version'),
+            'accepted_at' => now(),
         ]);
 
         return $vendor;
