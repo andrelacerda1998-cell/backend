@@ -186,6 +186,42 @@ class Vendor extends Model implements Auditable
     }
 
     /**
+     * O dinheiro está na carteira mas não sai: falta o acesso à AT.
+     *
+     * O trabalho dos três primeiros serviços conta, o cliente é cobrado e o
+     * técnico VÊ o dinheiro dele no saldo — só não o recebe enquanto não der o
+     * subutilizador da AT. Sem isto não se emite fatura, e não se transfere
+     * dinheiro por trabalho que não se consegue faturar.
+     *
+     * É a MESMA condição do `at_required && ! $this->at_ready` do
+     * `invoicingBlocker()`, mas com nome próprio e independente da ordem dessa
+     * lista: aqui interessa esta razão em concreto, não "a primeira que aparecer".
+     * Quem paga (backoffice) e quem avisa (app do técnico) leem daqui.
+     */
+    public function payoutBlockedByAt(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->at_required && ! $this->at_ready
+        )->shouldCache();
+    }
+
+    /**
+     * Quanto é que está retido por causa da AT, em cêntimos.
+     *
+     * É o saldo todo: a carteira do técnico só guarda a parte dele, e se o
+     * pagamento está travado está travado por inteiro. 0 quando não há nada
+     * retido -- seja porque já deu a AT, seja porque a carteira está a zero.
+     */
+    public function payoutOnHoldAmount(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->payout_blocked_by_at
+                ? max(0, (int) ($this->user?->wallet?->balance ?? 0))
+                : 0
+        );
+    }
+
+    /**
      * Whether the billing workspace has been created for this vendor.
      *
      * The workspace itself is created by the Piquet team from the backoffice

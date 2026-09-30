@@ -92,6 +92,19 @@ class StatsController extends Controller
             'pending_payment_count' => (int) $vendor->services()
                 ->whereIn('status', [ServiceStatus::FINISHED, ServiceStatus::CLOSED_PENDING_PAYMENT])
                 ->count(),
+            /*
+             * Dinheiro que E dele, esta no saldo, e nao sai: falta o subutilizador da AT.
+             *
+             * Distinto do `pending_payment_*` acima, que e trabalho ainda nao fechado. Aqui
+             * o servico fechou, o cliente foi cobrado e o valor esta na carteira -- o que
+             * falta e a AT para se poder faturar e transferir. Sao dois cartoes diferentes
+             * no ecra de Ganhos porque sao duas esperas diferentes, com accoes diferentes:
+             * uma passa com o tempo, a outra so passa se ele fizer algo.
+             *
+             * O valor vem em centimos, como todo o dinheiro que este endpoint devolve.
+             */
+            'payout_blocked_by_at' => $vendor->payout_blocked_by_at,
+            'payout_on_hold_amount' => $vendor->payout_on_hold_amount,
             'rating' => $ratingAvg !== null ? round((float) $ratingAvg, 1) : null,
             'acceptance_rate' => $acceptanceRate,
             'last_weeks' => $weeks,

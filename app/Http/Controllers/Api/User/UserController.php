@@ -71,7 +71,9 @@ class UserController extends Controller
                  * com o técnico na segunda pessoa e tem as suas traduções. O
                  * backoffice traduz o mesmo código para a terceira pessoa.
                  * Valores: contact_unverified, documents_pending, iban_missing,
-                 * fiscal_address_missing, ou null quando está tudo pronto.
+                 * fiscal_address_missing, at_user_missing, ou null quando está
+                 * tudo pronto. O último é o único que aparece DEPOIS de ele já
+                 * ter trabalhado -- ver `Vendor::invoicingBlocker()`.
                  */
                 'account_blocker' => $vendor->invoicingBlocker(),
                 'iban' => $vendor->iban,
@@ -108,6 +110,16 @@ class UserController extends Controller
                  */
                 'at_required' => $vendor->at_required,
                 'services_until_at_required' => $vendor->services_until_at_required,
+                /*
+                 * O dinheiro dos serviços já feitos está retido por falta da AT.
+                 *
+                 * Vai à parte do `account_blocker` de propósito. O blocker devolve a
+                 * PRIMEIRA coisa que falta; se a este técnico também faltar a morada
+                 * fiscal, o blocker diz `fiscal_address_missing` e o aviso do dinheiro
+                 * nunca apareceria -- apesar de o dinheiro estar retido do mesmo modo.
+                 * Aqui a pergunta é outra e a resposta é só sobre ela.
+                 */
+                'payout_blocked_by_at' => $vendor->payout_blocked_by_at,
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;
                 //  - aprovado mas com a semana a zero: dizer-lhe que há

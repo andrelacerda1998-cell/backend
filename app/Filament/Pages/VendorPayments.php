@@ -50,7 +50,14 @@ class VendorPayments extends Page implements HasForms, HasTable
                     ->copyable(),
                 TextColumn::make('user.wallet.balanceFloatNum')->label('Amount')->formatStateUsing(function ($state) {
                     return number_format($state, 2).'€';
-                })
+                }),
+                // Porque e que o botao esta desligado. Sem esta coluna o admin ve um
+                // "pay" cinzento e nao tem como saber que falta a AT ao tecnico.
+                TextColumn::make('payout_blocked_by_at')
+                    ->label('Retido')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => $state ? 'Falta AT' : '—')
+                    ->color(fn ($state) => $state ? 'danger' : 'gray'),
             ])
             ->filters([
                 // ...
@@ -58,7 +65,31 @@ class VendorPayments extends Page implements HasForms, HasTable
             ->actions([
                 Action::make('pay')
                 ->requiresConfirmation()
+                /*
+                 * Sem acesso a AT nao ha fatura, e sem fatura nao sai dinheiro. O saldo
+                 * fica na carteira do tecnico (o trabalho foi feito, o cliente foi
+                 * cobrado) e a app dele explica-lhe porque e que ainda nao recebeu.
+                 *
+                 * Desligar o botao E verificar dentro da acao: o botao e para o admin
+                 * ver, a verificacao e para o dinheiro. Um record que fique em cache no
+                 * ecra aberto enquanto o tecnico muda de estado passa pelo primeiro e
+                 * nao passa pelo segundo.
+                 */
+                ->disabled(fn (Vendor $record) => $record->payout_blocked_by_at)
+                ->tooltip(fn (Vendor $record) => $record->payout_blocked_by_at
+                    ? 'Retido: falta o subutilizador da AT deste tecnico.'
+                    : null)
                 ->action(function (Vendor $record) {
+                    if ($record->payout_blocked_by_at) {
+                        Notification::make()
+                            ->title('Pagamento retido')
+                            ->body('O tecnico ainda nao deu o acesso de subutilizador da AT. O saldo fica na carteira dele.')
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
                     Mail::to($record->user->email)->send(new PaymentSentMail($record, $record->user->wallet->balanceFloat));
                     $record->user->notify(new PaymentSentNotification($record->user->wallet->balanceFloat));
                     $record->user->wallet->withdraw($record->user->wallet->balance, [

@@ -30,6 +30,9 @@ class VendorPaymentController extends Controller
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
         $vendors = Vendor::whereHas('user.wallet', fn ($q) => $q->where('balance', '>', 0))
+            // `payout_blocked_by_at` precisa do at_valid/at_user (colunas do proprio
+            // vendor) e conta os servicos concluidos -- uma query por tecnico sem AT.
+            // Com AT o `&&` curto-circuita e nao ha contagem nenhuma.
             ->with(['user.wallet'])
             ->paginate($perPage);
 
@@ -73,6 +76,26 @@ class VendorPaymentController extends Controller
 
         if ($wallet->balance <= 0) {
             return new ApiErrorResponse(null, 'Este vendor não tem saldo por pagar.', 409);
+        }
+
+        /*
+         * Sem acesso à AT não há fatura, e sem fatura não sai dinheiro.
+         *
+         * O dinheiro está na carteira dele de propósito -- o trabalho foi feito e o
+         * cliente foi cobrado -- mas fica retido até dar o subutilizador. A app
+         * avisa-o disso; este guarda é o que torna o aviso verdadeiro. Sem ele, o
+         * aviso é uma promessa que um clique distraído no backoffice desmente.
+         *
+         * 409 e não 422: o pedido está bem formado, o estado do técnico é que não
+         * permite. A mensagem é para o admin, não para o técnico.
+         */
+        if ($vendor->payout_blocked_by_at) {
+            return new ApiErrorResponse(
+                null,
+                'Pagamento retido: o técnico ainda não deu o acesso de subutilizador da AT. '
+                .'O saldo fica na carteira dele até isso ser preenchido.',
+                409
+            );
         }
 
         $amount = $wallet->balance_float;
@@ -121,6 +144,9 @@ class VendorPaymentController extends Controller
             // zero seria indistinguível de "faturou 0 €".
             'total_invoiced' => $totais ? round(((int) $totais->faturado) / 100, 2) : null,
             'commission' => $totais ? round(((int) $totais->comissao) / 100, 2) : null,
+            // Porque e que este saldo nao se pode pagar. O dashboard tem de poder
+            // marcar a linha em vez de o admin descobrir pelo 409 depois de clicar.
+            'payout_blocked_by_at' => $vendor->payout_blocked_by_at,
         ];
     }
 }
