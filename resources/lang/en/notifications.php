@@ -294,4 +294,18 @@ return [
             'description' => 'You did not confirm the MBWay payment in time and the request was cancelled: ',
         ],
     ],
+    'atDeadline' => [
+        'daysLeft' => [
+            'title' => ':count days left to give Tax Authority access',
+            'description' => 'Without it we cannot pay you the :value € you have already earned, and at the end of the deadline you lose them.',
+        ],
+        'lastDay' => [
+            'title' => 'Last day to give Tax Authority access',
+            'description' => 'If you do not give it today, you lose the :value € you have already earned.',
+        ],
+        'forfeited' => [
+            'title' => 'You lost your balance for missing Tax Authority access',
+            'description' => 'The deadline ran out without the Tax Authority sub-user and the :value € are no longer in your wallet. Talk to support if you think this is a mistake.',
+        ],
+    ],
 ];

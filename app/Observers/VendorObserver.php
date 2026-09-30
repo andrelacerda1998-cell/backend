@@ -12,10 +12,46 @@ class VendorObserver
 {
     public function saved(Vendor $vendor): void
     {
+        $this->limparPrazoDaAtSeJaFoiDada($vendor);
+
         $vendor->searchable();
 
         // Also update the schedule search index
         $this->updateScheduleSearchIndex($vendor);
+    }
+
+    /**
+     * O relógio dos 5 dias pára assim que a AT chega.
+     *
+     * Aqui e não em cada sítio que grava a AT: ela entra pela app do técnico,
+     * pelo backoffice e por comandos de manutenção, e um caminho esquecido
+     * deixava o prazo a correr contra alguém que já o cumpriu -- e a perder o
+     * dinheiro por isso.
+     *
+     * `saved` e não `updated` porque o `at_valid` pode vir já certo na criação.
+     */
+    private function limparPrazoDaAtSeJaFoiDada(Vendor $vendor): void
+    {
+        // Só quando os campos da AT mudaram: poupa uma leitura em cada gravação
+        // de vendor, que são muitas (o índice de pesquisa escreve a cada uma).
+        if (! $vendor->wasChanged(['at_user', 'at_valid'])) {
+            return;
+        }
+
+        /*
+         * Instância NOVA e não `$vendor`.
+         *
+         * O `at_ready` é um acessor com `shouldCache()`, e nesta instância já
+         * foi calculado ANTES da gravação -- lê `false` mesmo depois de a AT
+         * chegar, e o prazo continuava a correr contra quem já o cumpriu. Uma
+         * leitura fresca custa uma query e evita alguém perder dinheiro por um
+         * valor em cache.
+         */
+        $atual = $vendor->fresh();
+
+        if ($atual?->at_deadline_started_at !== null && $atual->at_ready) {
+            $atual->limparPrazoDaAt();
+        }
     }
 
     /**

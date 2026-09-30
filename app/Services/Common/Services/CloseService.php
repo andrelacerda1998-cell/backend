@@ -5,15 +5,14 @@ namespace App\Services\Common\Services;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
+use App\Models\ServiceExtra;
 use Bavix\Wallet\Internal\Exceptions\ExceptionInterface;
 use Illuminate\Support\Facades\Log;
 use RwInteractive\PayshopSdk\Enums\Payment\Status;
 
 class CloseService
 {
-    public function __construct(private Service $service)
-    {
-    }
+    public function __construct(private Service $service) {}
 
     /**
      * The customer confirmed the service. Capture the payment and, only if the money is actually
@@ -160,6 +159,19 @@ class CloseService
 
         $vendor->user->deposit($this->service->amount_for_vendor, $this->service->getMetaProduct());
 
+        /*
+         * É AQUI que o relógio dos 5 dias arranca, e não quando a AT passa a
+         * ser exigida.
+         *
+         * A diferença importa: o prazo ameaça com a perda do dinheiro, e neste
+         * instante é a primeira vez que há dinheiro para perder. Arrancá-lo
+         * mais cedo era ameaçar alguém com a perda de zero euros — e gastar o
+         * aviso antes de ele significar alguma coisa.
+         *
+         * O método é idempotente; chamá-lo a cada fecho não empurra o prazo.
+         */
+        $vendor->refresh()->comecarPrazoDaAtSeNecessario();
+
         $vendorFee = abs($this->service->getRawOriginal('amount_for_vendor'));
         $systemFee = abs($this->service->getRawOriginal('amount') - $vendorFee);
         system_wallet()->deposit($systemFee, $this->service->getMetaProduct());
@@ -216,7 +228,7 @@ class CloseService
     }
 
     /** Captura da ordem MBWay de um extra no fecho; falha => `failed` + notificação. */
-    private function captureExtraOrder(\App\Models\ServiceExtra $extra): void
+    private function captureExtraOrder(ServiceExtra $extra): void
     {
         try {
             $order = $extra->paymentOrder;
@@ -241,13 +253,13 @@ class CloseService
         $this->notifyExtraChargeFailed($extra);
     }
 
-    private function notifyExtraChargeFailed(\App\Models\ServiceExtra $extra): void
+    private function notifyExtraChargeFailed(ServiceExtra $extra): void
     {
         app(NotifyServiceExtraChargeFailed::class)->handle($this->service, $extra);
     }
 
     /** Meta auditável do movimento de carteira do extra (distinto do serviço base). */
-    private function extraMeta(\App\Models\ServiceExtra $extra): array
+    private function extraMeta(ServiceExtra $extra): array
     {
         $meta = $this->service->getMetaProduct();
         $meta['description'] = ($meta['description'] ?? '').' — extra #'.$extra->id.' ('.$extra->type.')';

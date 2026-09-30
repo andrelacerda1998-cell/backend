@@ -314,4 +314,18 @@ return [
             'description' => 'Não confirmou o pagamento MBWay a tempo e o pedido foi cancelado: ',
         ],
     ],
+    'atDeadline' => [
+        'daysLeft' => [
+            'title' => 'Faltam :count dias para dares o acesso à AT',
+            'description' => 'Sem ele não te conseguimos pagar os :value € que já ganhaste, e ao fim do prazo perde-los.',
+        ],
+        'lastDay' => [
+            'title' => 'Último dia para dares o acesso à AT',
+            'description' => 'Se não o deres hoje, perdes os :value € que já ganhaste.',
+        ],
+        'forfeited' => [
+            'title' => 'Perdeste o saldo por falta do acesso à AT',
+            'description' => 'O prazo acabou sem o subutilizador da AT e os :value € deixaram de estar na tua carteira. Fala com o suporte se achas que é engano.',
+        ],
+    ],
 ];
