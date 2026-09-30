@@ -65,3 +65,13 @@ Schedule::command('services:notify-stuck-in-progress')->hourly()->withoutOverlap
 Schedule::command('services:detect-no-show')->everyMinute()->withoutOverlapping();
 
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
+
+/*
+ * Prazo dos 5 dias para o subutilizador da AT: avisa quem está dentro do prazo
+ * e executa a perda de quem o deixou passar.
+ *
+ * Uma vez por dia e a uma hora fixa, não de hora a hora: a consequência é
+ * medida em DIAS, e correr mais vezes só multiplicava as hipóteses de avisar
+ * duas vezes no mesmo dia. `withoutOverlapping` porque mexe em dinheiro.
+ */
+Schedule::command('vendors:executar-prazo-da-at')->dailyAt('09:00')->withoutOverlapping();

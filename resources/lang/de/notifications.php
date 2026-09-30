@@ -282,4 +282,18 @@ return [
             'description' => 'Du hast die MB Way-Zahlung nicht rechtzeitig bestätigt, und die Anfrage wurde storniert: ',
         ],
     ],
+    'atDeadline' => [
+        'daysLeft' => [
+            'title' => 'Noch :count Tage für den Finanzamt-Zugang',
+            'description' => 'Ohne ihn können wir dir die bereits verdienten :value € nicht auszahlen, und nach Ablauf der Frist verlierst du sie.',
+        ],
+        'lastDay' => [
+            'title' => 'Letzter Tag für den Finanzamt-Zugang',
+            'description' => 'Wenn du ihn heute nicht angibst, verlierst du die bereits verdienten :value €.',
+        ],
+        'forfeited' => [
+            'title' => 'Du hast dein Guthaben wegen des fehlenden Finanzamt-Zugangs verloren',
+            'description' => 'Die Frist ist ohne den Unterbenutzer abgelaufen und die :value € sind nicht mehr in deiner Wallet. Melde dich beim Support, wenn das ein Irrtum ist.',
+        ],
+    ],
 ];

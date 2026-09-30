@@ -26,4 +26,7 @@ return [
         'refund' => 'Devolución',
         'service' => 'Servicio',
     ],
+    'at_deadline' => [
+        'forfeited_description' => 'Saldo perdido por falta del acceso a Hacienda',
+    ],
 ];

@@ -121,6 +121,17 @@ class UserController extends Controller
                  */
                 'payout_blocked' => $vendor->payout_blocked,
                 'payout_blocker' => $vendor->payoutBlocker(),
+                /*
+                 * O prazo dos 5 dias, para a app poder contar.
+                 *
+                 * Vai a DATA DE FIM e não só os dias: um número de dias calculado
+                 * aqui congela no momento do pedido, e a app que fique aberta ao
+                 * virar da meia-noite continuava a dizer "faltam 2" quando já só
+                 * falta 1. Com a data, quem conta é quem mostra.
+                 *
+                 * `null` quando não há prazo a correr.
+                 */
+                'at_deadline_ends_at' => $vendor->prazoDaAtTerminaEm()?->toIso8601String(),
                 // Procura recente na zona escolhida. Serve dois momentos:
                 //  - perfil incompleto: o argumento para o acabar;
                 //  - aprovado mas com a semana a zero: dizer-lhe que há

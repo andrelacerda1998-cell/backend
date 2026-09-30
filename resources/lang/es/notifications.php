@@ -299,4 +299,18 @@ return [
             'description' => 'No has confirmado el pago con MB Way a tiempo y la solicitud se ha cancelado: ',
         ],
     ],
+    'atDeadline' => [
+        'daysLeft' => [
+            'title' => 'Te quedan :count días para dar el acceso a Hacienda',
+            'description' => 'Sin él no podemos pagarte los :value € que ya has ganado, y al acabar el plazo los pierdes.',
+        ],
+        'lastDay' => [
+            'title' => 'Último día para dar el acceso a Hacienda',
+            'description' => 'Si no lo das hoy, pierdes los :value € que ya has ganado.',
+        ],
+        'forfeited' => [
+            'title' => 'Has perdido tu saldo por falta del acceso a Hacienda',
+            'description' => 'El plazo acabó sin el subusuario y los :value € ya no están en tu monedero. Habla con soporte si crees que es un error.',
+        ],
+    ],
 ];
