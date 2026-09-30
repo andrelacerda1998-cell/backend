@@ -72,6 +72,68 @@ class AdminVendorDocumentsApiTest extends TestCase
             ->assertJsonPath('data.items.0.status', 'pending');
     }
 
+    public function test_it_shows_a_single_document_by_id(): void
+    {
+        $document = $this->makeVendorDocument('pending');
+
+        $this->withAuth()
+            ->getJson("/api/v1/admin/vendor-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $document->id)
+            ->assertJsonPath('data.vendor_name', 'Ana Ferreira')
+            ->assertJsonPath('data.document_type', 'Cartão de Cidadão')
+            ->assertJsonPath('data.status', 'pending');
+    }
+
+    /**
+     * O caso que motivou esta rota.
+     *
+     * O index é uma fila paginada por estado. Um documento aprovado só se
+     * alcançava percorrendo as páginas de ?status=approved -- e com centenas
+     * de aprovados ficava inalcançável na prática. Aprovar um documento fazia-o
+     * desaparecer (caso Danúbia Trintrim).
+     */
+    public function test_it_shows_a_document_that_was_already_approved(): void
+    {
+        $document = $this->makeVendorDocument('approved');
+
+        $this->withAuth()
+            ->getJson("/api/v1/admin/vendor-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $document->id)
+            ->assertJsonPath('data.status', 'approved');
+    }
+
+    public function test_it_shows_a_declined_document_too(): void
+    {
+        // Um recusado tem de se poder ver: é onde está o motivo da recusa.
+        $document = $this->makeVendorDocument('declined');
+
+        $this->withAuth()
+            ->getJson("/api/v1/admin/vendor-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'declined');
+    }
+
+    public function test_it_returns_404_for_a_document_that_does_not_exist(): void
+    {
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendor-documents/999999')
+            ->assertNotFound();
+    }
+
+    public function test_it_refuses_to_show_a_document_without_the_admin_token(): void
+    {
+        // A rota nova tem de ficar atrás do mesmo guarda que as outras: um
+        // documento de identificação não pode ser servido a quem passar por lá.
+        $document = $this->makeVendorDocument('approved');
+
+        config(['services.admin_api.token' => 'a-valid-token']);
+
+        $this->getJson("/api/v1/admin/vendor-documents/{$document->id}")
+            ->assertUnauthorized();
+    }
+
     public function test_it_can_list_documents_by_other_statuses(): void
     {
         $this->makeVendorDocument('pending');
