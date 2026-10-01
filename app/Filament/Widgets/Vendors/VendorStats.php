@@ -109,20 +109,26 @@ class VendorStats extends BaseWidget
     /**
      * Contagem de vendors que podem aceitar serviço.
      *
-     * A elegibilidade (Vendor::canAcceptService) tem 8 condições; 7 são SQL, mas
-     * a verificação de documentos (all_documents_verified) exige avaliação em PHP.
-     * Abordagem híbrida: pré-filtrar em SQL as condições baratas (sem falsos
-     * negativos) para reduzir o conjunto, e só depois avaliar o accessor
-     * can_accept_service nos candidatos — resultado exato (bate com o filtro da
-     * tabela) e barato (o PHP só corre para poucos candidatos).
+     * Abordagem híbrida: pré-filtrar em SQL as condições baratas para reduzir o
+     * conjunto, e só depois avaliar o accessor can_accept_service nos
+     * candidatos — exato e barato.
+     *
+     * O PRÉ-FILTRO SÓ PODE CONTER O QUE `canAcceptService` EXIGE SEMPRE. Tinha
+     * aqui `at_valid = true` e `at_user like '%/%'`, que era verdade até
+     * 30/09/2026 -- a partir daí a AT passou a ser exigida só ao quarto serviço
+     * (`at_ready || ! at_required`). O comentário original dizia que o
+     * pré-filtro era "sem falsos negativos", e deixou de ser: escondia os
+     * técnicos que já podem trabalhar sem terem dado a AT.
+     *
+     * O mesmo filtro foi corrigido no VendorController (#124); esta cópia
+     * ficou para trás, e durante um dia o Filament mostrou 41 elegíveis
+     * enquanto o backoffice novo mostrava 69, sobre a mesma base de dados.
      */
     protected function eligibleVendorCount(): int
     {
         $candidates = $this->baseVendorQuery()
             ->whereNotNull('iban')
             ->where('invoice_workspace', '!=', '')
-            ->where('at_valid', true)
-            ->where('at_user', 'like', '%/%')
             ->whereDoesntHave('services', fn ($q) => $q
                 ->whereIn('status', [
                     ServiceStatus::ACCEPTED,
