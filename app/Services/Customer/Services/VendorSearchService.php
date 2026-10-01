@@ -47,7 +47,10 @@ class VendorSearchService
             $doIndice = $this->getVendors()
                 ->take(20)
                 ->where('is_test', $isTestCustomer)
-                ->where('at_valid', true)
+                // `at_em_dia` e não `at_valid`: a AT só é exigida a partir do
+                // quarto serviço. Filtrar por `at_valid` escondia da procura
+                // os técnicos que a regra quer deixar trabalhar.
+                ->where('at_em_dia', true)
                 ->get();
         } catch (\Throwable $e) {
             Log::warning('Immediate vendor search fell back to database', [
@@ -99,7 +102,7 @@ class VendorSearchService
 
         $query = Vendor::query()
             ->with(['user', 'servicesTypes', 'currentLocation', 'averageRating'])
-            ->where('at_valid', true)
+            ->atEmDia()
             ->whereHas('user', fn ($q) => $q->where('is_test', $isTestCustomer));
 
         // Com a localização simulada ligada (só fora de produção) o índice
@@ -181,8 +184,10 @@ class VendorSearchService
     {
         $limiar = Carbon::now()->subMinutes((int) config('services.request.location_update_threshold'));
 
+        // O diagnóstico tem de usar o MESMO filtro da procura, senão explica
+        // um zero que não é o que aconteceu.
         $base = fn () => Vendor::query()
-            ->where('at_valid', true)
+            ->atEmDia()
             ->whereHas('user', fn ($q) => $q->where('is_test', $isTestCustomer));
 
         return [

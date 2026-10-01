@@ -79,7 +79,7 @@ class ScheduleVendorSearchService
             'schedules',
         ])
             ->whereIn('id', $vendorIds)
-            ->where('at_valid', true)
+            ->atEmDia()
             ->whereHas('user', fn ($q) => $q->where('is_test', $isTestCustomer))
             ->get();
 
@@ -326,7 +326,7 @@ class ScheduleVendorSearchService
                     ->whereNotNull('addresses.latitude')
                     ->whereNotNull('addresses.longitude');
             })
-            ->where('vendors.at_valid', true)
+            ->atEmDia()
             ->where('users.is_test', $isTestCustomer)
             ->whereHas('servicesTypes', fn ($q) => $q->where('services_types.id', $this->servicesType->id))
             ->whereHas('scheduleAvailable', fn ($q) => $q

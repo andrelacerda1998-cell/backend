@@ -39,7 +39,17 @@ class StatusController extends Controller
 
 
             if($status === StatusVendor::ONLINE->value){
-                if(!$vendor->at_valid){
+                /*
+                 * `at_em_dia` e não `at_valid`: desde 30/09 a AT só é exigida a
+                 * partir do quarto serviço concluído.
+                 *
+                 * Este portão ficou para trás quando a regra mudou, e sem ele
+                 * nada do resto funciona: um técnico que a regra deixa
+                 * trabalhar não conseguia sequer pôr-se Online, e a procura do
+                 * cliente só devolve quem está Online. A regra existia no
+                 * papel e não no produto.
+                 */
+                if(!$vendor->at_em_dia){
                     throw new VendorATAccountInvalid();
                 }
                 if (!$vendor->all_documents_verified){

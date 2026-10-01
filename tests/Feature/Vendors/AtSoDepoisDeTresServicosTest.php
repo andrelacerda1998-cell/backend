@@ -168,6 +168,73 @@ class AtSoDepoisDeTresServicosTest extends TestCase
         $this->assertFalse($vendor->fresh()->shouldBeSearchable());
     }
 
+    // ------------------------------------- a regra em SQL e nos portões
+
+    /**
+     * O `shouldBeSearchable` acima diz que o técnico é INDEXADO. Isso não
+     * basta: a procura filtrava depois por `at_valid = true` e punha-o de
+     * fora na mesma. O teste antigo chamava-se "aparece na pesquisa" e não
+     * verificava a pesquisa.
+     */
+    public function test_o_scope_da_at_encontra_quem_ainda_nao_a_deu(): void
+    {
+        $semAt = $this->semAt();
+        $comAt = $this->comAt();
+
+        $ids = Vendor::query()->atEmDia()->pluck('id');
+        $this->assertContains($semAt->id, $ids, 'Sem AT e sem serviços tem de entrar.');
+        $this->assertContains($comAt->id, $ids, 'Com AT entra sempre.');
+    }
+
+    public function test_o_scope_da_at_exclui_quem_passou_dos_tres_sem_a_dar(): void
+    {
+        $vendor = $this->semAt();
+        $this->concluidos($vendor, 3);
+
+        $this->assertNotContains($vendor->id, Vendor::query()->atEmDia()->pluck('id'));
+    }
+
+    public function test_o_scope_concorda_com_o_atributo(): void
+    {
+        // Duas escritas da mesma regra -- uma em SQL, outra em PHP -- é o que
+        // criou este problema. Ficam amarradas uma à outra.
+        $vendor = $this->semAt();
+        $this->concluidos($vendor, 2);
+
+        $noScope = Vendor::query()->atEmDia()->pluck('id')->contains($vendor->id);
+        $this->assertSame($vendor->fresh()->at_em_dia, $noScope);
+
+        $this->concluidos($vendor, 1);
+        $noScope = Vendor::query()->atEmDia()->pluck('id')->contains($vendor->id);
+        $this->assertSame($vendor->fresh()->at_em_dia, $noScope);
+    }
+
+    /**
+     * Sem isto nada do resto serve: a procura do cliente só devolve quem está
+     * Online, e o portão recusava quem não tinha AT.
+     */
+    public function test_pode_ficar_online_sem_at_antes_dos_tres(): void
+    {
+        $vendor = $this->semAt();
+        $vendor->update(['status' => StatusVendor::OFFLINE]);
+
+        $this->actingAs($vendor->user, 'api')
+            ->putJson('/api/v1/vendor/status', ['status' => StatusVendor::ONLINE->value])
+            ->assertOk();
+    }
+
+    public function test_deixa_de_poder_ficar_online_sem_at_ao_terceiro(): void
+    {
+        $vendor = $this->semAt();
+        $vendor->update(['status' => StatusVendor::OFFLINE]);
+        $this->concluidos($vendor, 3);
+
+        $this->actingAs($vendor->user, 'api')
+            ->putJson('/api/v1/vendor/status', ['status' => StatusVendor::ONLINE->value])
+            // A VendorATAccountInvalid sai como 422, não 400.
+            ->assertStatus(422);
+    }
+
     // --------------------------------------- o que a app e o backoffice veem
 
     public function test_o_bloqueio_da_conta_nomeia_a_at_so_quando_ela_trava(): void

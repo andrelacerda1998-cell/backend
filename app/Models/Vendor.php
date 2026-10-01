@@ -45,7 +45,7 @@ class Vendor extends Model implements Auditable
 
     protected $fillable = ['user_id', 'status', 'price_rate', 'username', 'invoice_workspace', 'auth_token', 'company_name', 'invoice_account_id', 'at_user', 'at_password', 'iban', 'notification_preferences'];
 
-    protected $appends = ['can_accept_service', 'price_rate', 'full_name', 'invoice_workspace_ready'];
+    protected $appends = ['can_accept_service', 'price_rate', 'full_name', 'invoice_workspace_ready', 'at_em_dia'];
 
     protected $with = ['user', 'servicesTypes', 'operationAreas', 'currentLocation'];
 
@@ -170,6 +170,43 @@ class Vendor extends Model implements Auditable
     }
 
     /** O acesso à AT está dado E validado. */
+    /**
+     * A AT está em dia: ou foi entregue, ou ainda não é exigida.
+     *
+     * É a MESMA condição que o `canAcceptService` usa (`at_ready ||
+     * ! at_required`), num sítio só e com nome próprio.
+     *
+     * Existe porque esta regra estava copiada em SQL em cinco sítios -- duas
+     * contagens e três consultas de procura -- e quando mudou a 30/09 só umas
+     * foram atualizadas. O resultado foi o backoffice a dizer 41 elegíveis e
+     * o novo a dizer 69, e técnicos a contarem como disponíveis sem o cliente
+     * os conseguir encontrar.
+     *
+     * Vai nos `$appends`, portanto entra no índice de pesquisa pelo
+     * `toSearchableArray()` -- é assim que o Meilisearch pode filtrar por ela
+     * em vez de por `at_valid`.
+     */
+    public function atEmDia(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->at_ready || ! $this->at_required)->shouldCache();
+    }
+
+    /**
+     * A mesma regra, em SQL, para quem filtra em consulta.
+     *
+     * `whereHas(..., '<', N)` gera uma subconsulta de contagem, por isso
+     * apanha também quem tem ZERO serviços concluídos -- que são justamente os
+     * que a regra quer deixar entrar.
+     */
+    public function scopeAtEmDia($query)
+    {
+        return $query->where(function ($q) {
+            $q->where(function ($jaDeu) {
+                $jaDeu->where('at_valid', true)->where('at_user', 'like', '%/%');
+            })->orWhereHas('completedServices', null, '<', self::SERVICOS_ANTES_DA_AT);
+        });
+    }
+
     public function atReady(): Attribute
     {
         return Attribute::make(
