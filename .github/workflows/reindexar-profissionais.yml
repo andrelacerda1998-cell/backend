@@ -67,7 +67,7 @@ jobs:
             $ART tinker --execute='
               echo "documentos no indice  = " . app(Meilisearch\Client::class)->index("vendors")->stats()["numberOfDocuments"] . PHP_EOL;
               echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
-            ' || true
+            ' 2>&1 || true
 
             echo
             echo "=============================================="
@@ -82,11 +82,23 @@ jobs:
             echo "=============================================="
             echo " A REINDEXAR"
             echo "=============================================="
+            # 2>&1 EM TODAS AS CHAMADAS, e não é detalhe: o `ssh-action` só
+            # mostra o stdout. A primeira versão disto falhou com "status 255"
+            # e nenhuma mensagem, porque o erro do artisan foi para o stderr e
+            # desapareceu. Um passo que falha sem dizer porquê é pior do que um
+            # passo que não existe.
+            #
+            # Aspas SIMPLES à volta do nome da classe: em aspas duplas a barra
+            # invertida depende de quantas camadas de shell o texto atravessa
+            # até chegar ao PHP. O `ler-estado-da-procura-imediata` já usa esta
+            # forma com classes com barras, e funciona.
+            #
             # `scout:import` reescreve TODOS os documentos a partir da base de
             # dados. Não apaga o índice primeiro: os documentos são
             # substituídos um a um pelo id, por isso a procura continua a
             # responder durante a operação em vez de ficar vazia a meio.
-            $ART scout:import "App\Models\Vendor"
+            echo "comando: php artisan scout:import 'App\Models\Vendor'"
+            $ART scout:import 'App\Models\Vendor' 2>&1
 
             echo
             echo "=============================================="
@@ -100,8 +112,8 @@ jobs:
             $ART tinker --execute='
               echo "documentos no indice  = " . app(Meilisearch\Client::class)->index("vendors")->stats()["numberOfDocuments"] . PHP_EOL;
               echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
-            ' || true
+            ' 2>&1 || true
 
             echo
             echo "jobs falhados na fila:"
-            $ART queue:failed 2>/dev/null | tail -3 || true
+            $ART queue:failed 2>&1 | tail -3 || true
