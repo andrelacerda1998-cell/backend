@@ -54,6 +54,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         // de ponta a ponta e devolvia sempre comentario vazio.
         'rating_comment_by_customer',
         'rating_by_vendor',
+        'rating_comment_by_vendor',
         'customer_notes',
         'vendor_notes',
         'credit_used',

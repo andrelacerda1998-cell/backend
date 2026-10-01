@@ -118,6 +118,7 @@ class ServicesHistoryController extends Controller
                         ] : null,
                         // 'rating_by_customer' => $service->rating_by_customer,
                         'rating_by_vendor' => $service->rating_by_vendor,
+                        'rating_comment_by_vendor' => $service->rating_comment_by_vendor,
                         'created_at' => $service->created_at,
                         'invoice_id' => $service->invoice_id,
                         // Temporary URL (não getFirstMediaUrl): com disco de media privado (S3) o

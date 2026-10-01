@@ -16,6 +16,42 @@ use RwInteractive\PayshopSdk\Enums\Payment\Status;
 
 class RefuseService
 {
+    /** O profissional recusou, com o dedo. */
+    public const MOTIVO_RECUSA = 'internal/services.refused.vendor';
+
+    /**
+     * O prazo acabou sem resposta.
+     *
+     * O DINHEIRO SEGUE O MESMO CAMINHO (libertar a autorização ou reembolsar,
+     * devolver o crédito, apagar o agendamento, libertar o voucher) — deixar um
+     * pedido pago a expirar sem isto prendia o dinheiro do cliente para sempre.
+     *
+     * O que NÃO é igual é a leitura: não responder porque se estava a conduzir
+     * não é recusar. Por isso o motivo fica gravado, e a taxa de aceitação
+     * ignora-o (ver StatsController).
+     */
+    public const MOTIVO_EXPIRADO = 'internal/services.refused.timeout';
+
+    /**
+     * O profissional aceitou OUTRO pedido imediato e ficou ocupado.
+     *
+     * Também não é recusa dele: ele disse que sim -- a outro. Fica de fora da
+     * taxa de aceitação pela mesma razão que o timeout.
+     */
+    public const MOTIVO_OCUPADO = 'internal/services.refused.vendor_busy';
+
+    /**
+     * As justificações que NÃO são uma recusa do profissional.
+     *
+     * Vive aqui, e não espalhada pelos sítios que a consultam, porque a lista
+     * vai crescer e esquecer um sítio é fazer a taxa de aceitação de alguém
+     * cair por uma razão que não é dele.
+     */
+    public const MOTIVOS_QUE_NAO_SAO_RECUSA = [
+        self::MOTIVO_EXPIRADO,
+        self::MOTIVO_OCUPADO,
+    ];
+
     public function __construct(private Service $service)
     {
     }
@@ -25,7 +61,7 @@ class RefuseService
      * @throws \Exception
      * @throws \Throwable
      */
-    public function refuse(): void
+    public function refuse(string $motivo = self::MOTIVO_RECUSA): void
     {
         $this->service->refresh();
 
@@ -37,7 +73,7 @@ class RefuseService
             \DB::beginTransaction();
             try {
                 $this->service->status = ServiceStatus::REFUSED;
-                $this->service->status_justification = 'internal/services.refused.vendor';
+                $this->service->status_justification = $motivo;
 
                 $this->service->save();
                 $customer = $this->service->customer;
