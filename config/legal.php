@@ -10,7 +10,7 @@ return [
      * quando o texto muda.
      */
     'provider_terms' => [
-        'version' => env('LEGAL_PROVIDER_TERMS_VERSION', '1.0'),
+        'version' => env('LEGAL_PROVIDER_TERMS_VERSION', '1.1'),
         'url' => env('LEGAL_PROVIDER_TERMS_URL', 'https://piquetapp.com/termos-e-condicoes-prestadores-de-servico/'),
     ],
 ];
