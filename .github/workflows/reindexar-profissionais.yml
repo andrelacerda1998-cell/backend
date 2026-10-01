@@ -1,0 +1,107 @@
+name: Reindexar os profissionais
+
+# Reconstrói o índice de pesquisa dos profissionais a partir da base de dados.
+#
+# PORQUE EXISTE: a 01/10/2026 o índice tinha 83 documentos para 464
+# profissionais, e os que lá estavam não tinham o campo `at_em_dia` -- o campo
+# por onde a procura passou a filtrar nesse dia. Um filtro por um campo que não
+# existe não devolve nada.
+#
+# Era preciso entrar no servidor por SSH para correr isto. Passa a ser um botão
+# com portão de aprovação, porque esta não vai ser a última vez que um campo
+# novo entra no índice: sempre que o `toSearchableArray()` ganhar um campo, os
+# documentos já indexados ficam sem ele até serem reescritos.
+#
+# NÃO É A CURA da fila. O índice fica a 83 de 464 porque a fila que o alimenta
+# anda a falhar (432 jobs falhados, o mais recente de 20/07). Isto repõe o
+# índice; a fila continua a não acompanhar, e isso trata-se noutro sítio.
+
+on:
+  workflow_dispatch:
+
+# ENTRA no grupo do deploy, ao contrário dos workflows de leitura.
+#
+# Isto ESCREVE no índice, e um deploy a meio de uma reindexação deixaria metade
+# dos documentos com o formato antigo e metade com o novo -- e a diferença só
+# se notaria quando um cliente não encontrasse ninguém.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reindexar:
+    name: Reindexar os profissionais
+    runs-on: ubuntu-latest
+    # 461 profissionais demoram pouco, mas a fila pode estar carregada.
+    timeout-minutes: 30
+    # Traz o portão de aprovação manual, que aqui faz ainda mais sentido do que
+    # nos workflows de leitura: isto escreve.
+    environment: production
+    steps:
+      - name: Reconstruir o índice a partir da base de dados
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 25m
+          # O comando é FIXO neste ficheiro, e NÃO um input do workflow. Aceitar
+          # um comando por parâmetro transformava este botão numa shell remota
+          # para produção à espera de ser usada. É a mesma regra dos workflows
+          # de leitura.
+          script: |
+            set -euo pipefail
+            cd ~/project-laravel
+
+            ART="docker compose exec -T laravel-prod php artisan"
+
+            echo "=============================================="
+            echo " ANTES"
+            echo "=============================================="
+            # A MESMA forma de contar que o `ler-estado-da-procura-imediata`
+            # usa. Inventar uma segunda maneira de contar a mesma coisa é
+            # exactamente o que já custou dois dias noutros sítios.
+            $ART tinker --execute='
+              echo "documentos no indice  = " . app(Meilisearch\Client::class)->index("vendors")->stats()["numberOfDocuments"] . PHP_EOL;
+              echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
+            ' || true
+
+            echo
+            echo "=============================================="
+            echo " DEFINIÇÕES DO ÍNDICE"
+            echo "=============================================="
+            # Primeiro as definições, depois os documentos: um campo novo só é
+            # filtrável se estiver nos filterableAttributes, e reindexar antes
+            # disso deixava o índice cheio e na mesma sem conseguir filtrar.
+            $ART scout:sync-index-settings
+
+            echo
+            echo "=============================================="
+            echo " A REINDEXAR"
+            echo "=============================================="
+            # `scout:import` reescreve TODOS os documentos a partir da base de
+            # dados. Não apaga o índice primeiro: os documentos são
+            # substituídos um a um pelo id, por isso a procura continua a
+            # responder durante a operação em vez de ficar vazia a meio.
+            $ART scout:import "App\Models\Vendor"
+
+            echo
+            echo "=============================================="
+            echo " DEPOIS"
+            echo "=============================================="
+            # A prova. Se o número não subir, a fila engoliu os jobs -- e é
+            # isso que é preciso saber, em vez de se assumir que correu bem.
+            # A MESMA forma de contar que o `ler-estado-da-procura-imediata`
+            # usa. Inventar uma segunda maneira de contar a mesma coisa é
+            # exactamente o que já custou dois dias noutros sítios.
+            $ART tinker --execute='
+              echo "documentos no indice  = " . app(Meilisearch\Client::class)->index("vendors")->stats()["numberOfDocuments"] . PHP_EOL;
+              echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
+            ' || true
+
+            echo
+            echo "jobs falhados na fila:"
+            $ART queue:failed 2>/dev/null | tail -3 || true
