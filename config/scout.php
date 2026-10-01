@@ -138,7 +138,7 @@ return [
         'key' => env('MEILISEARCH_KEY'),
         'index-settings' => [
             Vendor::class => [
-                'filterableAttributes' => ['id', 'user.name', 'user.email', '_geo', 'services_types', 'geoTime', 'status', 'ratings', 'is_test', 'at_valid'],
+                'filterableAttributes' => ['id', 'user.name', 'user.email', '_geo', 'services_types', 'geoTime', 'status', 'ratings', 'is_test', 'at_valid', 'at_em_dia'],
                 'sortableAttributes' => ['_geo', 'ratings.average_rating'],
             ],
             VendorScheduleSearch::class => [
