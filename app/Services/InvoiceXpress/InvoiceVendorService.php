@@ -134,7 +134,20 @@ class InvoiceVendorService
 
         $amount = $service->amount;
 
-        $payload = $this->generateInvoicePayload($service->created_at, $service->created_at, $service->id, $customer, [$this->item('Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt'), $amount)]);
+        /**
+         * `serviceType` PODE SER NULL — um pedido PERSONALIZADO não tem tipo de
+         * serviço (`services_type_id` é null de propósito).
+         *
+         * Sem o `?->` isto era `getTranslation()` sobre null: Error fatal, e o
+         * `CreateInvoiceJob` tem `tries = 1`. A fatura de um serviço
+         * personalizado nunca chegava a ser emitida, e nada o dizia -- o job
+         * morria em silêncio. O que o cliente descreveu é o nome que faz
+         * sentido na fatura.
+         */
+        $descricao = $service->serviceType?->getTranslation('name', 'pt-pt')
+            ?: ($service->custom_description ?: 'Serviço');
+
+        $payload = $this->generateInvoicePayload($service->created_at, $service->created_at, $service->id, $customer, [$this->item('Serviço: '.$descricao, $amount)]);
         $response = $this->sendRequest('/invoice_receipts.json', 'POST', $payload);
         $service->invoice_id = $response['invoice_receipt']['id'];
         $service->save();
