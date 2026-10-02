@@ -151,11 +151,10 @@ class Vendor extends Model implements Auditable
      */
     public function completedServices(): HasMany
     {
-        return $this->services()->whereIn('status', [
-            ServiceStatus::CLOSED,
-            ServiceStatus::CLOSED_PENDING_PAYMENT,
-            ServiceStatus::ARCHIVED,
-        ]);
+        // A lista dos estados vive no enum, e não aqui. Estava escrita à mão
+        // nos dois sítios que a usam, e os dois divergiram: o backoffice
+        // contava só `CLOSED`. Ver `ServiceStatus::concluidos()`.
+        return $this->services()->whereIn('status', ServiceStatus::concluidos());
     }
 
     /**

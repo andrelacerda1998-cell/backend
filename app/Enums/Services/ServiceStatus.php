@@ -45,4 +45,41 @@ enum ServiceStatus: string
     // there is no remote hold to release; the remote order (if any) expires on its own. The reaper
     // does the local refund (wallet credit + voucher) itself.
     case EXPIRED_3DS = 'Expired3DS';
+
+    /**
+     * «O profissional levou este serviço até ao fim.»
+     *
+     * UM SÓ SÍTIO, e é esta a razão de existir deste método. A regra da AT
+     * contava `CLOSED + CLOSED_PENDING_PAYMENT + ARCHIVED` (ver
+     * `Vendor::completedServices`) enquanto o cartão «Sem serviços» do
+     * backoffice contava só `CLOSED`. O mesmo profissional aparecia como «já
+     * fez serviços» para a AT e como «nunca fez nenhum» no ecrã ao lado --
+     * duas respostas certas para duas perguntas que deviam ser a mesma.
+     *
+     * PORQUE É QUE OS TRÊS ESTADOS CONTAM:
+     *
+     *  - `CLOSED`: o caso normal, serviço feito e pago.
+     *  - `CLOSED_PENDING_PAYMENT`: o cliente confirmou, o trabalho ESTÁ feito;
+     *    o que falhou foi a captura do pagamento, e isso é um problema nosso
+     *    com o banco, não trabalho por fazer. Dizer a quem o fez que não fez
+     *    nada seria mentira.
+     *  - `ARCHIVED`: arquivado por um administrador depois do facto. Arquivar
+     *    é arrumar, não é desfazer.
+     *
+     * ONDE *NÃO* SE USA ISTO, de propósito:
+     *
+     *  - dinheiro (`VendorPaymentController`, `PaymentOrderController`, as
+     *    somas do «top por receita»). Aí `CLOSED_PENDING_PAYMENT` é
+     *    exactamente o que o nome diz -- ainda não houve captura -- e somá-lo
+     *    inflacionava valores recebidos com dinheiro que não entrou;
+     *  - avaliações (`updateRatting`, `VendorRankingService`). Essas filtram
+     *    por `rating_by_customer` e mexem na nota pública; mudar o conjunto
+     *    mudava notas de gente real, e é uma decisão à parte desta.
+     *
+     * @return array<int, self>
+     */
+    public static function concluidos(): array
+    {
+        return [self::CLOSED, self::CLOSED_PENDING_PAYMENT, self::ARCHIVED];
+    }
 }

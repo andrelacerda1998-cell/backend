@@ -458,9 +458,20 @@ class VendorController extends Controller
         $eligibleIds = $this->eligibleVendorIds();
         $eligible = $eligibleIds->count();
 
+        /*
+         * «Sem serviços» = dos ELEGÍVEIS, quantos nunca levaram nenhum ao fim.
+         * O denominador são os elegíveis e não os registados -- perguntar
+         * quantos dos 461 nunca trabalharam responde-se sozinho.
+         *
+         * Contava só `CLOSED`. A regra da AT, no mesmo código, conta
+         * `CLOSED + CLOSED_PENDING_PAYMENT + ARCHIVED`: quem tivesse serviços
+         * apenas nesses dois estados aparecia aqui como «nunca fez nenhum» e
+         * já tinha a AT exigida por «já fez três». Agora ambos leem a mesma
+         * lista, em `ServiceStatus::concluidos()`.
+         */
         $withClosedService = Service::query()
             ->whereIn('vendor_id', $eligibleIds)
-            ->where('status', ServiceStatus::CLOSED)
+            ->whereIn('status', ServiceStatus::concluidos())
             ->where('is_test', false)
             ->distinct()
             ->pluck('vendor_id');
