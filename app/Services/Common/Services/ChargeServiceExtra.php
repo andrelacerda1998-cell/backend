@@ -11,6 +11,7 @@ use RwInteractive\PayshopSdk\Enums\PaymentMethods\PaymentMethodType;
 use RwInteractive\PayshopSdk\Exceptions\Api\CreditCardValidationRequired;
 use RwInteractive\PayshopSdk\Models\PaymentMethod;
 use RwInteractive\PayshopSdk\Models\PaymentOrder;
+use App\Services\Payments\JanelaDeCativacao;
 
 /**
  * Cobrança de um extra (tempo/peças) APROVADO pelo cliente — ordem Payshop dedicada,
@@ -148,7 +149,7 @@ class ChargeServiceExtra
             OperationType::DEFERRED,
             (int) $extra->amount,
             'Extra for service #'.$service->id,
-            now()->addDays(15),
+            JanelaDeCativacao::expiraEm(),
             [],
             ['service' => $service->id, 'extra' => $extra->id]
         );
@@ -160,7 +161,7 @@ class ChargeServiceExtra
             OperationType::DEFERRED,
             (int) $extra->amount,
             'Extra for service #'.$service->id.' via MBWay',
-            now()->addDays(15),
+            JanelaDeCativacao::expiraEm(),
             $mbway,
             ['service' => $service->id]
         );

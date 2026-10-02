@@ -73,6 +73,8 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
         Route::group(['prefix' => 'matching'], function () {
             Route::get('/', [MatchingInvitationsController::class, 'index']);
             // Padrões de procura, calculados a partir de pedidos reais.
+            // Aceites, à espera de o cliente decidir.
+            Route::get('/awaiting', [MatchingInvitationsController::class, 'aguardando']);
             Route::get('/insights', [MatchingInvitationsController::class, 'insights'])->middleware('throttle:10,1');
             Route::post('/{candidate}/accept', [MatchingInvitationsController::class, 'accept']);
             Route::post('/{candidate}/decline', [MatchingInvitationsController::class, 'decline']);

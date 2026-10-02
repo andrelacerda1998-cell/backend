@@ -40,9 +40,44 @@ readonly class ServiceRequestedData
         public ?string $date_label,
         public Carbon $updated_at,
         public Carbon $server_time,
+        /**
+         * Quando o prazo de resposta FECHA, segundo o servidor.
+         *
+         * A app calculava-o sozinha (`created_at` + uma constante escrita no
+         * código) e, quando o servidor subiu a janela de 60 para 120 segundos,
+         * ficou meses a prometer metade do tempo. Agora o número vem de quem
+         * manda nele — o mesmo que o `services:expirar-pedidos-pendentes` usa
+         * para fechar o pedido.
+         *
+         * Lê-se sempre em par com o `server_time`: sem ele a app contava pelo
+         * relógio do telemóvel contra um prazo do servidor, e meio minuto de
+         * desvio comia um quarto da janela.
+         */
+        public ?Carbon $expires_at,
         public int $created_timestamp,
         public int $updated_timestamp,
     ) {}
+
+    /**
+     * Fim da janela de resposta: `created_at` + a janela das definições.
+     *
+     * É a MESMA conta que o comando que expira o pedido faz. Duplicá-la aqui é
+     * deliberado e está contido num sítio só: a alternativa era a app receber
+     * uma data e o comando fechar noutra, e ninguém perceber porquê.
+     */
+    private static function fimDoPrazo(Service $service): ?Carbon
+    {
+        if (! $service->created_at) {
+            return null;
+        }
+
+        $settings = app(\App\Settings\MatchingSettings::class);
+        $janela = ($service->schedule_id || $service->schedule)
+            ? (int) $settings->vendor_response_seconds_scheduled
+            : (int) $settings->vendor_response_seconds_immediate;
+
+        return $service->created_at->copy()->addSeconds(max(1, $janela));
+    }
 
     /**
      * Itens sem tradução na língua atual chegam aqui como string vazia
@@ -164,6 +199,7 @@ readonly class ServiceRequestedData
             date_label: $service->date_label,
             updated_at: $service->updated_at,
             server_time: now(),
+            expires_at: self::fimDoPrazo($service),
             created_timestamp: $service->created_at->timestamp,
             updated_timestamp: $service->updated_at->timestamp,
         );

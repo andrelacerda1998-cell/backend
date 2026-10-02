@@ -6,6 +6,7 @@ use App\Enums\Services\AddressType;
 use App\Exceptions\Api\Vendor\Invoicing\VendorInvalidAtCredentials;
 use App\Exceptions\Api\Vendor\VendorDuplicatedSequence;
 use App\Models\Service;
+use App\Models\ServiceExtra;
 use App\Models\Vendor;
 use App\Services\InvoiceXpress\Contracts\HasInvoiceActions;
 use App\Services\InvoiceXpress\Contracts\HasInvoicesItems;
@@ -134,13 +135,82 @@ class InvoiceVendorService
 
         $amount = $service->amount;
 
-        $payload = $this->generateInvoicePayload($service->created_at, $service->created_at, $service->id, $customer, [$this->item('Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt'), $amount)]);
+        /**
+         * `serviceType` PODE SER NULL — um pedido PERSONALIZADO não tem tipo de
+         * serviço (`services_type_id` é null de propósito).
+         *
+         * Sem o `?->` isto era `getTranslation()` sobre null: Error fatal, e o
+         * `CreateInvoiceJob` tem `tries = 1`. A fatura de um serviço
+         * personalizado nunca chegava a ser emitida, e nada o dizia -- o job
+         * morria em silêncio. O que o cliente descreveu é o nome que faz
+         * sentido na fatura.
+         */
+        $payload = $this->generateInvoicePayload(
+            $service->created_at,
+            $service->created_at,
+            $service->id,
+            $customer,
+            $this->linhasDaFatura($service, $amount),
+        );
         $response = $this->sendRequest('/invoice_receipts.json', 'POST', $payload);
         $service->invoice_id = $response['invoice_receipt']['id'];
         $service->save();
 
         return $response['invoice_receipt']['id'];
 
+    }
+
+    /**
+     * As linhas da fatura: o serviço base MAIS os extras que o cliente pagou.
+     *
+     * OS EXTRAS FALTAVAM. A fatura levava uma linha só, com `$service->amount`,
+     * e nada soma os extras a esse valor. Mas o extra é COBRADO AO CLIENTE NA
+     * APROVAÇÃO (captura imediata): num serviço de 60 € com uma peça de 50 € e
+     * meia hora extra de 15 €, o cliente pagava 125 € e a fatura dizia 60 €.
+     * Sessenta e cinco euros recebidos sem documento fiscal, emitidos sob o NIF
+     * do técnico.
+     *
+     * O predicado é o MESMO que o `CloseService::settleExtras` usa para creditar
+     * o técnico (`isCharged()`): assim o que se fatura é exactamente o que
+     * entrou e foi pago a alguém. Divergirem era garantir que um dia não batiam
+     * certo.
+     *
+     * IVA: 23% em tudo (decisão do André, 02/10/2026). A taxa é do documento
+     * inteiro (`generateInvoicePayload`), por isso as linhas novas herdam-na
+     * sem conta nenhuma à parte.
+     */
+    private function linhasDaFatura(Service $service, int $amount): array
+    {
+        // Um pedido PERSONALIZADO não tem tipo de serviço (`services_type_id`
+        // null de propósito). Sem o `?->` isto era uma chamada de método sobre
+        // null -- Error fatal -- e o `CreateInvoiceJob` tem `tries = 1`: a
+        // fatura nunca saía e o job morria em silêncio.
+        $descricao = $service->serviceType?->getTranslation('name', 'pt-pt')
+            ?: ($service->custom_description ?: 'Serviço');
+
+        $linhas = [$this->item('Serviço: '.$descricao, $amount)];
+
+        foreach ($service->extras()->where('status', 'approved')->get() as $extra) {
+            // Zero euros não é uma linha de fatura, e o que não foi cobrado não
+            // se fatura.
+            if (! $extra->isCharged() || (int) $extra->amount <= 0) {
+                continue;
+            }
+
+            $linhas[] = $this->item($this->descricaoDoExtra($extra), (int) $extra->amount);
+        }
+
+        return $linhas;
+    }
+
+    /** O que o cliente lê na fatura por baixo do serviço. */
+    private function descricaoDoExtra(ServiceExtra $extra): string
+    {
+        if ($extra->type === 'part') {
+            return 'Peça/material: '.($extra->description ?: 'sem descrição');
+        }
+
+        return 'Tempo extra: '.((int) $extra->minutes).' min';
     }
 
     public function createAtCommunications(): bool

@@ -188,10 +188,21 @@ class CloseService
      *  2) Cada extra efetivamente cobrado (`paid`/`not_required`) e ainda não creditado
      *     (`vendor_credited_at` null — guard de idempotência) é depositado agora.
      *
-     * Regra de comissão: não existe nenhuma regra de comissão para extras no código atual.
-     * DECISÃO A VALIDAR: aplica-se a MESMA proporção do serviço base
-     * (amount_for_vendor / amount); o resto vai para a carteira da plataforma. Se o dono do
-     * produto decidir que o extra é 100% do técnico, basta trocar o rácio por 1.0 aqui.
+     * COMISSÃO POR TIPO DE EXTRA (decisão do André, 02/10/2026).
+     *
+     *  - TEMPO EXTRA: mesma proporção do serviço base (75/25 hoje). É mão de
+     *    obra, exactamente como o serviço que está a prolongar, e não há razão
+     *    para a tratar de outra maneira.
+     *
+     *  - PEÇAS: 100% para o técnico. Não é receita dele -- é o REEMBOLSO de um
+     *    custo que ele adiantou do bolso. Com os 75/25 uma torneira de 50 €
+     *    devolvia-lhe 37,50 € e ele perdia 12,50 € por a ter comprado; a reação
+     *    natural a isso é deixar de declarar peças, comprá-las por fora, ou
+     *    inflacionar o preço para compensar.
+     *
+     * O risco do 100% é inflacionar o valor da peça para esconder mão de obra.
+     * Está mitigado hoje: a peça exige descrição, valor e APROVAÇÃO DO CLIENTE,
+     * e o backoffice vê-as todas. Se crescer, pede-se foto do talão.
      */
     private function settleExtras(): void
     {
@@ -203,7 +214,7 @@ class CloseService
 
         $baseAmount = abs((int) $this->service->getRawOriginal('amount'));
         $baseVendor = abs((int) $this->service->getRawOriginal('amount_for_vendor'));
-        $ratio = $baseAmount > 0 ? $baseVendor / $baseAmount : 1.0;
+        $ratioDoServico = $baseAmount > 0 ? $baseVendor / $baseAmount : 1.0;
 
         foreach ($extras as $extra) {
             // MBWay ficou à espera do push na aprovação — tentar capturar agora.
@@ -214,6 +225,10 @@ class CloseService
             if (! $extra->isCharged() || $extra->vendor_credited_at !== null) {
                 continue; // não cobrado (nunca pagar dinheiro que não entrou) ou já creditado
             }
+
+            // Peça = reembolso de um custo, vai inteira. Tempo = mão de obra,
+            // leva a comissão do serviço. Ver o bloco acima.
+            $ratio = $extra->type === 'part' ? 1.0 : $ratioDoServico;
 
             $extraVendor = (int) round(((int) $extra->amount) * $ratio);
             $extraSystem = ((int) $extra->amount) - $extraVendor;

@@ -5,6 +5,7 @@ namespace App\Http\Requests\Api\Customer\Services;
 use App\Enums\Schedule\ScheduleRecurrence;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Rules\AgendamentoDentroDaJanelaDePagamento;
 
 class OpenServiceRequest extends FormRequest
 {
@@ -17,7 +18,7 @@ class OpenServiceRequest extends FormRequest
             'mbway_phone' => 'string|nullable',
             'scheduled' => 'boolean',
             'schedule' => 'array|required_if:scheduled,true',
-            'schedule.scheduled_day' => 'required_if:scheduled,true|date',
+            'schedule.scheduled_day' => ['required_if:scheduled,true', 'date', new AgendamentoDentroDaJanelaDePagamento],
             'schedule.scheduled_time_start' => 'required_if:scheduled,true|date_format:H:i',
             'schedule.scheduled_time_end' => 'required_if:scheduled,true|date_format:H:i|after:schedule.scheduled_time_start',
             // Confirmar uma ocorrência de uma série: o pagamento é de uma

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Vendor\Services;
 
 use App\Enums\Services\CandidateStatus;
+use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
@@ -46,6 +47,59 @@ class MatchingInvitationsController extends Controller
 
         return new ApiSuccessResponse(
             $invitations->map(fn (ServiceCandidate $c) => $this->payload($c))->values()
+        );
+    }
+
+    /**
+     * Candidaturas aceites à espera de o cliente decidir.
+     *
+     * Entre dizer "tenho disponibilidade" e o cliente escolher, o profissional
+     * ficava às cegas: a app não lhe mostrava em lado nenhum que estava à
+     * espera de nada. A Home não dizia, a Agenda dizia "livre" -- inclusive no
+     * próprio dia do serviço -- e ele só percebia que não tinha sido escolhido
+     * por nunca mais receber notícias.
+     *
+     * Só entram as que ainda estão VIVAS: o serviço continua em seleção
+     * (`Matching`). Se já foi adjudicado a outro, a candidatura dele passa a
+     * `lost` e deixa de aparecer; se foi a ele, passa a `selected` e o serviço
+     * sai de `Matching` para a agenda a sério.
+     */
+    public function aguardando(): ApiSuccessResponse
+    {
+        $vendorId = auth()->user()->vendor->id;
+
+        $candidaturas = ServiceCandidate::query()
+            ->where('vendor_id', $vendorId)
+            ->where('status', CandidateStatus::ACCEPTED)
+            ->whereHas('service', fn ($q) => $q->where('status', ServiceStatus::MATCHING))
+            ->with(['service.serviceType', 'service.schedule'])
+            ->orderBy('created_at')
+            ->get()
+            /**
+             * Passado o prazo do cliente, a candidatura MORRE -- mesmo que o
+             * `matching:advance` ainda não lhe tenha tocado.
+             *
+             * O cron corre ao minuto, e nesse intervalo o pedido continua em
+             * `Matching` com a candidatura em `accepted`: sem este filtro, a
+             * app mostrava-a na Agenda a dizer "o prazo do cliente terminou" e
+             * ao mesmo tempo na Home a dizer "à espera da decisão". Duas
+             * mensagens contrárias sobre a mesma coisa, e nenhuma delas útil --
+             * já não há decisão nenhuma para esperar.
+             *
+             * A expiração é avaliada POR LEITURA, como já se faz nos convites
+             * (ver `index()`), em vez de se confiar em alguém ter carimbado o
+             * estado a tempo.
+             */
+            ->filter(function (ServiceCandidate $c): bool {
+                $prazo = $c->service
+                    ? $this->matching->customerDeadline($c->service)
+                    : null;
+
+                return $prazo === null || $prazo->isFuture();
+            });
+
+        return new ApiSuccessResponse(
+            $candidaturas->map(fn (ServiceCandidate $c) => $this->payload($c))->values()
         );
     }
 
@@ -176,6 +230,20 @@ class MatchingInvitationsController extends Controller
             // relance do que o número sozinho.
             'notified_at' => $candidate->notified_at?->toIso8601String(),
             'expires_at' => $candidate->expires_at?->toIso8601String(),
+            /**
+             * Até quando o CLIENTE tem para escolher e pagar.
+             *
+             * É o mesmo instante que o ecrã do cliente mostra -- vem do
+             * `MatchingService::customerDeadline()`, que existe precisamente
+             * para os dois lados não contarem por relógios diferentes.
+             *
+             * Null enquanto ninguém aceitou: o relógio do cliente só arranca
+             * no primeiro "tenho disponibilidade". Num convite por responder
+             * vem quase sempre null, e é o esperado.
+             */
+            'customer_deadline' => $service
+                ? $this->matching->customerDeadline($service)?->toIso8601String()
+                : null,
             // Sem isto o contador ficava a contar pelo relógio do TELEMÓVEL
             // contra um prazo do SERVIDOR. Numa janela de 60 segundos, 30
             // segundos de desvio comiam metade do tempo visível — e este era o

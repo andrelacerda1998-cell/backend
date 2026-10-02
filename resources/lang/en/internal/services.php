@@ -3,6 +3,8 @@
 return [
     'refused' => [
         'vendor' => 'The vendor has refused the job.',
+        'timeout' => "The provider's response window expired.",
+        'vendor_busy' => 'The provider took another immediate request.',
     ],
     'refunds' => [
         'refused' => 'Refund for service.',

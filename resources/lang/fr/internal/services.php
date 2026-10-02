@@ -3,6 +3,8 @@
 return [
     'refused' => [
         'vendor' => "Le pro a refusé l'intervention.",
+        'timeout' => "Le délai de réponse du pro a expiré.",
+        'vendor_busy' => "Le pro a accepté une autre demande immédiate.",
     ],
     'refunds' => [
         'refused' => "Remboursement de l'intervention.",
