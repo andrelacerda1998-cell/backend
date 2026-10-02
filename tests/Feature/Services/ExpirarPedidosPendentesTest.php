@@ -115,6 +115,20 @@ class ExpirarPedidosPendentesTest extends TestCase
      */
     public function test_o_limite_e_exclusivo(): void
     {
+        /**
+         * RELÓGIO CONGELADO, senão isto é flake.
+         *
+         * 119 segundos contra uma janela de 120 deixa UM segundo de margem:
+         * entre construir o `created_at` e o comando avaliar `isFuture()`
+         * passa tempo real, e numa suite carregada passa mais de um segundo.
+         * O teste falhava ao calhar -- e um teste que falha ao calhar na CI é
+         * pior do que não existir, porque ensina a ignorar vermelhos.
+         *
+         * Congelar mantém a fronteira exacta, que é o que o teste quer provar,
+         * sem a pôr à mercê da velocidade da máquina.
+         */
+        $this->freezeTime();
+
         $servico = $this->pedido($this->tecnico(), 119);
 
         $this->artisan('services:expirar-pedidos-pendentes')->assertSuccessful();
