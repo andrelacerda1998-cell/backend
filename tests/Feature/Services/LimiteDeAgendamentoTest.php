@@ -50,6 +50,9 @@ class LimiteDeAgendamentoTest extends TestCase
     public function test_a_janela_tem_quinze_dias(): void
     {
         $this->assertSame(15, JanelaDeCativacao::DIAS);
+        // O limite do agendamento é 14 dias -- escrito aqui à letra de propósito,
+        // para que mexer nele seja uma decisão e não um efeito lateral.
+        $this->assertSame(14, JanelaDeCativacao::DIAS_AGENDAVEIS);
         $this->assertSame(
             now()->addDays(15)->format('Y-m-d H:i'),
             JanelaDeCativacao::expiraEm()->format('Y-m-d H:i'),

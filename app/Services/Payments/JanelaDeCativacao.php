@@ -27,6 +27,19 @@ final class JanelaDeCativacao
     /** Dias que a autorização do Payshop se mantém capturável. */
     public const DIAS = 15;
 
+    /**
+     * Dias de antecedência máxima para agendar: 14. Decisão do André, 02/10/2026.
+     *
+     * É UM DIA MENOS do que a cativação dura, e isso não é margem a mais -- é a
+     * conta certa. A captura acontece no FECHO, depois do trabalho feito: um
+     * slot às 18:00 do 15.º dia, marcado às 10:00 do dia zero, fecha-se para lá
+     * das 360 horas e a autorização expirou oito horas antes.
+     *
+     * Derivado de `DIAS` e não escrito a 14: se o prazo do Payshop mudar, o
+     * limite acompanha sem ninguém se lembrar dele.
+     */
+    public const DIAS_AGENDAVEIS = self::DIAS - 1;
+
     /** Quando expira uma cativação criada agora. */
     public static function expiraEm(?DateTimeInterface $de = null): Carbon
     {
@@ -50,7 +63,7 @@ final class JanelaDeCativacao
     {
         $agora = $de ? CarbonImmutable::instance($de) : CarbonImmutable::now();
 
-        return $agora->addDays(self::DIAS - 1)->endOfDay();
+        return $agora->addDays(self::DIAS_AGENDAVEIS)->endOfDay();
     }
 
     /** O fecho de um serviço nesta data e hora ainda cai dentro da cativação? */
