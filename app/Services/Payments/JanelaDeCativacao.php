@@ -28,17 +28,26 @@ final class JanelaDeCativacao
     public const DIAS = 15;
 
     /**
-     * Dias de antecedência máxima para agendar: 14. Decisão do André, 02/10/2026.
+     * Dias de antecedência máxima para agendar: 7. Decisão do André, 02/10/2026.
      *
-     * É UM DIA MENOS do que a cativação dura, e isso não é margem a mais -- é a
-     * conta certa. A captura acontece no FECHO, depois do trabalho feito: um
-     * slot às 18:00 do 15.º dia, marcado às 10:00 do dia zero, fecha-se para lá
-     * das 360 horas e a autorização expirou oito horas antes.
+     * NÃO é derivado de `DIAS`: é uma decisão de produto que por acaso cabe
+     * folgadamente dentro da cativação. Chegou a ser `DIAS - 1` (14), a conta
+     * mais permissiva que o dinheiro consegue suportar -- o limite da máquina.
+     * Sete dias é mais apertado do que isso de propósito, e por razões que não
+     * são técnicas: a semana é o horizonte em que uma pessoa sabe o que vai
+     * fazer, e o técnico não fica com a agenda hipotecada a quinze dias.
      *
-     * Derivado de `DIAS` e não escrito a 14: se o prazo do Payshop mudar, o
-     * limite acompanha sem ninguém se lembrar dele.
+     * A folga é o que protege o resto. A captura acontece no FECHO, depois do
+     * trabalho feito, e com sete dias o pior caso (marcar à meia-noite e um
+     * minuto, fechar às 23:59 do 7.º dia) fica a mais de sete dias do fim da
+     * autorização. Também dá espaço a um agendado pago por MBWay, onde não está
+     * provado que o Payshop honre uma captura diferida tão longe.
+     *
+     * TEM DE SER MENOR QUE `DIAS`, e o `LimiteDeAgendamentoTest` guarda isso:
+     * agendar para além da cativação é prometer um serviço que ninguém consegue
+     * cobrar.
      */
-    public const DIAS_AGENDAVEIS = self::DIAS - 1;
+    public const DIAS_AGENDAVEIS = 7;
 
     /** Quando expira uma cativação criada agora. */
     public static function expiraEm(?DateTimeInterface $de = null): Carbon
@@ -47,17 +56,11 @@ final class JanelaDeCativacao
     }
 
     /**
-     * ÚLTIMO DIA QUE SE PODE AGENDAR — e é um dia ANTES do fim da cativação,
-     * não o próprio.
+     * ÚLTIMO DIA QUE SE PODE AGENDAR, até ao fim desse dia.
      *
-     * A captura não acontece à hora do serviço: acontece no FECHO, depois de o
-     * trabalho estar feito. Um slot às 18:00 do 15.º dia, marcado às 10:00 do
-     * dia zero, fecha-se já para lá das 360 horas — a cativação expirou oito
-     * horas antes.
-     *
-     * Cortar no dia anterior cobre qualquer hora de qualquer slot sem ter de
-     * conhecer o horário: o pior caso (marcar à meia-noite e um minuto, fechar
-     * às 23:59 do 14.º dia) dá 14 dias e 23 horas, dentro dos 15.
+     * `endOfDay()` e não a hora exacta: o cliente escolhe um DIA na tira da app,
+     * e um limite às 11:03 do 7.º dia era impossível de desenhar num seletor de
+     * datas. O dia inteiro está dentro da cativação com folga de uma semana.
      */
     public static function ultimoDiaAgendavel(?DateTimeInterface $de = null): CarbonImmutable
     {
