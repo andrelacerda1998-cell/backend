@@ -445,6 +445,54 @@ class AdminVendorsApiTest extends TestCase
     }
 
     /**
+     * «Serviço concluído» tem de querer dizer o mesmo em todo o lado.
+     *
+     * Havia duas listas escritas à mão: a regra da AT contava
+     * `CLOSED + CLOSED_PENDING_PAYMENT + ARCHIVED` e o cartão «Sem serviços»
+     * contava só `CLOSED`. O mesmo profissional era, ao mesmo tempo, «nunca
+     * levou nenhum ao fim» num ecrã e «já fez os três que obrigam à AT» na
+     * regra ao lado.
+     *
+     * Testa-se pelos dois estados que estavam a faltar, um de cada vez, porque
+     * é exactamente neles que as duas contas discordavam.
+     */
+    public function test_sem_servicos_conta_os_mesmos_estados_que_a_regra_da_at(): void
+    {
+        $pagamentoFalhado = $this->makeEligibleVendor();
+        // O cliente confirmou e o trabalho está feito; o que falhou foi a
+        // captura. Antes contava como «nunca fez nenhum».
+        $this->makeService($pagamentoFalhado, ServiceStatus::CLOSED_PENDING_PAYMENT);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.eligible', 1)
+            ->assertJsonPath('data.noServices', 0);
+
+        // Arquivar é arrumar, não é desfazer.
+        $arquivado = $this->makeEligibleVendor();
+        $this->makeService($arquivado, ServiceStatus::ARCHIVED);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.eligible', 2)
+            ->assertJsonPath('data.noServices', 0);
+
+        // E o que NÃO conta continua a não contar: um serviço recusado não é
+        // trabalho feito, e este profissional tem de voltar a aparecer no
+        // «sem serviços».
+        $recusado = $this->makeEligibleVendor();
+        $this->makeService($recusado, ServiceStatus::REFUSED);
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendors/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.eligible', 3)
+            ->assertJsonPath('data.noServices', 1);
+    }
+
+    /**
      * `services_types` é o que o técnico faz SEGUNDO O MATCHING.
      *
      * Não é o mesmo que `operation_areas`: esse também guarda nomes de ofícios
