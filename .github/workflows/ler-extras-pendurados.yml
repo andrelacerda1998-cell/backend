@@ -1,0 +1,92 @@
+name: Ler extras pendurados em produção
+
+# So por accionamento manual. NAO corre em push, nunca.
+#
+# A pergunta que responde: um extra (peca ou tempo extra) e cobrado ao cliente
+# NO MOMENTO DA APROVACAO -- captura imediata, nao no fecho. E so existe com o
+# servico em ARRIVED, que e um dos estados de onde ainda se pode cancelar.
+#
+# Ate 02/10/2026 o cancelamento nao lhes tocava, e quem credita extras
+# (`CloseService`) nunca corre num servico cancelado. Resultado: o cliente
+# pagou, o tecnico nao recebeu, e o extra ficou `approved`/`paid` para sempre.
+#
+# Este workflow diz QUANTOS casos destes existem ja em producao, de antes da
+# correcao. E uma leitura: SELECTs, sem escritas.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Listar extras pagos e por resolver
+    runs-on: ubuntu-latest
+    # Traz os segredos do deploy e, de borla, o portao de aprovacao manual.
+    environment: production
+    steps:
+      - name: Extras pagos pendurados
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Comando FIXO, nao um input. Aceitar SQL por parametro transformava
+          # este botao numa consola de base de dados de producao.
+          script: |
+            set -euo pipefail
+            cd ~/project-laravel
+
+            docker compose exec -T laravel-prod sh -c 'cat > /tmp/extras.sql' <<'SQL'
+            SELECT
+                e.id            AS extra_id,
+                e.service_id,
+                s.vendor_id,
+                e.type,
+                ROUND(e.amount / 100, 2) AS valor_eur,
+                e.payment_status,
+                s.status        AS estado_do_servico,
+                DATE(e.charged_at) AS cobrado_em
+            FROM service_extras e
+            JOIN services s ON s.id = e.service_id
+            WHERE e.deleted_at IS NULL
+              AND e.status = 'approved'
+              AND e.payment_status IN ('paid', 'not_required')
+              AND e.vendor_credited_at IS NULL
+              AND s.status IN ('Canceled', 'CanceledMbway')
+            ORDER BY e.amount DESC
+            SQL
+
+            echo "==========================================================="
+            echo " EXTRAS COBRADOS AO CLIENTE NUM SERVICO CANCELADO"
+            echo " (dinheiro que hoje nao foi para lado nenhum)"
+            echo "==========================================================="
+            docker compose exec -T laravel-prod php artisan tinker --execute='
+              $linhas = DB::select(file_get_contents("/tmp/extras.sql"));
+              if (! $linhas) { echo "  NENHUM — nunca aconteceu em producao.\n"; }
+              $total = 0;
+              foreach ($linhas as $l) {
+                  $total += (float) $l->valor_eur;
+                  printf("  extra #%-6s servico #%-6s vendor %-5s %-6s %9s EUR  %-14s %s  (%s)\n",
+                      $l->extra_id, $l->service_id, $l->vendor_id, $l->type,
+                      $l->valor_eur, $l->payment_status, $l->estado_do_servico, $l->cobrado_em);
+              }
+              if ($linhas) {
+                  printf("\n  TOTAL: %d extra(s), %.2f EUR por resolver.\n", count($linhas), $total);
+              }
+            '
+
+            echo
+            echo "==========================================================="
+            echo " CONTEXTO: quantos extras existem, e em que estados"
+            echo "==========================================================="
+            docker compose exec -T laravel-prod php artisan tinker --execute='
+              foreach (DB::table("service_extras")->whereNull("deleted_at")
+                  ->selectRaw("status, payment_status, COUNT(*) AS n, ROUND(SUM(amount)/100,2) AS eur")
+                  ->groupBy("status","payment_status")->orderByDesc("n")->get() as $l) {
+                  printf("  %-10s %-20s %5d  %10s EUR\n",
+                      $l->status, $l->payment_status ?? "(null)", $l->n, $l->eur);
+              }
+            '
+
+            docker compose exec -T laravel-prod rm -f /tmp/extras.sql
