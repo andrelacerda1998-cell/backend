@@ -102,7 +102,16 @@ jobs:
               echo "documentos no indice  = " . $idx->stats()["numberOfDocuments"] . PHP_EOL;
               echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
               echo "com at_em_dia         = " . $idx->search("", ["filter" => "at_em_dia = true", "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
-              $elegiveis = App\Models\Vendor::with("user")->get()->filter->shouldBeSearchable()->count();
+              // POR LOTES, e não `->get()` de uma vez. A primeira versão
+              // carregava os 464 com as relações e avaliava `shouldBeSearchable()`
+              // em cada um; morria com código 255 e SEM mensagem -- o feitio de
+              // uma morte por memória, que não passa pelo tratamento de erros do
+              // PHP e por isso não escreve nada. O passo ficava vermelho depois
+              // de a reindexação ter corrido bem.
+              $elegiveis = 0;
+              App\Models\Vendor::query()->with("user")->chunkById(50, function ($lote) use (&$elegiveis) {
+                  $elegiveis += $lote->filter->shouldBeSearchable()->count();
+              });
               echo "elegiveis na base     = " . $elegiveis . PHP_EOL;
             '
 
@@ -174,13 +183,40 @@ jobs:
             #    reindexação NÃO a resolve: é quem tem localização fresca o
             #    suficiente para a procura imediata o considerar. As
             #    localizações vêm da app.
+            # ESPERAR QUE O ÍNDICE ASSENTE antes de contar.
+            #
+            # O Meilisearch aceita os documentos e processa-os depois. A
+            # primeira versão contava logo a seguir à escrita e deu números
+            # impossíveis: 116 documentos de um índice que tinha 83 e recebeu
+            # 72 reescritas, e 40 com `at_em_dia` entre 72 que, por definição
+            # do `shouldBeSearchable()`, o têm todos. Não era o índice a estar
+            # mal -- era a contagem a ser tirada a meio.
+            correr "esperar pelo indice" $ART tinker --execute='
+              $idx = app(Meilisearch\Client::class)->index("vendors");
+              $esperou = 0;
+              while ($esperou < 180) {
+                  $s = $idx->stats();
+                  if (empty($s["isIndexing"])) break;
+                  sleep(3); $esperou += 3;
+              }
+              echo "esperou " . $esperou . "s pelo indice a assentar" . PHP_EOL;
+              if ($esperou >= 180) { echo "AVISO: ainda a indexar -- as contas abaixo sao provisorias" . PHP_EOL; }
+            '
+
             correr "contagem final" $ART tinker --execute='
               $idx = app(Meilisearch\Client::class)->index("vendors");
               $docs = $idx->stats()["numberOfDocuments"];
               $minutos = config("services.request.location_update_threshold");
               $limite = now()->subMinutes($minutos)->timestamp;
               echo "documentos no indice = " . $docs . PHP_EOL;
-              echo "com at_em_dia        = " . $idx->search("", ["filter" => "at_em_dia = true", "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
+              $comCampo = $idx->search("", ["filter" => "at_em_dia = true", "limit" => 1])->getEstimatedTotalHits();
+              $semAt = $idx->search("", ["filter" => "at_em_dia = false", "limit" => 1])->getEstimatedTotalHits();
+              echo "com at_em_dia = true = " . $comCampo . PHP_EOL;
+              echo "com at_em_dia = false= " . $semAt . PHP_EOL;
+              // A LINHA QUE INTERESSA. Um documento sem o campo nenhum é um
+              // documento ANTIGO, por reescrever -- e a procura, que filtra por
+              // `at_em_dia`, nunca o devolve. Zero aqui é o objectivo disto.
+              echo "SEM o campo (antigos) = " . ($docs - $comCampo - $semAt) . PHP_EOL;
               echo "status Online        = " . $idx->search("", ["filter" => "status = \"Online\"", "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
               echo "janela = " . $minutos . " min; dentro dela = " . $idx->search("", ["filter" => "geoTime >= " . $limite, "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
             '
