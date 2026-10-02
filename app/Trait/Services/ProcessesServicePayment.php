@@ -12,6 +12,7 @@ use RwInteractive\PayshopSdk\Enums\Payment\OperationType;
 use RwInteractive\PayshopSdk\Enums\Payment\Wallet;
 use RwInteractive\PayshopSdk\Exceptions\Api\CreditCardValidationRequired;
 use App\Services\Payments\JanelaDeCativacao;
+use App\Exceptions\Api\Customer\AgendamentoForaDaJanelaDePagamento;
 
 /**
  * Cobrança de um serviço: cartão (com 3DS), MBWay e carteiras.
@@ -25,6 +26,8 @@ trait ProcessesServicePayment
 {
     protected function processCreditCardPayment($customer, $service, $vendor, $total, $paymentMethod): ?string
     {
+        $this->garanteQueOAgendadoEPagavel($service);
+
         $validationUrl = null;
 
         if ($total['balance'] > 0) {
@@ -106,6 +109,8 @@ trait ProcessesServicePayment
         array|string $payload,
         ?string $customerIp = null,
     ): ?string {
+        $this->garanteQueOAgendadoEPagavel($service);
+
         $validationUrl = null;
 
         if ($total['balance'] > 0) {
@@ -177,6 +182,8 @@ trait ProcessesServicePayment
 
     protected function processMbwayPayment(User $customer, Service $service, Vendor $vendor, $total, $paymentMethod): ?string
     {
+        $this->garanteQueOAgendadoEPagavel($service);
+
         $validationUrl = null;
 
         if ($total['balance'] > 0) {
@@ -206,5 +213,43 @@ trait ProcessesServicePayment
         $service->save();
 
         return 'check bank app';
+    }
+
+    /**
+     * NÃO SE PAGA UM AGENDADO QUE A CATIVAÇÃO NÃO CHEGA A COBRIR.
+     *
+     * Chamado pelos TRÊS caminhos de pagamento -- cartão, carteiras (Apple Pay e
+     * Google Pay) e MBWay -- porque a regra é sobre o dinheiro e não sobre o
+     * instrumento. Pôr isto em cada controlador deixava de fora o que alguém
+     * acrescentasse a seguir; aqui é por construção.
+     *
+     * A validação do `scheduled_day` já recusa estas datas na criação. Esta é a
+     * segunda linha, para os casos que não passam por lá: serviços criados antes
+     * de o limite existir, marcações pendentes pagas mais tarde, e caminhos
+     * novos. Repetir a verificação é barato; descobrir ao fecho que o dinheiro
+     * expirou não é.
+     *
+     * Mede-se o FIM do serviço e não o início: é o fecho que captura, e um
+     * trabalho de três horas acaba depois de começar. Sem duração conhecida
+     * usa-se a hora de início -- é o que há.
+     *
+     * Um pedido imediato não tem agendamento e passa sem verificação.
+     *
+     * @throws AgendamentoForaDaJanelaDePagamento
+     */
+    protected function garanteQueOAgendadoEPagavel(Service $service): void
+    {
+        $inicio = $service->scheduledAt();
+
+        if ($inicio === null) {
+            return; // imediato
+        }
+
+        $minutos = $service->durationMinutes();
+        $fim = $minutos !== null ? $inicio->addMinutes($minutos) : $inicio;
+
+        if (! JanelaDeCativacao::cobre($fim)) {
+            throw new AgendamentoForaDaJanelaDePagamento;
+        }
     }
 }

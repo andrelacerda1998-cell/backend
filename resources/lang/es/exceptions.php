@@ -15,6 +15,7 @@ return [
     'services' => [
         'service_not_found' => 'Servicio no encontrado.',
         'verify_phone_to_request' => 'Verifica tu número de móvil para pedir un servicio. Es así como el profesional contacta contigo cuando llega.',
+        'schedule_outside_payment_window' => 'Ya no es posible pagar esta reserva: la fecha está demasiado lejos. Reserva de nuevo para una fecha más cercana.',
         'customer_cannot_request_service' => 'El cliente no puede solicitar un servicio.',
         // Dichas al CLIENTE, en segunda persona. Las equivalentes de backoffice
         // están en backoffice/customer.infolist.eligibility y van en tercera.

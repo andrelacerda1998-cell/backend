@@ -13,6 +13,7 @@ return [
     'services' => [
         'service_not_found' => 'Auftrag nicht gefunden.',
         'verify_phone_to_request' => 'Bestätige deine Handynummer, um einen Auftrag anzufragen. Darüber meldet sich die Fachkraft bei dir, wenn sie ankommt.',
+        'schedule_outside_payment_window' => 'Diese Buchung kann nicht mehr bezahlt werden: das Datum liegt zu weit in der Zukunft. Bitte buchen Sie erneut für ein früheres Datum.',
         'customer_cannot_request_service' => 'Der Kunde kann keinen Auftrag anfragen.',
         'cannot_request' => [
             'unverified_phone' => 'Bestätige deine Handynummer, um einen Auftrag anzufragen.',

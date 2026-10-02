@@ -16,6 +16,7 @@ return [
     'services' => [
         'service_not_found' => 'Intervention introuvable.',
         'verify_phone_to_request' => 'Vérifie ton numéro de téléphone pour demander une intervention. C\'est par là que le pro te contacte à son arrivée.',
+        'schedule_outside_payment_window' => 'Cette réservation ne peut plus être payée : la date est trop éloignée. Réservez à nouveau pour une date plus proche.',
         'customer_cannot_request_service' => 'Le client ne peut pas demander d\'intervention.',
         // Dites au CLIENT, à la deuxième personne. Les équivalentes du
         // backoffice sont dans backoffice/customer.infolist.eligibility et

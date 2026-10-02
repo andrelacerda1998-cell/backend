@@ -13,6 +13,7 @@ return [
     'services' => [
         'service_not_found' => 'Service not found.',
         'verify_phone_to_request' => 'Verify your phone number to request a service. It is how the professional reaches you on arrival.',
+        'schedule_outside_payment_window' => 'This booking can no longer be paid: the date is too far away. Please book again for an earlier date.',
         'customer_cannot_request_service' => 'Customer can´t request a service.',
         'cannot_request' => [
             'unverified_phone' => 'Confirm your phone number to request a service.',
