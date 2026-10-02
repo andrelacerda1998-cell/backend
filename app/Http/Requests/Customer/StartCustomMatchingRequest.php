@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Customer;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Rules\AgendamentoDentroDaJanelaDePagamento;
 
 /**
  * Abrir um pedido personalizado: o cliente descreve, o backoffice completa.
@@ -29,7 +30,7 @@ class StartCustomMatchingRequest extends FormRequest
             'address_id' => ['nullable', 'integer', 'exists:addresses,id'],
             'scheduled' => ['sometimes', 'boolean'],
             'schedule' => ['nullable', 'required_if:scheduled,true', 'array'],
-            'schedule.scheduled_day' => ['required_if:scheduled,true', 'date'],
+            'schedule.scheduled_day' => ['required_if:scheduled,true', 'date', new AgendamentoDentroDaJanelaDePagamento],
             'schedule.scheduled_time_start' => ['required_if:scheduled,true', 'string'],
 
             // Fotos ja carregadas para a coleccao pendente do cliente (ver

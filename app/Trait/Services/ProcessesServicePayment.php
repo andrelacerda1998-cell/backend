@@ -11,6 +11,7 @@ use RwInteractive\PayshopSdk\Api\Payments\WalletPayment;
 use RwInteractive\PayshopSdk\Enums\Payment\OperationType;
 use RwInteractive\PayshopSdk\Enums\Payment\Wallet;
 use RwInteractive\PayshopSdk\Exceptions\Api\CreditCardValidationRequired;
+use App\Services\Payments\JanelaDeCativacao;
 
 /**
  * Cobrança de um serviço: cartão (com 3DS), MBWay e carteiras.
@@ -37,7 +38,7 @@ trait ProcessesServicePayment
                     OperationType::DEFERRED,
                     $total['value_for_payment'],
                     'Payment for service',
-                    now()->addDays(15),
+                    JanelaDeCativacao::expiraEm(),
                     [],
                     ['service' => $service->id]
                 );
@@ -118,7 +119,7 @@ trait ProcessesServicePayment
                     OperationType::DEFERRED,
                     $total['value_for_payment'],
                     'Payment for service',
-                    now()->addDays(15),
+                    JanelaDeCativacao::expiraEm(),
                     [],
                     ['service' => $service->id]
                 );
@@ -188,7 +189,7 @@ trait ProcessesServicePayment
                 OperationType::DEFERRED,
                 $total['value_for_payment'],
                 'Payment for service via MBWay',
-                now()->addDays(15),
+                JanelaDeCativacao::expiraEm(),
                 $paymentMethod,
                 ['service' => $service->id]
             );

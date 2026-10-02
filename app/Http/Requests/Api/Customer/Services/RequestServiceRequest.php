@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\Customer\Services;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Rules\AgendamentoDentroDaJanelaDePagamento;
 
 class RequestServiceRequest extends FormRequest
 {
@@ -13,7 +14,7 @@ class RequestServiceRequest extends FormRequest
             // Dia e hora do trabalho, quando ja escolhidos. A lista mostra
             // precos, e a sobretaxa horaria e a do servico: sem eles a lista
             // cotava com a hora de agora e discordava do checkout.
-            'scheduled_day' => 'date|nullable|required_with:scheduled_time_start',
+            'scheduled_day' => ['date', 'nullable', 'required_with:scheduled_time_start', new AgendamentoDentroDaJanelaDePagamento],
             'scheduled_time_start' => 'string|nullable|required_with:scheduled_day',
         ];
     }

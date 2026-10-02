@@ -58,4 +58,8 @@ return [
         'postal_code' => 'código postal',
         'locality' => 'distrito',
     ],
+    // O agendamento não pode passar do prazo em que o cartão fica cativo
+    // (App\Services\Payments\JanelaDeCativacao). Depois disso a captura no
+    // fecho falha e o técnico trabalha sem receber.
+    'agendamento_fora_da_janela' => 'Só é possível agendar até :data. Escolhe uma data mais próxima.',
 ];

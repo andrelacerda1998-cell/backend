@@ -58,4 +58,5 @@ return [
         'postal_code' => 'code postal',
         'locality' => 'district',
     ],
+    'agendamento_fora_da_janela' => 'Les réservations sont possibles jusqu\'au :data. Choisissez une date plus proche.',
 ];
