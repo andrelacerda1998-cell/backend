@@ -359,12 +359,24 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         return $query->whereIn('status', [ServiceStatus::PENDING])->where('payment_status', PaymentStatus::PAID);
     }
 
+    /**
+     * Metadados do movimento na carteira — é isto que o técnico lê nos Ganhos.
+     *
+     * `serviceType` PODE SER NULL: um pedido personalizado não tem tipo de
+     * serviço nenhum (`services_type_id` é null de propósito). Sem o `?->`, o
+     * PHP devolvia null com um warning e a linha dos Ganhos ficava "Serviço
+     * #20261002-093431" -- sem nome e com um espaço a dobrar. O trabalho que o
+     * cliente descreveu é o nome que faz sentido ali.
+     */
     public function getMetaProduct(): ?array
     {
+        $nome = $this->serviceType?->name
+            ?: ($this->custom_description ?: __('internal/services.transactions_type.service'));
+
         return [
             'type' => 'internal/services.transactions_type.service',
             'description' => __('internal/services.accepted.description', [
-                'service_name' => $this->serviceType->name,
+                'service_name' => $nome,
                 'date' => $this->created_at->format('Ymd-his'),
             ]),
             'admin_description' => __('internal/services.accepted.admin_description'),

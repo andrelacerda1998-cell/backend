@@ -82,6 +82,64 @@ class CloseServiceExtrasSettlementTest extends TestCase
         $this->assertSame(9000, $vendorWalletAfter - $vendorWalletBefore);
     }
 
+    /**
+     * UMA PEÇA VAI INTEIRA PARA O TÉCNICO (decisão do André, 02/10/2026).
+     *
+     * O extra de tempo é mão de obra e leva a comissão do serviço; uma peça não
+     * é receita, é o REEMBOLSO de um custo que ele adiantou do bolso. Com os
+     * 75/25 uma torneira de 50 € devolvia-lhe 37,50 € — pagava 12,50 € por a
+     * ter comprado, e a reação natural a isso é deixar de a declarar.
+     */
+    public function test_close_credits_a_part_in_full_without_commission(): void
+    {
+        $service = $this->finishedService(amount: 10000, amountForVendor: 7500);
+        $extra = ServiceExtra::factory()->approved()->create([
+            'service_id' => $service->id,
+            'type' => 'part',
+            'description' => 'Torneira nova',
+            'minutes' => null,
+            'amount' => 5000,
+            'payment_status' => 'paid',
+            'charged_at' => now(),
+        ]);
+
+        $antes = $service->vendor->user->balanceInt;
+
+        (new CloseService($service))->close();
+
+        $extra->refresh();
+        $this->assertNotNull($extra->vendor_credited_at);
+
+        // Serviço base (7500) + a peça INTEIRA (5000) = 12500.
+        $depois = $service->vendor->user->refresh()->balanceInt;
+        $this->assertSame(12500, $depois - $antes);
+    }
+
+    /**
+     * E o tempo extra continua a levar comissão: é a mesma mão de obra do
+     * serviço que está a prolongar.
+     */
+    public function test_close_still_takes_commission_on_extra_time(): void
+    {
+        $service = $this->finishedService(amount: 10000, amountForVendor: 7500);
+        ServiceExtra::factory()->approved()->create([
+            'service_id' => $service->id,
+            'type' => 'time',
+            'minutes' => 60,
+            'amount' => 4000,
+            'payment_status' => 'paid',
+            'charged_at' => now(),
+        ]);
+
+        $antes = $service->vendor->user->balanceInt;
+
+        (new CloseService($service))->close();
+
+        // Serviço base (7500) + 75% de 4000 (=3000) = 10500.
+        $depois = $service->vendor->user->refresh()->balanceInt;
+        $this->assertSame(10500, $depois - $antes);
+    }
+
     public function test_close_never_credits_an_extra_that_was_never_actually_charged(): void
     {
         $service = $this->finishedService();
