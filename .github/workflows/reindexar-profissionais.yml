@@ -2,19 +2,26 @@ name: Reindexar os profissionais
 
 # Reconstrói o índice de pesquisa dos profissionais a partir da base de dados.
 #
-# PORQUE EXISTE: a 01/10/2026 o índice tinha 83 documentos para 464
-# profissionais, e os que lá estavam não tinham o campo `at_em_dia` -- o campo
-# por onde a procura passou a filtrar nesse dia. Um filtro por um campo que não
-# existe não devolve nada.
+# PORQUE EXISTE: a 30/09 a procura imediata passou a filtrar por `at_em_dia`
+# (VendorSearchService: `->where("at_em_dia", true)`). É um campo NOVO, e os
+# documentos que já estavam no índice não o têm. No Meilisearch, filtrar por um
+# campo que o documento não tem EXCLUI o documento -- por isso o índice podia
+# estar cheio e a procura responder zero. Isto reescreve os documentos para que
+# passem a trazer o campo.
 #
-# Era preciso entrar no servidor por SSH para correr isto. Passa a ser um botão
-# com portão de aprovação, porque esta não vai ser a última vez que um campo
-# novo entra no índice: sempre que o `toSearchableArray()` ganhar um campo, os
-# documentos já indexados ficam sem ele até serem reescritos.
+# O NÚMERO A OLHAR NÃO É 464, e a versão anterior deste ficheiro dizia que era.
+# Estava errado: o `shouldBeSearchable()` do Vendor exige telefone e email
+# verificados, documentos todos validados, IBAN, workspace de faturação e a AT
+# em dia. Em produção isso dá cerca de 70 profissionais, não 464. Um índice com
+# ~83 documentos para 464 registados NÃO é um índice faminto -- é o que as
+# regras do produto mandam. Quem olhasse para "83 de 464" ia à procura de um
+# problema que não existe.
 #
-# NÃO É A CURA da fila. O índice fica a 83 de 464 porque a fila que o alimenta
-# anda a falhar (432 jobs falhados, o mais recente de 20/07). Isto repõe o
-# índice; a fila continua a não acompanhar, e isso trata-se noutro sítio.
+# NÃO É A CURA da procura imediata. Há uma segunda razão, mais antiga, para dar
+# zero: o filtro `geoTime >= agora - location_update_threshold`. A 01/10 só UM
+# profissional tinha localização dentro dessa janela, e o zero já aparecia no
+# diagnóstico de 25/09 -- antes de o `at_em_dia` existir. Reindexar não mexe
+# nisso: as localizações vêm da app, não do índice.
 
 on:
   workflow_dispatch:
@@ -35,7 +42,7 @@ jobs:
   reindexar:
     name: Reindexar os profissionais
     runs-on: ubuntu-latest
-    # 461 profissionais demoram pouco, mas a fila pode estar carregada.
+    # 464 profissionais demoram pouco, mas a fila pode estar carregada.
     timeout-minutes: 30
     # Traz o portão de aprovação manual, que aqui faz ainda mais sentido do que
     # nos workflows de leitura: isto escreve.
@@ -53,10 +60,31 @@ jobs:
           # para produção à espera de ser usada. É a mesma regra dos workflows
           # de leitura.
           script: |
-            set -euo pipefail
+            set -uo pipefail
             cd ~/project-laravel
 
             ART="docker compose exec -T laravel-prod php artisan"
+
+            # SEM `set -e`, e de propósito.
+            #
+            # Duas corridas falharam com "Process exited with status 255" e
+            # NENHUMA mensagem, mesmo com `2>&1` no comando. Com `set -e` o
+            # bash morre no instante em que o comando falha, e o que o
+            # `ssh-action` ainda tinha em buffer vai com ele. Captura-se a saída
+            # numa variável e imprime-se DEPOIS, num comando que não falha --
+            # assim a mensagem de erro chega sempre.
+            ALGO_FALHOU=0
+            correr() {
+              local nome="$1"; shift
+              local saida codigo
+              saida=$("$@" 2>&1); codigo=$?
+              echo "$saida"
+              if [ "$codigo" -ne 0 ]; then
+                echo ">>> ${nome} FALHOU com código ${codigo}"
+                ALGO_FALHOU=1
+              fi
+              return "$codigo"
+            }
 
             echo "=============================================="
             echo " ANTES"
@@ -64,10 +92,19 @@ jobs:
             # A MESMA forma de contar que o `ler-estado-da-procura-imediata`
             # usa. Inventar uma segunda maneira de contar a mesma coisa é
             # exactamente o que já custou dois dias noutros sítios.
-            $ART tinker --execute='
-              echo "documentos no indice  = " . app(Meilisearch\Client::class)->index("vendors")->stats()["numberOfDocuments"] . PHP_EOL;
+            #
+            # `elegiveis` é o número que o índice DEVE ter: é a contagem, na
+            # base de dados, de quem passa o `shouldBeSearchable()`. É contra
+            # este número que a contagem de documentos se compara -- não contra
+            # o total de profissionais.
+            correr "contagem inicial" $ART tinker --execute='
+              $idx = app(Meilisearch\Client::class)->index("vendors");
+              echo "documentos no indice  = " . $idx->stats()["numberOfDocuments"] . PHP_EOL;
               echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
-            ' 2>&1 || true
+              echo "com at_em_dia         = " . $idx->search("", ["filter" => "at_em_dia = true", "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
+              $elegiveis = App\Models\Vendor::with("user")->get()->filter->shouldBeSearchable()->count();
+              echo "elegiveis na base     = " . $elegiveis . PHP_EOL;
+            '
 
             echo
             echo "=============================================="
@@ -76,44 +113,84 @@ jobs:
             # Primeiro as definições, depois os documentos: um campo novo só é
             # filtrável se estiver nos filterableAttributes, e reindexar antes
             # disso deixava o índice cheio e na mesma sem conseguir filtrar.
-            $ART scout:sync-index-settings
+            correr "scout:sync-index-settings" $ART scout:sync-index-settings
 
             echo
             echo "=============================================="
             echo " A REINDEXAR"
             echo "=============================================="
-            # 2>&1 EM TODAS AS CHAMADAS, e não é detalhe: o `ssh-action` só
-            # mostra o stdout. A primeira versão disto falhou com "status 255"
-            # e nenhuma mensagem, porque o erro do artisan foi para o stderr e
-            # desapareceu. Um passo que falha sem dizer porquê é pior do que um
-            # passo que não existe.
+            # NÃO se usa `scout:import`, e a razão é a fila.
             #
-            # Aspas SIMPLES à volta do nome da classe: em aspas duplas a barra
-            # invertida depende de quantas camadas de shell o texto atravessa
-            # até chegar ao PHP. O `ler-estado-da-procura-imediata` já usa esta
-            # forma com classes com barras, e funciona.
+            # O `config/scout.php` tem `"queue" => env("SCOUT_QUEUE", true)`. Com
+            # a fila ligada, o `scout:import` não escreve no índice: despacha
+            # jobs. E a fila desta instalação tem centenas de jobs falhados, o
+            # mais recente de 20/07 -- ou seja, o comando dizia "importado" e o
+            # índice não mudava. Aqui força-se `scout.queue = false` para a
+            # escrita ser SÍNCRONA: quando este passo acabar, o índice já mudou,
+            # e a contagem do fim prova-o.
             #
-            # `scout:import` reescreve TODOS os documentos a partir da base de
-            # dados. Não apaga o índice primeiro: os documentos são
-            # substituídos um a um pelo id, por isso a procura continua a
-            # responder durante a operação em vez de ficar vazia a meio.
-            echo "comando: php artisan scout:import 'App\Models\Vendor'"
-            $ART scout:import 'App\Models\Vendor' 2>&1
+            # Por lotes, e cada lote com rede: se um profissional rebentar a
+            # serializar, tenta-se um a um para que os outros entrem e para se
+            # saber QUAL é o que rebenta. Um import que morre a meio e não diz
+            # onde é o que deixa um índice com 83 documentos e ninguém a saber
+            # porquê.
+            correr "reindexação" $ART tinker --execute='
+              config(["scout.queue" => false]);
+              $feitos = 0; $falhas = [];
+              App\Models\Vendor::query()->chunkById(50, function ($lote) use (&$feitos, &$falhas) {
+                  $aIndexar = $lote->filter->shouldBeSearchable();
+                  if ($aIndexar->isEmpty()) { return; }
+                  try {
+                      $aIndexar->searchable();
+                      $feitos += $aIndexar->count();
+                  } catch (\Throwable $e) {
+                      foreach ($aIndexar as $v) {
+                          try { $v->searchable(); $feitos++; }
+                          catch (\Throwable $e2) { $falhas[$v->id] = get_class($e2) . ": " . $e2->getMessage(); }
+                      }
+                  }
+              });
+              echo "escritos no indice = " . $feitos . PHP_EOL;
+              echo "falhas             = " . count($falhas) . PHP_EOL;
+              foreach ($falhas as $id => $m) { echo "  vendor " . $id . " -> " . mb_substr($m, 0, 200) . PHP_EOL; }
+            '
 
             echo
             echo "=============================================="
             echo " DEPOIS"
             echo "=============================================="
-            # A prova. Se o número não subir, a fila engoliu os jobs -- e é
-            # isso que é preciso saber, em vez de se assumir que correu bem.
-            # A MESMA forma de contar que o `ler-estado-da-procura-imediata`
-            # usa. Inventar uma segunda maneira de contar a mesma coisa é
-            # exactamente o que já custou dois dias noutros sítios.
-            $ART tinker --execute='
-              echo "documentos no indice  = " . app(Meilisearch\Client::class)->index("vendors")->stats()["numberOfDocuments"] . PHP_EOL;
-              echo "profissionais na base = " . App\Models\Vendor::count() . PHP_EOL;
-            ' 2>&1 || true
+            # A PROVA, e o que cada linha quer dizer:
+            #
+            #  - `documentos` perto de `elegiveis` = o índice está no sítio. Se
+            #    sobrarem documentos a mais, são de quem já não é elegível (um
+            #    documento que caducou, por exemplo). Ficam a dizer que sobram;
+            #    APAGAR do índice muda quem o cliente encontra, e essa decisão
+            #    não é deste botão.
+            #  - `com at_em_dia` TEM de passar a ser igual a `documentos`. É
+            #    este o campo por onde a procura filtra desde 30/09, e era esta
+            #    a razão de existir desta reindexação. Se ficar a zero, não se
+            #    ganhou nada.
+            #  - `dentro da janela` é a outra metade do problema, e esta
+            #    reindexação NÃO a resolve: é quem tem localização fresca o
+            #    suficiente para a procura imediata o considerar. As
+            #    localizações vêm da app.
+            correr "contagem final" $ART tinker --execute='
+              $idx = app(Meilisearch\Client::class)->index("vendors");
+              $docs = $idx->stats()["numberOfDocuments"];
+              $minutos = config("services.request.location_update_threshold");
+              $limite = now()->subMinutes($minutos)->timestamp;
+              echo "documentos no indice = " . $docs . PHP_EOL;
+              echo "com at_em_dia        = " . $idx->search("", ["filter" => "at_em_dia = true", "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
+              echo "status Online        = " . $idx->search("", ["filter" => "status = \"Online\"", "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
+              echo "janela = " . $minutos . " min; dentro dela = " . $idx->search("", ["filter" => "geoTime >= " . $limite, "limit" => 1])->getEstimatedTotalHits() . PHP_EOL;
+            '
 
             echo
-            echo "jobs falhados na fila:"
-            $ART queue:failed 2>&1 | tail -3 || true
+            echo "jobs falhados na fila (não é o que isto corrige, é contexto):"
+            correr "queue:failed" $ART queue:failed | tail -3
+
+            # Sem `set -e`, o passo acabaria VERDE mesmo que a reindexação
+            # tivesse rebentado -- e um botão que diz que correu bem sem ter
+            # escrito nada é pior do que um que falha. O código de saída volta
+            # a depender do que aconteceu.
+            exit "$ALGO_FALHOU"
