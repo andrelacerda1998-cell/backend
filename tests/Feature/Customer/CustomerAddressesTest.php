@@ -57,7 +57,14 @@ class CustomerAddressesTest extends TestCase
         $this->actingAs($user, 'api')->postJson('/api/v1/customer/addresses', $this->payload('Casa Cascais'))
             ->assertStatus(201)->assertJsonPath('data.address.main_address', true);
 
-        $this->actingAs($user, 'api')->postJson('/api/v1/customer/addresses', $this->payload('Apartamento Baixa'))
+        // Rua diferente: com a mesma rua, número e código postal seria a MESMA
+        // porta com outro rótulo, e o servidor passou a reconhecer isso em vez
+        // de criar uma linha repetida (MoradasRepetidasTest). Uma casa em
+        // Cascais e um apartamento na Baixa não partilham a morada.
+        $this->actingAs($user, 'api')->postJson('/api/v1/customer/addresses', [
+            ...$this->payload('Apartamento Baixa'),
+            'street_name' => 'Rua Augusta',
+        ])
             ->assertStatus(201)->assertJsonPath('data.address.main_address', false);
 
         $this->actingAs($user, 'api')->getJson('/api/v1/customer/addresses')

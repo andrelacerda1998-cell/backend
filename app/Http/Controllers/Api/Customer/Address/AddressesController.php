@@ -11,6 +11,7 @@ use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Address;
 use App\Trait\Customer\ResolvesCustomerAddress;
 use Illuminate\Support\Facades\DB;
+use App\Support\ChaveDeMorada;
 
 /**
  * Gestão das várias moradas do cliente (multi-morada). Um proprietário de vários
@@ -25,11 +26,24 @@ class AddressesController extends Controller
     {
         $customer = auth('api')->user();
 
+        /**
+         * SEM REPETIDAS NA LISTA.
+         *
+         * O `store` criava sempre uma linha nova, e há clientes com a mesma
+         * morada guardada várias vezes. Esconde-as aqui em vez de as apagar:
+         * os serviços antigos apontam para esses ids, e apagar uma morada que
+         * um serviço usa é perder de onde ele foi feito.
+         *
+         * Fica a que vem primeiro nesta ordem -- a principal, se alguma das
+         * repetidas o for, senão a mais antiga.
+         */
         return new ApiSuccessResponse([
             'addresses' => $customer->addresses()
                 ->orderByDesc('main_address')
                 ->orderBy('id')
-                ->get(),
+                ->get()
+                ->unique(fn (Address $a) => ChaveDeMorada::de($a))
+                ->values(),
         ]);
     }
 
@@ -46,6 +60,33 @@ class AddressesController extends Controller
         // A primeira morada é sempre principal; as seguintes só se pedido.
         $isFirst = ! $customer->addresses()->exists();
         $makeMain = $isFirst || $request->boolean('main_address');
+
+        /**
+         * A MESMA MORADA NÃO SE GUARDA DUAS VEZES.
+         *
+         * Isto criava sempre uma linha nova, e a lista de moradas guardadas
+         * enchia-se de repetidas -- cada vez que a app voltava a mandar uma
+         * morada que o cliente já tinha. Se já existe, devolve-se essa (e
+         * passa a principal, se foi isso que se pediu).
+         *
+         * "A mesma" é a `ChaveDeMorada`: ignora maiúsculas, acentos e o nome
+         * que se lhe deu, mas NÃO o andar -- o 3.º Esq e o 2.º Dto do mesmo
+         * prédio são casas diferentes.
+         */
+        $chave = ChaveDeMorada::de($addressData);
+        $existente = $customer->addresses()->orderByDesc('main_address')->orderBy('id')->get()
+            ->first(fn (Address $a) => ChaveDeMorada::de($a) === $chave);
+
+        if ($existente) {
+            if ($makeMain && ! $existente->main_address) {
+                DB::transaction(function () use ($customer, $existente) {
+                    $customer->addresses()->update(['main_address' => false]);
+                    $existente->forceFill(['main_address' => true])->save();
+                });
+            }
+
+            return new ApiSuccessResponse(['address' => $existente->fresh()], statusCode: 200);
+        }
 
         $address = DB::transaction(function () use ($customer, $addressData, $makeMain) {
             if ($makeMain) {
