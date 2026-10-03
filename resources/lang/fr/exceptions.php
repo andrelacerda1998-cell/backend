@@ -40,6 +40,7 @@ return [
         'wrong_credentials' => 'Identifiants invalides.',
     ],
     'vendor' => [
+        'phone_permissions_off' => 'Pour être en ligne, vous devez activer la localisation et les notifications. Sans elles, vous n\'êtes pas averti des demandes et le client ne vous voit pas en route.',
         'service' => [
             'service_is_not_pending' => 'L\'intervention n\'est pas en attente.',
             'service_is_not_accepted' => 'L\'intervention n\'a pas été acceptée.',

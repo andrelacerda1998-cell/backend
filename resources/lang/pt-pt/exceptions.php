@@ -38,6 +38,7 @@ return [
         'wrong_credentials' => 'Credenciais inválidas.',
     ],
     'vendor' => [
+        'phone_permissions_off' => 'Para ficares online tens de ter a localização e as notificações ligadas. Sem elas não és avisado dos pedidos e o cliente não te vê a caminho.',
         'service' => [
             'service_is_not_pending' => 'O serviço não está pendente.',
             'service_is_not_accepted' => 'O serviço não foi aceite.',

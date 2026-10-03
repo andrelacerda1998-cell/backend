@@ -38,6 +38,7 @@ return [
         'wrong_credentials' => 'Credenciales no válidas.',
     ],
     'vendor' => [
+        'phone_permissions_off' => 'Para estar en línea necesitas la ubicación y las notificaciones activadas. Sin ellas no recibes avisos de pedidos y el cliente no te ve en camino.',
         'service' => [
             'service_is_not_pending' => 'El servicio no está pendiente.',
             'service_is_not_accepted' => 'El servicio no ha sido aceptado.',
