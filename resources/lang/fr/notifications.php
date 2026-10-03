@@ -299,18 +299,4 @@ return [
             'description' => 'Tu n\'as pas confirmé le paiement MBWay à temps et la demande a été annulée : ',
         ],
     ],
-    'atDeadline' => [
-        'daysLeft' => [
-            'title' => 'Il te reste :count jours pour donner l\'accès aux Finances',
-            'description' => 'Sans lui, nous ne pouvons pas te verser les :value € que tu as déjà gagnés, et à la fin du délai tu les perds.',
-        ],
-        'lastDay' => [
-            'title' => 'Dernier jour pour donner l\'accès aux Finances',
-            'description' => 'Si tu ne le donnes pas aujourd\'hui, tu perds les :value € déjà gagnés.',
-        ],
-        'forfeited' => [
-            'title' => 'Tu as perdu ton solde faute d\'accès aux Finances',
-            'description' => 'Le délai est écoulé sans le sous-utilisateur et les :value € ne sont plus dans ton portefeuille. Contacte le support si tu penses qu\'il y a erreur.',
-        ],
-    ],
 ];

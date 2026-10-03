@@ -105,8 +105,6 @@ class StatsController extends Controller
              */
             'payout_blocked' => $vendor->payout_blocked,
             'payout_blocker' => $vendor->payoutBlocker(),
-            // Data de fim, não dias: ver a nota no UserController.
-            'at_deadline_ends_at' => $vendor->prazoDaAtTerminaEm()?->toIso8601String(),
             'payout_on_hold_amount' => $vendor->payout_on_hold_amount,
             'rating' => $ratingAvg !== null ? round((float) $ratingAvg, 1) : null,
             'acceptance_rate' => $acceptanceRate,

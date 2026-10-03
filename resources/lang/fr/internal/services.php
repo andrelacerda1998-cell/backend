@@ -26,7 +26,4 @@ return [
         'refund' => 'Remboursement',
         'service' => 'Intervention',
     ],
-    'at_deadline' => [
-        'forfeited_description' => 'Solde perdu faute d\'accès aux Finances',
-    ],
 ];
