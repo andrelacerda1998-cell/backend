@@ -147,6 +147,17 @@ class UserController extends Controller
                 //  - aprovado mas com a semana a zero: dizer-lhe que há
                 //    mercado, em vez de o deixar com três zeros sem contexto.
                 'zone_recent_requests' => app(ZoneDemand::class)->recentRequestCount($vendor),
+                /**
+                 * Quantas cidades o técnico escolheu para trabalhar.
+                 *
+                 * O passo das cidades no "Completar perfil" não tinha sinal
+                 * persistente: usava uma flag de sessão que voltava a `false`
+                 * sempre que o ecrã abria, e o passo reaparecia como se nunca
+                 * tivesse sido feito -- com as cidades já guardadas no servidor.
+                 * O técnico preenchia, voltava, e concluía que não tinha gravado.
+                 * Com isto a app sabe que o passo está feito.
+                 */
+                'available_cities_count' => $vendor->availableCities()->count(),
             ]);
         }
 
