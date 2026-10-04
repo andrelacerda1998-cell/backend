@@ -43,6 +43,39 @@ class VendorContaEdocumentosTest extends TestCase
             ->assertOk();
     }
 
+    /**
+     * Com documentos a sério, e não com a lista vazia do teste de cima.
+     *
+     * O eager load pedia uma relação `document` que o modelo não tem (chama-se
+     * `type`). Com zero linhas o Eloquent nem chega a procurá-la, por isso o
+     * teste da lista vazia passava; com um documento enviado dava 500, e a app
+     * mostrava tudo como "Por enviar" mesmo depois de o técnico enviar.
+     */
+    public function test_a_lista_traz_o_nome_o_estado_e_o_motivo_de_cada_documento(): void
+    {
+        $tecnico = $this->tecnico();
+        $tipo = \App\Models\GeneralSettings\Document::create(['name' => 'Cartão de Cidadão', 'required' => true]);
+        \App\Models\Vendor\VendorDocuments::create([
+            'vendor_id' => $tecnico->id, 'document_id' => $tipo->id,
+            'status' => 'declined', 'reason' => 'Foto desfocada',
+        ]);
+        \App\Models\Vendor\VendorDocuments::create([
+            'vendor_id' => $tecnico->id, 'document_id' => $tipo->id, 'status' => 'pending',
+        ]);
+
+        $docs = $this->actingAs($tecnico->user, 'api')
+            ->getJson('/api/v1/vendor/documents')
+            ->assertOk()
+            ->json('data.documents');
+
+        $this->assertCount(2, $docs);
+        $this->assertSame('Cartão de Cidadão', $docs[0]['name']);
+        $this->assertSame('declined', $docs[0]['status']);
+        $this->assertSame('Foto desfocada', $docs[0]['reason']);
+        // A app fica com a última linha de cada tipo: o reenvio tem de vir depois.
+        $this->assertSame('pending', $docs[1]['status']);
+    }
+
     public function test_documentos_exige_autenticacao(): void
     {
         $this->getJson('/api/v1/vendor/documents')->assertStatus(401);
