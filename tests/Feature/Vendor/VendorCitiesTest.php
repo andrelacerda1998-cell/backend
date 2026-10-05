@@ -82,18 +82,29 @@ class VendorCitiesTest extends TestCase
         $this->assertSame($ids[1], $preferred->firstWhere('pivot.position', 3)->id);
     }
 
-    public function test_available_requires_at_least_three(): void
+    /**
+     * O mínimo passou de três para uma (05/10/2026): as cidades decidem os
+     * convites, e obrigar a três fazia o técnico inventar cidades onde não vai.
+     * Nenhuma continua a não ser aceite.
+     */
+    public function test_available_requires_at_least_one(): void
     {
         $vendor = $this->vendor();
-        $ids = $this->cities(3);
 
         $this->actingAs($vendor->user, 'api')
-            ->postJson('/api/v1/vendor/cities', [
-                'available_city_ids' => [$ids[0], $ids[1]],
-                'preferred_city_ids' => [$ids[0], $ids[1], $ids[2]],
-            ])
+            ->postJson('/api/v1/vendor/cities', ['available_city_ids' => []])
             ->assertStatus(422)
             ->assertJsonValidationErrors('available_city_ids');
+    }
+
+    public function test_one_city_is_enough(): void
+    {
+        $vendor = $this->vendor();
+        $ids = $this->cities(1);
+
+        $this->actingAs($vendor->user, 'api')
+            ->postJson('/api/v1/vendor/cities', ['available_city_ids' => [$ids[0]]])
+            ->assertOk();
     }
 
     public function test_preferred_is_optional(): void
