@@ -249,6 +249,10 @@ return [
             ],
         ],
     ],
+    'serviceCanceledByVendorReopened' => [
+        'title' => 'Le professionnel a annulé — nous en cherchons déjà un autre',
+        'description' => 'Nous cherchons déjà un autre professionnel pour votre service :service_type. Ce que vous aviez payé a été rendu.',
+    ],
     'serviceCanceledByVendor' => [
         'title' => 'Intervention annulée',
         'description' => ':vendor_name a annulé ton intervention :service_type',

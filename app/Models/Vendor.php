@@ -142,6 +142,113 @@ class Vendor extends Model implements Auditable
     public const SERVICOS_ANTES_DA_AT = 3;
 
     /**
+     * FIABILIDADE — as regras que o técnico vê na app.
+     *
+     * Cancelar um serviço depois de o aceitar deixa um cliente sem ninguém,
+     * muitas vezes já à espera em casa. Ao terceiro no mesmo mês, o técnico
+     * fica 48 horas sem receber convites. Não é multa: é uma pausa, e a regra
+     * é dita antes de ele cancelar (ver `reliabilitySummary`).
+     *
+     * O mês é o do calendário, em Lisboa: "este mês" é o que o técnico entende
+     * sem fazer contas, e é o que a app lhe mostra.
+     */
+    public const CANCELAMENTOS_ANTES_DA_PAUSA = 3;
+
+    public const HORAS_DE_PAUSA = 48;
+
+    /**
+     * Cada falta nesta janela faz descer uma faixa no ranking (até ao máximo
+     * de faixas que existem). Noventa dias: tempo de a falta pesar, sem a
+     * carregar para sempre.
+     */
+    public const DIAS_DAS_FALTAS_NO_RANKING = 90;
+
+    private const FUSO = 'Europe/Lisbon';
+
+    /**
+     * Cancelamentos e faltas de vários técnicos, numa consulta cada.
+     *
+     * O ranking avalia dezenas de técnicos por pedido: perguntar a cada um
+     * separadamente seria uma consulta por técnico em cada onda.
+     *
+     * @param  int[]  $vendorIds
+     * @return array<int, array{cancelamentos: int, ultimo_cancelamento: ?CarbonInterface, faltas: int}>
+     */
+    public static function fiabilidadeDe(array $vendorIds): array
+    {
+        if (empty($vendorIds)) {
+            return [];
+        }
+
+        $inicioDoMes = now(self::FUSO)->startOfMonth()->utc();
+
+        $cancelamentos = Service::query()
+            ->selectRaw('vendor_id, COUNT(*) as total, MAX(vendor_canceled_at) as ultimo')
+            ->whereIn('vendor_id', $vendorIds)
+            ->where('vendor_canceled_at', '>=', $inicioDoMes)
+            ->groupBy('vendor_id')
+            ->get()
+            ->keyBy('vendor_id');
+
+        $faltas = Service::query()
+            ->selectRaw('vendor_id, COUNT(*) as total')
+            ->whereIn('vendor_id', $vendorIds)
+            ->where('vendor_no_show_at', '>=', now()->subDays(self::DIAS_DAS_FALTAS_NO_RANKING))
+            ->groupBy('vendor_id')
+            ->pluck('total', 'vendor_id');
+
+        $resultado = [];
+
+        foreach ($vendorIds as $id) {
+            $c = $cancelamentos->get($id);
+            $resultado[$id] = [
+                'cancelamentos' => (int) ($c->total ?? 0),
+                'ultimo_cancelamento' => $c?->ultimo ? Carbon::parse($c->ultimo) : null,
+                'faltas' => (int) ($faltas[$id] ?? 0),
+            ];
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Até quando está sem convites, ou null se não está.
+     *
+     * Conta a partir do ÚLTIMO cancelamento do mês: um quarto cancelamento
+     * durante a pausa prolonga-a, em vez de não ter consequência nenhuma.
+     */
+    public static function pausaAte(array $fiabilidade): ?CarbonInterface
+    {
+        if (($fiabilidade['cancelamentos'] ?? 0) < self::CANCELAMENTOS_ANTES_DA_PAUSA) {
+            return null;
+        }
+
+        $fim = $fiabilidade['ultimo_cancelamento']?->copy()->addHours(self::HORAS_DE_PAUSA);
+
+        return $fim && $fim->isFuture() ? $fim : null;
+    }
+
+    public function invitesPausedUntil(): ?CarbonInterface
+    {
+        return self::pausaAte(self::fiabilidadeDe([$this->id])[$this->id]);
+    }
+
+    /** O que a app mostra ao técnico: onde está, e qual é a regra. */
+    public function reliabilitySummary(): array
+    {
+        $f = self::fiabilidadeDe([$this->id])[$this->id];
+
+        return [
+            'cancellations_this_month' => $f['cancelamentos'],
+            'cancellations_limit' => self::CANCELAMENTOS_ANTES_DA_PAUSA,
+            'pause_hours' => self::HORAS_DE_PAUSA,
+            'invites_paused_until' => self::pausaAte($f)?->toIso8601String(),
+            'no_shows_recent' => $f['faltas'],
+            'no_shows_window_days' => self::DIAS_DAS_FALTAS_NO_RANKING,
+        ];
+    }
+
+    /**
      * Serviços que o profissional levou até ao fim.
      *
      * Conta o trabalho FEITO, não o dinheiro recebido: `ClosedPendingPayment` é

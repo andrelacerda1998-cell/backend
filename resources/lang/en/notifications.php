@@ -246,6 +246,10 @@ return [
             ],
         ],
     ],
+    'serviceCanceledByVendorReopened' => [
+        'title' => 'Your professional canceled — we\'re already looking for another',
+        'description' => 'We\'re already looking for another professional for your :service_type service. What you paid has been returned.',
+    ],
     'serviceCanceledByVendor' => [
         'title' => 'Service canceled',
         'description' => ':vendor_name has canceled your :service_type service',

@@ -99,6 +99,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'on_the_way_at' => 'datetime',
         'arrived_at' => 'datetime',
         'vendor_no_show_at' => 'datetime',
+        'vendor_canceled_at' => 'datetime',
     ];
 
     protected $appends = ['price_rate'];

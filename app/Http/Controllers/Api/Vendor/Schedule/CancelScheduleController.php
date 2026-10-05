@@ -8,7 +8,9 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Schedule\Schedule;
 use App\Notifications\Customer\ScheduleCanceledByVendorNotification;
+use App\Notifications\Customer\ServiceCanceledByVendorNotification;
 use App\Services\Common\Services\CancelService;
+use App\Services\Matching\ReabrirPedidoAposCancelamento;
 use Exception;
 
 class CancelScheduleController extends Controller
@@ -28,12 +30,24 @@ class CancelScheduleController extends Controller
             }
 
             $service = $schedule->service;
+            $reaberto = null;
 
             if ($service) {
+                // A hora lê-se antes: o pedido reaberto mantém-na, e cancelar
+                // apaga a marcação.
+                $intencao = $service->scheduleIntent();
                 $cancelService = new CancelService($service);
 
                 if ($service->status === ServiceStatus::PENDING || $service->status === ServiceStatus::SCHEDULED) {
                     $cancelService->vendorCancelService();
+                }
+
+                // O mesmo que no cancelamento de um serviço: o cliente não
+                // fica a recomeçar do zero, o pedido volta a procurar outro.
+                try {
+                    $reaberto = app(ReabrirPedidoAposCancelamento::class)->handle($service->refresh(), $intencao);
+                } catch (\Throwable $e) {
+                    report($e);
                 }
             }
 
@@ -43,7 +57,9 @@ class CancelScheduleController extends Controller
             $customer = $schedule->customer;
             if ($customer && ! $customer->trashed() && $customer->devices()->exists()) {
                 try {
-                    $customer->notify(new ScheduleCanceledByVendorNotification($schedule));
+                    $customer->notify($reaberto?->status === ServiceStatus::MATCHING
+                        ? new ServiceCanceledByVendorNotification($service, $reaberto)
+                        : new ScheduleCanceledByVendorNotification($schedule));
                 } catch (\Throwable $e) {
                     report($e);
                 }

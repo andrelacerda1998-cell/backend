@@ -241,6 +241,10 @@ return [
             ],
         ],
     ],
+    'serviceCanceledByVendorReopened' => [
+        'title' => 'Die Fachkraft hat storniert — wir suchen bereits eine andere',
+        'description' => 'Wir suchen bereits eine andere Fachkraft für deinen Service :service_type. Dein Betrag wurde zurückerstattet.',
+    ],
     'serviceCanceledByVendor' => [
         'title' => 'Auftrag storniert',
         'description' => ':vendor_name hat deinen Auftrag für :service_type storniert',

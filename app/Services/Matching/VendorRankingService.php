@@ -52,10 +52,22 @@ class VendorRankingService
             return collect();
         }
 
+        // Fiabilidade: quem está em pausa (3 cancelamentos depois de aceitar,
+        // no mesmo mês) não é convidado; quem faltou recentemente desce de
+        // faixa. São as regras que o técnico vê na app — ver Vendor.
+        $fiabilidade = Vendor::fiabilidadeDe($vendors->pluck('id')->all());
+        $vendors = $vendors
+            ->reject(fn (Vendor $v) => Vendor::pausaAte($fiabilidade[$v->id] ?? []) !== null)
+            ->values();
+
+        if ($vendors->isEmpty()) {
+            return collect();
+        }
+
         $ratings = $this->ratingsFor($vendors->pluck('id')->all(), $scope);
 
         $ranked = $vendors
-            ->map(fn (Vendor $vendor) => $this->describe($vendor, $scope, $address, $ratings, $immediate))
+            ->map(fn (Vendor $vendor) => $this->describe($vendor, $scope, $address, $ratings, $immediate, (int) ($fiabilidade[$vendor->id]['faltas'] ?? 0)))
             ->filter()
             ->values();
 
@@ -314,6 +326,7 @@ class VendorRankingService
         AddressCoordinatesDTO|Address $address,
         array $ratings,
         bool $immediate,
+        int $faltasRecentes = 0,
     ): ?RankedVendor {
         try {
             $prices = $this->calculatePricesForMinutes($scope->minutes, $address, $vendor, ! $immediate, $scope->serviceAt);
@@ -339,6 +352,7 @@ class VendorRankingService
             distance: (float) $prices['distance'],
             quotedAmount: $prices['customer_amount'],
             quotedAmountForVendor: $prices['vendor_amount'],
+            recentNoShows: $faltasRecentes,
         );
     }
 

@@ -32,6 +32,11 @@ enum CandidateStatus: string
     /** Aceitou mas o cliente escolheu outro, ou o pedido fechou antes. */
     case LOST = 'lost';
 
+    // Fora da corrida de propósito: o técnico que cancelou um serviço e cujo
+    // pedido foi reaberto para outro. Fica registado para o pedido novo saber
+    // que não o deve voltar a convidar — e para se poder ver porquê.
+    case EXCLUDED = 'excluded';
+
     /** Estados em que ainda pode vir a ficar com o serviço. */
     public function isLive(): bool
     {
