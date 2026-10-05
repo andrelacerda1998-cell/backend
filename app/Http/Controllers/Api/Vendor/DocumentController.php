@@ -23,7 +23,8 @@ class DocumentController extends Controller
     public function index()
     {
         $documents = VendorDocuments::where('vendor_id', auth()->user()->vendor->id)
-            ->with('document')
+            ->with('type')
+            ->orderBy('id')
             ->get()
             ->map(function (VendorDocuments $d) {
                 $expiration = $d->expiration_date ? Carbon::parse($d->expiration_date) : null;
@@ -32,7 +33,7 @@ class DocumentController extends Controller
                 return [
                     'id' => $d->id,
                     'document_id' => $d->document_id,
-                    'name' => $d->document?->name,
+                    'name' => $d->type?->name,
                     'status' => $d->status,
                     'reason' => $d->reason,
                     'expiration_date' => $expiration?->toDateString(),

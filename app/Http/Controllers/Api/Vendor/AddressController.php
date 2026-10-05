@@ -40,7 +40,11 @@ class AddressController extends Controller
         $geoAddress = $this->addressService->getCoordinates($data);
 
         if (! is_array($geoAddress) || empty($geoAddress['address_components'] ?? null) || ! isset($geoAddress['lat'], $geoAddress['lng'])) {
-            Log::info('address', $geoAddress);
+            // Num array: é precisamente neste ramo que `$geoAddress` pode NÃO
+            // ser um array (`null` ou `''` quando a Google não reconhece a
+            // morada), e o `Log::info` exige um. Rebentava com TypeError e o
+            // técnico levava um 500 em vez do 400 "morada inválida" de baixo.
+            Log::info('address', ['geo' => $geoAddress]);
 
             return new ApiErrorResponse(new Exception('Could not geocode address.'), 'Address is invalid', 400);
         }

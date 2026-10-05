@@ -122,17 +122,6 @@ class UserController extends Controller
                 'payout_blocked' => $vendor->payout_blocked,
                 'payout_blocker' => $vendor->payoutBlocker(),
                 /*
-                 * O prazo dos 5 dias, para a app poder contar.
-                 *
-                 * Vai a DATA DE FIM e não só os dias: um número de dias calculado
-                 * aqui congela no momento do pedido, e a app que fique aberta ao
-                 * virar da meia-noite continuava a dizer "faltam 2" quando já só
-                 * falta 1. Com a data, quem conta é quem mostra.
-                 *
-                 * `null` quando não há prazo a correr.
-                 */
-                'at_deadline_ends_at' => $vendor->prazoDaAtTerminaEm()?->toIso8601String(),
-                /*
                  * Termos por aceitar.
                  *
                  * Vai no perfil e não só no endpoint próprio porque a app já lê
@@ -147,6 +136,17 @@ class UserController extends Controller
                 //  - aprovado mas com a semana a zero: dizer-lhe que há
                 //    mercado, em vez de o deixar com três zeros sem contexto.
                 'zone_recent_requests' => app(ZoneDemand::class)->recentRequestCount($vendor),
+                /**
+                 * Quantas cidades o técnico escolheu para trabalhar.
+                 *
+                 * O passo das cidades no "Completar perfil" não tinha sinal
+                 * persistente: usava uma flag de sessão que voltava a `false`
+                 * sempre que o ecrã abria, e o passo reaparecia como se nunca
+                 * tivesse sido feito -- com as cidades já guardadas no servidor.
+                 * O técnico preenchia, voltava, e concluía que não tinha gravado.
+                 * Com isto a app sabe que o passo está feito.
+                 */
+                'available_cities_count' => $vendor->availableCities()->count(),
             ]);
         }
 

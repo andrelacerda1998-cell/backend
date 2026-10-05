@@ -34,6 +34,7 @@ return [
         'wrong_credentials' => 'Credentials are invalid',
     ],
     'vendor' => [
+        'phone_permissions_off' => 'To go online you need location and notifications turned on. Without them you are not alerted to requests and the customer cannot see you on the way.',
         'service' => [
             'service_is_not_pending' => 'Service is not pending.',
             'service_is_not_accepted' => 'Service has not been accepted.',

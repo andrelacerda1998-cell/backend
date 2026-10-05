@@ -34,6 +34,7 @@ return [
         'wrong_credentials' => 'Ungültige Anmeldedaten.',
     ],
     'vendor' => [
+        'phone_permissions_off' => 'Um online zu gehen, müssen Standort und Benachrichtigungen aktiviert sein. Ohne sie werden Sie nicht über Anfragen informiert und der Kunde sieht Sie nicht unterwegs.',
         'service' => [
             'service_is_not_pending' => 'Der Auftrag ist nicht ausstehend.',
             'service_is_not_accepted' => 'Der Auftrag wurde nicht angenommen.',

@@ -26,7 +26,4 @@ return [
         'refund' => 'Refund',
         'service' => 'Service',
     ],
-    'at_deadline' => [
-        'forfeited_description' => 'Balance forfeited for missing Tax Authority access',
-    ],
 ];

@@ -6,6 +6,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
 use App\Exceptions\Api\Vendor\Status\VendorAlreadyHasDeviceConnected;
 use App\Exceptions\Api\Vendor\Status\VendorHasServiceOpen;
+use App\Exceptions\Api\Vendor\Status\VendorPermissoesDoTelemovelDesligadas;
 use App\Exceptions\Api\Vendor\VendorAccountNotValidated;
 use App\Exceptions\Api\Vendor\VendorAccountWorkspaceRequired;
 use App\Exceptions\Api\Vendor\VendorATAccountInvalid;
@@ -60,6 +61,24 @@ class StatusController extends Controller
                 }
                 if (!$vendor->can_accept_service){
                     throw new VendorCantAcceptServices();
+                }
+                /*
+                 * Sem localização ou sem notificações não se vai online.
+                 *
+                 * Um técnico online sem notificações não é avisado de nenhum
+                 * pedido, e cada um só dura 120 segundos: passavam todos, e
+                 * cada um baixava-lhe a taxa de aceitação. Sem localização o
+                 * cliente não o vê a caminho.
+                 *
+                 * Só quando a app diz EXPLICITAMENTE que estão desligadas. Sem
+                 * o campo -- versões antigas -- deixa-se passar: recusar por
+                 * falta de informação trancava fora técnicos que não fizeram
+                 * nada de errado. `has` + `boolean` apanha tanto o `false` do
+                 * JSON como o "0"/"false" de um formulário.
+                 */
+                $desligada = fn (string $campo) => $request->has($campo) && ! $request->boolean($campo);
+                if ($desligada('location_enabled') || $desligada('notifications_enabled')) {
+                    throw new VendorPermissoesDoTelemovelDesligadas();
                 }
             } else {
                 $service = $vendor->services()->whereIn('status', [ServiceStatus::FINISHED, ServiceStatus::ACCEPTED])->get()->first();

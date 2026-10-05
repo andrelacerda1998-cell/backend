@@ -157,17 +157,6 @@ class Vendor extends Model implements Auditable
         return $this->services()->whereIn('status', ServiceStatus::concluidos());
     }
 
-    /**
-     * Limpa o prazo. Chamado quando a AT chega -- o relógio deixa de fazer
-     * sentido, e se ele voltar a ficar sem AT um dia começa um prazo novo.
-     */
-    public function limparPrazoDaAt(): void
-    {
-        if ($this->at_deadline_started_at !== null) {
-            $this->forceFill(['at_deadline_started_at' => null])->save();
-        }
-    }
-
     /** O acesso à AT está dado E validado. */
     /**
      * A AT está em dia: ou foi entregue, ou ainda não é exigida.
@@ -352,80 +341,6 @@ class Vendor extends Model implements Auditable
         return Attribute::make(
             get: fn () => $this->versaoDosTermosAceite() === config('legal.provider_terms.version')
         )->shouldCache();
-    }
-
-    /** Dias que o técnico tem para dar a AT antes de perder o que ganhou. */
-    public const DIAS_DE_PRAZO_DA_AT = 5;
-
-    /**
-     * O relógio dos 5 dias arranca quando há mesmo alguma coisa em jogo.
-     *
-     * Não basta a AT passar a ser exigida: só conta quando ele TEM dinheiro
-     * ganho retido por causa dela. Arrancar o prazo a quem não tem nada a
-     * receber seria ameaçá-lo com a perda de zero euros, e gastar o aviso.
-     *
-     * Idempotente: uma vez começado não se reinicia. Sem isso, cada serviço
-     * novo empurrava o prazo para a frente e ele nunca chegava ao fim.
-     */
-    public function comecarPrazoDaAtSeNecessario(): void
-    {
-        if ($this->at_deadline_started_at !== null) {
-            return;
-        }
-
-        /*
-         * SEM ACEITAÇÃO REGISTADA, O RELÓGIO NÃO ARRANCA.
-         *
-         * O prazo acaba em perda do saldo, e uma cláusula que retira dinheiro a
-         * alguém só o vincula se ele a tiver aceitado. Amarrar as duas coisas
-         * aqui significa que não há caminho no código que faça alguém perder
-         * dinheiro por um texto que nunca lhe foi mostrado.
-         *
-         * A RETENÇÃO não depende disto e continua a valer: não pagar o que não
-         * se consegue faturar não é uma penalização, é a ausência de um ato.
-         */
-        if (! $this->aceitou_os_termos_em_vigor) {
-            return;
-        }
-
-        if ($this->payoutBlocker() !== 'at_user_missing') {
-            return;
-        }
-
-        $this->forceFill(['at_deadline_started_at' => now()])->save();
-    }
-
-    /** Quando o prazo acaba. `null` se ainda não começou. */
-    public function prazoDaAtTerminaEm(): ?\Illuminate\Support\Carbon
-    {
-        return $this->at_deadline_started_at?->copy()->addDays(self::DIAS_DE_PRAZO_DA_AT);
-    }
-
-    /**
-     * Dias inteiros que faltam. 0 = é hoje que acaba; `null` = não há prazo.
-     *
-     * Arredonda para CIMA de propósito: dizer "falta 1 dia" a quem tem 18 horas
-     * é mais seguro do que dizer "faltam 0" e ele pensar que já perdeu.
-     */
-    public function diasAteAoPrazoDaAt(): Attribute
-    {
-        return Attribute::make(get: function () {
-            $fim = $this->prazoDaAtTerminaEm();
-
-            return $fim === null ? null : max(0, (int) ceil(now()->floatDiffInDays($fim, false)));
-        });
-    }
-
-    /** O prazo já passou e ele continua sem dar a AT. */
-    public function prazoDaAtExpirado(): Attribute
-    {
-        return Attribute::make(get: function () {
-            $fim = $this->prazoDaAtTerminaEm();
-
-            return $fim !== null
-                && now()->greaterThan($fim)
-                && $this->payoutBlocker() === 'at_user_missing';
-        });
     }
 
     /** Atalho booleano do `payoutBlocker()`, para quem só precisa de sim/não. */

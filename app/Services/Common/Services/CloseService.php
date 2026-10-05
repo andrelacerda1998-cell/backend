@@ -159,18 +159,6 @@ class CloseService
 
         $vendor->user->deposit($this->service->amount_for_vendor, $this->service->getMetaProduct());
 
-        /*
-         * É AQUI que o relógio dos 5 dias arranca, e não quando a AT passa a
-         * ser exigida.
-         *
-         * A diferença importa: o prazo ameaça com a perda do dinheiro, e neste
-         * instante é a primeira vez que há dinheiro para perder. Arrancá-lo
-         * mais cedo era ameaçar alguém com a perda de zero euros — e gastar o
-         * aviso antes de ele significar alguma coisa.
-         *
-         * O método é idempotente; chamá-lo a cada fecho não empurra o prazo.
-         */
-        $vendor->refresh()->comecarPrazoDaAtSeNecessario();
 
         $vendorFee = abs($this->service->getRawOriginal('amount_for_vendor'));
         $systemFee = abs($this->service->getRawOriginal('amount') - $vendorFee);

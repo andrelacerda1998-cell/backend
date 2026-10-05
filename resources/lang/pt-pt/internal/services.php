@@ -26,7 +26,4 @@ return [
         'refund' => 'Devolução',
         'service' => 'Serviço',
     ],
-    'at_deadline' => [
-        'forfeited_description' => 'Saldo perdido por falta do acesso à AT',
-    ],
 ];
