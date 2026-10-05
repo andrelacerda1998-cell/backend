@@ -16,6 +16,7 @@ use App\Models\Service;
 use App\Notifications\Vendor\ServiceCanceledNotification;
 use App\Services\Common\Services\CancelService;
 use App\Services\Common\Services\MbwayPaymentResolver;
+use App\Services\Matching\MatchingService;
 use RwInteractive\PayshopSdk\Enums\Payment\Status;
 
 class CancelServiceController extends Controller
@@ -45,6 +46,18 @@ class CancelServiceController extends Controller
                 }
 
                 $canceledBeforePayment = true;
+            }
+
+            // Ainda em seleção (à procura, ou escolhido mas por pagar): fecha o
+            // pedido e avisa quem já tinha respondido. Antes caía no
+            // `cancelOpenService`, que não faz nada fora de ACCEPTED/ARRIVED —
+            // o cliente não tinha forma de desistir de um pedido em seleção.
+            if (in_array($service->status, [ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT], true)) {
+                if (! app(MatchingService::class)->cancelByCustomer($service)) {
+                    throw new ServiceNotPossibleToCancel;
+                }
+
+                return new ApiSuccessResponse(['status' => ServiceStatus::CANCELED->value]);
             }
 
             $cancelService = new CancelService($service);

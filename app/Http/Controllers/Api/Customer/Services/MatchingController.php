@@ -77,10 +77,24 @@ class MatchingController extends Controller
                 ->latest('id')
                 ->first();
 
+            // ...mas só quando é o MESMO pedido. Devolvia-se o aberto fosse ele
+            // qual fosse: quem desistia de um desentupimento e pedia um
+            // eletricista recebia de volta o desentupimento, com os técnicos
+            // de canalização ainda a ser convidados. Outro serviço (ou o mesmo
+            // noutro modo) substitui o anterior — desde que não haja um
+            // pagamento a meio, que aí não se mexe e continua a mandar o aberto.
             if ($existing) {
-                DB::commit();
+                $mesmoPedido = (int) $existing->services_type_id === (int) $serviceType->id
+                    && $this->matching->isScheduled($existing) === $isScheduled;
 
-                return new ApiSuccessResponse($this->payload($existing));
+                // Um personalizado nunca é substituído em silêncio: passou por
+                // análise do backoffice, e deitá-lo fora por um toque noutro
+                // serviço seria perder esse trabalho sem o cliente perceber.
+                if ($mesmoPedido || $existing->is_custom || ! $this->matching->cancelByCustomer($existing)) {
+                    DB::commit();
+
+                    return new ApiSuccessResponse($this->payload($existing->refresh()));
+                }
             }
 
             $service = new Service([

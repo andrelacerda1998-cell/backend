@@ -315,6 +315,64 @@ class MatchingService
         });
     }
 
+    /**
+     * O cliente desistiu de um pedido ainda em seleção.
+     *
+     * Sem isto não havia saída: o ecrã de espera só tinha "voltar", e voltar
+     * não fechava nada. O pedido ficava em `Matching` a convidar técnicos para
+     * um trabalho que já ninguém queria, e o pedido seguinte do cliente — de
+     * qualquer serviço — devolvia este.
+     *
+     * Só antes de haver pagamento em curso. Em `AwaitingPayment` com uma ordem
+     * já criada (MB Way à espera do banco, 3DS por validar) cancelar aqui
+     * podia cruzar-se com o pagamento a confirmar; aí devolve false e o
+     * cancelamento normal, que sabe tratar ordens, é que decide.
+     *
+     * Quem já tinha respondido é avisado com o desfecho "fechou" — o mesmo de
+     * quando o pedido expira. Não perdeu para ninguém, o pedido deixou de
+     * existir.
+     */
+    public function cancelByCustomer(Service $service): bool
+    {
+        return DB::transaction(function () use ($service) {
+            $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
+
+            if (! $locked || ! in_array($locked->status, [ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT], true)) {
+                return false;
+            }
+
+            if ($locked->status === ServiceStatus::AWAITING_PAYMENT && $locked->payment_order_id !== null) {
+                return false;
+            }
+
+            $open = $locked->candidates()
+                ->whereIn('status', [
+                    CandidateStatus::SHORTLISTED,
+                    CandidateStatus::NOTIFIED,
+                    CandidateStatus::ACCEPTED,
+                    CandidateStatus::SELECTED,
+                ])
+                ->with('vendor')
+                ->get();
+
+            $locked->candidates()
+                ->whereKey($open->modelKeys())
+                ->update(['status' => CandidateStatus::LOST]);
+
+            $locked->vendor_id = null;
+            $locked->status = ServiceStatus::CANCELED;
+            $locked->status_justification = 'internal/services.cancel.description';
+            $locked->pending_schedule_data = null;
+            $locked->save();
+
+            foreach ($open as $candidate) {
+                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+            }
+
+            return true;
+        });
+    }
+
     /** Ninguém aceitou, ou esgotaram-se as ondas: o cliente tenta outra vez. */
     public function fail(Service $service): void
     {
