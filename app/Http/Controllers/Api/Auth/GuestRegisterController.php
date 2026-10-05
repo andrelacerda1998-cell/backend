@@ -9,6 +9,7 @@ use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
 use App\Models\User;
 use App\Services\Common\PhoneLoginSmsService;
+use App\Support\ChaveDeMorada;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Spatie\Geocoder\Facades\Geocoder;
@@ -81,6 +82,20 @@ class GuestRegisterController extends Controller
 
     private function storeMainAddress(User $user, array $addressData): void
     {
+        // A mesma morada não se guarda duas vezes. Quem já tinha conta e voltava
+        // a confirmar o telemóvel (agora no toque em "Pedir") ganhava uma
+        // morada nova de cada vez — a lista de moradas enchia-se de repetidas.
+        // Se já a tem, passa só a ser a principal.
+        $chave = ChaveDeMorada::de($addressData);
+        $existente = $user->addresses()->get()->first(fn ($a) => ChaveDeMorada::de($a) === $chave);
+
+        if ($existente) {
+            $user->addresses()->update(['main_address' => false]);
+            $existente->forceFill(['main_address' => true])->save();
+
+            return;
+        }
+
         $municipality = $this->resolveMunicipalityCity($addressData);
 
         $user->addresses()->update(['main_address' => false]);
