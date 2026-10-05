@@ -200,6 +200,10 @@ return [
         'title' => 'Le client a signalé un problème',
         'description' => 'Le client a signalé un problème sur le service :service_type. Piquet va examiner le cas ; le paiement est en attente d’ici là.',
     ],
+    'vendorCantFindCustomer' => [
+        'title' => 'Le professionnel ne vous trouve pas',
+        'description' => ':vendor_name est à l’adresse du service et ne vous trouve pas. Appelez-le ou répondez dans le chat.',
+    ],
     'finishedService' => [
         'title' => 'Le professionnel a terminé le service',
         'description' => 'Votre service :service_type est terminé. Si quelque chose ne va pas, signalez un problème dans les :hours prochaines heures ; ensuite nous fermons le service automatiquement.',

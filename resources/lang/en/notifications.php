@@ -197,6 +197,10 @@ return [
         'title' => 'The customer reported a problem',
         'description' => 'The customer reported a problem with the :service_type service. Piquet will look into it; the payment is on hold until then.',
     ],
+    'vendorCantFindCustomer' => [
+        'title' => 'Your professional can\'t find you',
+        'description' => ':vendor_name is at the service address and can\'t find you. Call them or reply in the chat.',
+    ],
     'finishedService' => [
         'title' => 'Your professional finished the service',
         'description' => 'Your :service_type service is done. If something is not right, report a problem in the next :hours hours; after that we close the service automatically.',

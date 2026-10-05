@@ -192,6 +192,10 @@ return [
         'title' => 'Der Kunde hat ein Problem gemeldet',
         'description' => 'Der Kunde hat beim Service :service_type ein Problem gemeldet. Piquet prüft den Fall; die Zahlung ist bis dahin angehalten.',
     ],
+    'vendorCantFindCustomer' => [
+        'title' => 'Die Fachkraft findet dich nicht',
+        'description' => ':vendor_name ist an der Serviceadresse und findet dich nicht. Ruf an oder antworte im Chat.',
+    ],
     'finishedService' => [
         'title' => 'Die Fachkraft hat den Service abgeschlossen',
         'description' => 'Dein Service :service_type ist abgeschlossen. Wenn etwas nicht stimmt, melde in den nächsten :hours Stunden ein Problem; danach schließen wir den Service automatisch.',

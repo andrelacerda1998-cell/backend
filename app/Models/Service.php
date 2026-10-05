@@ -512,6 +512,11 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             'on_the_way_at' => $service->on_the_way_at?->toIso8601String(),
             // Início da execução — a app conta a partir daqui.
             'arrived_at' => $service->arrived_at?->toIso8601String(),
+            // O técnico já disse que o cliente não está (ou o cliente reportou
+            // um problema): a app mostra que a equipa vai decidir.
+            'problem_reported_at' => $service->problem_reported_at?->toIso8601String(),
+            'problem_reported_by' => $service->problem_reported_by,
+            'problem_reason' => $service->problem_reason,
             'is_immediate' => ! $service->schedule()->exists(),
             'scheduled_at' => $service->schedule?->scheduled_day,
             'created_at' => $service->created_at?->toIso8601String(),

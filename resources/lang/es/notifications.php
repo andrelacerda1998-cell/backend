@@ -200,6 +200,10 @@ return [
         'title' => 'El cliente informó de un problema',
         'description' => 'El cliente informó de un problema en el servicio de :service_type. Piquet lo revisará; el pago queda en espera hasta entonces.',
     ],
+    'vendorCantFindCustomer' => [
+        'title' => 'El profesional no te encuentra',
+        'description' => ':vendor_name está en la dirección del servicio y no te encuentra. Llámale o responde en el chat.',
+    ],
     'finishedService' => [
         'title' => 'El profesional terminó el servicio',
         'description' => 'Tu servicio de :service_type está terminado. Si algo no está bien, informa de un problema en las próximas :hours horas; después cerramos el servicio automáticamente.',
