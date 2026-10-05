@@ -6,6 +6,23 @@ return [
         'description' => 'Pagamento enviado com o valor de :value€',
     ],
     'mail' => [
+        'problemReportedOps' => [
+            'subject' => 'Problema reportado — serviço #:service_id',
+            'line1' => 'O serviço #:service_id (:service_type) tem um problema reportado por :reported_by: :reason.',
+            'line2' => 'Cliente: :customer_name (:customer_phone). Profissional: :vendor_name.',
+            'line3' => 'O fecho automático está parado até alguém decidir: fechar e pagar, reembolsar, ou mandar outro profissional.',
+            'by_customer' => 'o cliente',
+            'by_vendor' => 'o profissional',
+            'reasons' => [
+                'not_done' => 'o trabalho não ficou feito',
+                'poor_quality' => 'trabalho mal feito',
+                'damage' => 'danos em casa',
+                'price' => 'problema com o preço',
+                'no_show' => 'o profissional não apareceu',
+                'customer_absent' => 'o cliente não estava no local',
+                'other' => 'outro motivo',
+            ],
+        ],
         'paymentSent' => [
             'subject' => 'Pagamento enviado',
             'greeting' => 'Olá',
@@ -190,9 +207,17 @@ return [
         'title' => 'Serviço aceite',
         'description' => 'O profissional aceitou a tua proposta para o serviço do tipo: ',
     ],
+    'serviceAutoClosed' => [
+        'title' => 'Serviço fechado',
+        'description' => 'Passaram :hours horas sem nenhum problema reportado, por isso fechámos o teu serviço de :service_type. Conta-nos como correu.',
+    ],
+    'problemReportedVendor' => [
+        'title' => 'O cliente reportou um problema',
+        'description' => 'O cliente reportou um problema no serviço de :service_type. A Piquet vai ver o caso; o pagamento fica em espera até lá.',
+    ],
     'finishedService' => [
-        'title' => 'Serviço terminado',
-        'description' => 'O profissional diz ter terminado o serviço do tipo: ',
+        'title' => 'O técnico concluiu o serviço',
+        'description' => 'O teu serviço de :service_type está concluído. Se algo não estiver bem, reporta um problema nas próximas :hours horas; depois disso fechamos o serviço automaticamente.',
     ],
     'vendorArrivedService' => [
         'title' => 'Profissional chegou',

@@ -6,6 +6,23 @@ return [
         'description' => 'Payment sent with value :value€',
     ],
     'mail' => [
+        'problemReportedOps' => [
+            'subject' => 'Problem reported — service #:service_id',
+            'line1' => 'Service #:service_id (:service_type) has a problem reported by :reported_by: :reason.',
+            'line2' => 'Customer: :customer_name (:customer_phone). Professional: :vendor_name.',
+            'line3' => 'Automatic closing is on hold until someone decides: close and pay, refund, or send another professional.',
+            'by_customer' => 'the customer',
+            'by_vendor' => 'the professional',
+            'reasons' => [
+                'not_done' => 'the job was not done',
+                'poor_quality' => 'poor quality work',
+                'damage' => 'damage at home',
+                'price' => 'a problem with the price',
+                'no_show' => 'the professional did not show up',
+                'customer_absent' => 'the customer was not there',
+                'other' => 'another reason',
+            ],
+        ],
         'paymentSent' => [
             'subject' => 'Payment sent',
             'greeting' => 'Hello',
@@ -172,9 +189,17 @@ return [
         'title' => 'Service accepted',
         'description' => 'The professional accepted your proposal for the service of type: ',
     ],
+    'serviceAutoClosed' => [
+        'title' => 'Service closed',
+        'description' => ':hours hours went by with no problem reported, so we closed your :service_type service. Tell us how it went.',
+    ],
+    'problemReportedVendor' => [
+        'title' => 'The customer reported a problem',
+        'description' => 'The customer reported a problem with the :service_type service. Piquet will look into it; the payment is on hold until then.',
+    ],
     'finishedService' => [
-        'title' => 'Service finished',
-        'description' => 'The professional says to have finished the service of type: ',
+        'title' => 'Your professional finished the service',
+        'description' => 'Your :service_type service is done. If something is not right, report a problem in the next :hours hours; after that we close the service automatically.',
     ],
     'vendorArrivedService' => [
         'title' => 'Professional arrived',

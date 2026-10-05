@@ -4,6 +4,8 @@ namespace App\Services\Common\Services;
 
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Events\Common\Services\CloseServiceEvent;
+use App\Events\Vendor\Services\CloseServiceEvent as VendorCloseServiceEvent;
 use App\Models\Service;
 use App\Models\ServiceExtra;
 use Bavix\Wallet\Internal\Exceptions\ExceptionInterface;
@@ -25,6 +27,28 @@ class CloseService
      * @throws ExceptionInterface
      * @throws \Throwable
      */
+    /**
+     * Os avisos de "fechado e pago": ao cliente, e ao técnico com a carteira
+     * atualizada. Só depois de a captura ter mesmo acontecido — em
+     * CLOSED_PENDING_PAYMENT o técnico NÃO foi pago e não se lhe pode dizer
+     * que foi.
+     *
+     * Partilhado entre o fecho pelo cliente e o fecho automático: os dois
+     * fecham o mesmo serviço e têm de avisar exatamente da mesma maneira.
+     */
+    public static function anunciarFecho(Service $service): void
+    {
+        CloseServiceEvent::dispatch($service);
+        $serviceDataForVendor = $service->formatDataForVendor();
+        VendorCloseServiceEvent::dispatch($service->vendor, [
+            ...$serviceDataForVendor,
+            'vendor' => [
+                ...$serviceDataForVendor['vendor'],
+                'wallet' => $service->vendor->wallet,
+            ],
+        ]);
+    }
+
     public function close(): ServiceStatus
     {
         return \DB::transaction(function (): ServiceStatus {

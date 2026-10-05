@@ -100,6 +100,9 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'arrived_at' => 'datetime',
         'vendor_no_show_at' => 'datetime',
         'vendor_canceled_at' => 'datetime',
+        'finished_at' => 'datetime',
+        'auto_closed_at' => 'datetime',
+        'problem_reported_at' => 'datetime',
     ];
 
     protected $appends = ['price_rate'];
@@ -110,6 +113,32 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
      * um atributo dinâmico via Eloquent seria gravado como coluna no save().
      */
     public bool $skipCancellationRefund = false;
+
+    /**
+     * Horas entre o técnico concluir e o serviço fechar sozinho (cobrar e
+     * pagar), se o cliente não confirmar nem reportar um problema.
+     *
+     * Sem fecho automático, o pagamento do técnico dependia de um toque do
+     * cliente que não tinha razão nenhuma para o dar — e a cativação acabava
+     * por caducar. 24 horas é tempo de o cliente ver o trabalho feito.
+     */
+    public const HORAS_ATE_FECHO_AUTOMATICO = 24;
+
+    /** Motivos de "Reportar um problema". O texto livre vai à parte. */
+    public const MOTIVOS_DE_PROBLEMA = ['not_done', 'poor_quality', 'damage', 'price', 'no_show', 'customer_absent', 'other'];
+
+    /**
+     * Quando fecha sozinho, ou null se não vai fechar (ainda não concluído,
+     * ou com um problema reportado à espera de uma pessoa).
+     */
+    public function autoCloseAt(): ?CarbonInterface
+    {
+        if ($this->status !== ServiceStatus::FINISHED || ! $this->finished_at || $this->problem_reported_at) {
+            return null;
+        }
+
+        return $this->finished_at->copy()->addHours(self::HORAS_ATE_FECHO_AUTOMATICO);
+    }
 
     public function customer(): BelongsTo
     {
@@ -657,6 +686,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             // a contagem não tinha por onde começar.
             'on_the_way_at' => $service->on_the_way_at?->toIso8601String(),
             'arrived_at' => $service->arrived_at?->toIso8601String(),
+            // Fecho automático: quando o técnico concluiu, quando fecha sozinho
+            // (null se não fecha), e se já há um problema reportado. A app diz
+            // ao cliente até quando pode reportar.
+            'finished_at' => $service->finished_at?->toIso8601String(),
+            'auto_close_at' => $service->autoCloseAt()?->toIso8601String(),
+            'problem_reported_at' => $service->problem_reported_at?->toIso8601String(),
             // Unidades pedidas. Vai nos dois payloads: o técnico precisa de saber
             // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
             // precisa de ver o que comprou.

@@ -45,6 +45,11 @@ class GetServiceDetailsController extends Controller
                 // três. A quantidade não chega sequer a estes ecrãs; quem sabe
                 // a conta é o servidor (ver Service::durationMinutes()).
                 'duration_minutes' => $service->durationMinutes(),
+                // Fecho automático: até quando o cliente pode reportar um
+                // problema antes de o serviço fechar e ser cobrado sozinho.
+                'finished_at' => $service->finished_at?->toIso8601String(),
+                'auto_close_at' => $service->autoCloseAt()?->toIso8601String(),
+                'problem_reported_at' => $service->problem_reported_at?->toIso8601String(),
                 'quantity' => $service->quantity,
                 'service_type' => $service->serviceType ? [
                     'id' => $service->serviceType->id,

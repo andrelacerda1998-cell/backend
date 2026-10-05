@@ -6,6 +6,23 @@ return [
         'description' => 'Zahlung über :value € gesendet',
     ],
     'mail' => [
+        'problemReportedOps' => [
+            'subject' => 'Problem gemeldet — Service #:service_id',
+            'line1' => 'Service #:service_id (:service_type) hat ein Problem, gemeldet von :reported_by: :reason.',
+            'line2' => 'Kunde: :customer_name (:customer_phone). Fachkraft: :vendor_name.',
+            'line3' => 'Der automatische Abschluss ist angehalten, bis jemand entscheidet: abschließen und zahlen, erstatten oder eine andere Fachkraft schicken.',
+            'by_customer' => 'dem Kunden',
+            'by_vendor' => 'der Fachkraft',
+            'reasons' => [
+                'not_done' => 'die Arbeit wurde nicht erledigt',
+                'poor_quality' => 'schlechte Arbeit',
+                'damage' => 'Schaden in der Wohnung',
+                'price' => 'ein Problem mit dem Preis',
+                'no_show' => 'die Fachkraft ist nicht erschienen',
+                'customer_absent' => 'der Kunde war nicht da',
+                'other' => 'ein anderer Grund',
+            ],
+        ],
         'paymentSent' => [
             'subject' => 'Zahlung gesendet',
             'greeting' => 'Hallo',
@@ -167,9 +184,17 @@ return [
         'title' => 'Auftrag angenommen',
         'description' => 'Die Fachkraft hat dein Angebot angenommen: ',
     ],
+    'serviceAutoClosed' => [
+        'title' => 'Service abgeschlossen',
+        'description' => ':hours Stunden sind ohne gemeldetes Problem vergangen, deshalb haben wir deinen Service :service_type abgeschlossen. Erzähl uns, wie es war.',
+    ],
+    'problemReportedVendor' => [
+        'title' => 'Der Kunde hat ein Problem gemeldet',
+        'description' => 'Der Kunde hat beim Service :service_type ein Problem gemeldet. Piquet prüft den Fall; die Zahlung ist bis dahin angehalten.',
+    ],
     'finishedService' => [
-        'title' => 'Auftrag abgeschlossen',
-        'description' => 'Die Fachkraft hat den Auftrag als abgeschlossen gemeldet: ',
+        'title' => 'Die Fachkraft hat den Service abgeschlossen',
+        'description' => 'Dein Service :service_type ist abgeschlossen. Wenn etwas nicht stimmt, melde in den nächsten :hours Stunden ein Problem; danach schließen wir den Service automatisch.',
     ],
     'vendorArrivedService' => [
         'title' => 'Fachkraft angekommen',
