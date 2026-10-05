@@ -170,6 +170,8 @@ class MatchingInvitationsController extends Controller
             'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
             // Já trabalhou para este cliente: é um regresso, não um desconhecido.
             'knows_customer' => (bool) $candidate->is_returning_vendor,
+            // Fora das cidades que escolheu: o convite tem de o dizer.
+            'outside_your_cities' => (bool) $candidate->is_outside_area,
             'distance' => (float) $candidate->quoted_distance,
             // A janela é visível de propósito: sem saber quando fica livre, o
             // profissional fica pendurado e deixa de responder.

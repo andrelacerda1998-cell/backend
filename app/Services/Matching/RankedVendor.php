@@ -30,6 +30,8 @@ final class RankedVendor
         public readonly int $recentNoShows = 0,
         /** Já atendeu este cliente, e correu bem. Entra na onda fora do ranking. */
         public bool $isReturningVendor = false,
+        /** Convidado fora das cidades dele (recurso: não havia ninguém dentro). */
+        public bool $outsideArea = false,
     ) {
     }
 

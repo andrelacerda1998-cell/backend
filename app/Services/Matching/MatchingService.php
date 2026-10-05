@@ -80,7 +80,9 @@ class MatchingService
         $alreadySeen = $service->candidates()->pluck('vendor_id')->all();
         $immediate = ! $this->isScheduled($service);
 
-        $ranked = $this->rankFor($service, immediate: $immediate)
+        $ranked = $this->rankFor($service, immediate: $immediate, excluir: $alreadySeen)
+            // Redundante com o `excluir`, de propósito: se alguém chamar o
+            // ranking sem ele, ninguém é convidado duas vezes.
             ->reject(fn (RankedVendor $c) => in_array($c->vendor->id, $alreadySeen, true))
             ->values();
 
@@ -804,7 +806,7 @@ class MatchingService
     /**
      * @return Collection<int, RankedVendor>
      */
-    private function rankFor(Service $service, bool $immediate): Collection
+    private function rankFor(Service $service, bool $immediate, array $excluir = []): Collection
     {
         $service->loadMissing('serviceType', 'customer');
 
@@ -817,6 +819,8 @@ class MatchingService
             customer: $service->customer,
             immediate: $immediate,
             scheduledFor: $this->scheduledStartAt($service),
+            excluir: $excluir,
+            cidadeDaMorada: $service->address['city'] ?? null,
         );
     }
 
@@ -878,6 +882,7 @@ class MatchingService
                     'quoted_distance' => $c->distance,
                     'is_new_vendor_slot' => $c->isNewVendorSlot,
                     'is_returning_vendor' => $c->isReturningVendor,
+                    'is_outside_area' => $c->outsideArea,
                     'notified_at' => $status === CandidateStatus::NOTIFIED ? now() : null,
                     'expires_at' => $status === CandidateStatus::NOTIFIED ? $window : null,
                 ]

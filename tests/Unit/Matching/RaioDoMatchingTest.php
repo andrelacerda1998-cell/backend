@@ -109,15 +109,20 @@ class RaioDoMatchingTest extends TestCase
         $this->assertSame([$naFronteira->vendor->id], $this->nomes($resultado));
     }
 
-    public function test_sem_ninguem_dentro_o_raio_abre_se(): void
+    /**
+     * Mudou de regra a 05/10/2026 (decisão do André): o raio deixou de se
+     * abrir a toda a gente quando não havia ninguém dentro. Era o que punha
+     * ao lado de um cliente de Lisboa uma proposta a 398 km. Sem ninguém
+     * dentro, o pedido falha e o cliente pode agendar.
+     */
+    public function test_sem_ninguem_dentro_ninguem_de_longe_entra(): void
     {
-        // Zona sem cobertura: mais vale uma proposta longe do que pedido nenhum.
         $um = $this->aKm('a-120km', 120.0);
         $outro = $this->aKm('a-398km', 398.0);
 
         $resultado = $this->ranking->dentroDoRaio(collect([$um, $outro]));
 
-        $this->assertCount(2, $resultado, 'não é exclusão dura: sem ninguém dentro, entram os de fora');
+        $this->assertCount(0, $resultado, 'exclusão dura: nunca a 400 km');
     }
 
     public function test_com_o_raio_a_zero_nao_se_filtra_nada(): void

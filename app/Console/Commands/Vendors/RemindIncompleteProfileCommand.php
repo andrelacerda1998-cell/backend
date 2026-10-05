@@ -43,7 +43,7 @@ class RemindIncompleteProfileCommand extends Command
                     now()->subDays($days)->startOfDay(),
                     now()->subDays($days)->endOfDay(),
                 ])
-                ->with(['user', 'documents', 'allowedZones'])
+                ->with(['user', 'documents', 'availableCities'])
                 ->get()
                 // can_accept_service resume TODAS as condições do wizard; quem já
                 // passa não precisa de lembrete nenhum.
@@ -124,7 +124,10 @@ class RemindIncompleteProfileCommand extends Command
             $missing++;
         }
 
-        if ($vendor->allowedZones()->doesntExist()) {
+        // As cidades de agora, não as zonas do inquérito antigo que a app já
+        // não grava — com isso, todos os técnicos novos tinham sempre um
+        // passo "em falta" que já tinham feito.
+        if ($vendor->availableCities()->doesntExist()) {
             $missing++;
         }
 
