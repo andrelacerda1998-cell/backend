@@ -168,6 +168,8 @@ class MatchingInvitationsController extends Controller
             // O que ele recebe, congelado. Nunca o que o cliente paga: o modelo
             // é margem por cima, e o técnico recebe 100% do que definiu.
             'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
+            // Já trabalhou para este cliente: é um regresso, não um desconhecido.
+            'knows_customer' => (bool) $candidate->is_returning_vendor,
             'distance' => (float) $candidate->quoted_distance,
             // A janela é visível de propósito: sem saber quando fica livre, o
             // profissional fica pendurado e deixa de responder.

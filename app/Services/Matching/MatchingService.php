@@ -92,13 +92,32 @@ class MatchingService
         // uma onda que talvez nunca chegue a existir.
         $batch = $this->ranking->shortlist($ranked, $this->settings->wave_size);
 
+        // Quem já atendeu este cliente (e correu bem) entra na onda mesmo fora
+        // do top — é a pessoa que ele já conhece. Não ocupa lugar de ninguém:
+        // soma-se à onda. A seguir, `selectableFor` garante que, se aceitar,
+        // o cliente o vê.
+        $conhecidos = $this->conhecidosDoCliente($service);
+
+        if ($conhecidos !== []) {
+            $ultimoRank = (int) $batch->max('rank');
+
+            $ranked
+                ->filter(fn (RankedVendor $c) => in_array($c->vendor->id, $conhecidos, true))
+                ->reject(fn (RankedVendor $c) => $batch->contains(fn (RankedVendor $b) => $b->vendor->id === $c->vendor->id))
+                ->each(function (RankedVendor $c) use ($batch, &$ultimoRank) {
+                    $c->rank = ++$ultimoRank;
+                    $batch->push($c);
+                });
+
+            $batch->each(function (RankedVendor $c) use ($conhecidos) {
+                $c->isReturningVendor = in_array($c->vendor->id, $conhecidos, true);
+            });
+        }
+
         $candidates = $this->persist($service, $batch, CandidateStatus::NOTIFIED, $wave);
 
         foreach ($candidates as $candidate) {
             $this->notifyVendor($candidate->loadMissing('vendor'), MatchingInvitationEvent::class);
-            // Quem tem auto-aceitação ligada responde já, como no convite
-            // individual. Sem isto, a unificação teria desligado a funcionalidade
-            // em silêncio para os pedidos imediatos.
         }
 
         return $candidates;
@@ -733,11 +752,53 @@ class MatchingService
         // O corte é aqui e não no `accept()` de propósito: um profissional
         // melhor que responda mais tarde tem de poder entrar e empurrar outro
         // para fora do top 3 — é isso que "os melhores 3" quer dizer.
-        return $service->candidates()
+        $aceites = $service->candidates()
             ->where('status', CandidateStatus::ACCEPTED)
             ->orderBy('rank')
-            ->limit($this->settings->shortlist_size)
             ->get();
+
+        $limite = $this->settings->shortlist_size;
+        $top = $aceites->take($limite);
+
+        // Com uma exceção: quem já atendeu o cliente, se aceitou, aparece
+        // sempre — e à frente. Foi convidado por isso; empurrá-lo para fora
+        // pelo ranking seria convidá-lo para nada.
+        $conhecido = $aceites->first(fn (ServiceCandidate $c) => $c->is_returning_vendor);
+
+        if (! $conhecido) {
+            return $top->values();
+        }
+
+        $resto = $top->reject(fn (ServiceCandidate $c) => $c->id === $conhecido->id)->take($limite - 1);
+
+        // Coleção do Eloquent, e não `collect()`: quem chama faz `->load()`.
+        return \Illuminate\Database\Eloquent\Collection::make([$conhecido])->concat($resto)->values();
+    }
+
+    /**
+     * Técnicos que já fizeram um serviço a este cliente e com quem correu bem:
+     * fechado, sem problema reportado, e sem nota abaixo de 4. Quem levou uma
+     * nota má não volta a ser posto à frente por ser conhecido.
+     *
+     * @return int[]
+     */
+    private function conhecidosDoCliente(Service $service): array
+    {
+        if (! $service->customer_id) {
+            return [];
+        }
+
+        return Service::query()
+            ->where('customer_id', $service->customer_id)
+            ->whereKeyNot($service->getKey())
+            ->where('status', ServiceStatus::CLOSED)
+            ->whereNotNull('vendor_id')
+            ->whereNull('problem_reported_at')
+            ->where(fn ($q) => $q->whereNull('rating_by_customer')->orWhere('rating_by_customer', '>=', 4))
+            ->distinct()
+            ->pluck('vendor_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     /**
@@ -816,6 +877,7 @@ class MatchingService
                     'quoted_amount_for_vendor' => $c->quotedAmountForVendor,
                     'quoted_distance' => $c->distance,
                     'is_new_vendor_slot' => $c->isNewVendorSlot,
+                    'is_returning_vendor' => $c->isReturningVendor,
                     'notified_at' => $status === CandidateStatus::NOTIFIED ? now() : null,
                     'expires_at' => $status === CandidateStatus::NOTIFIED ? $window : null,
                 ]

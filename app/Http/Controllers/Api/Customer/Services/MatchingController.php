@@ -598,6 +598,8 @@ class MatchingController extends Controller
                 'travel_amount' => $this->travelAmountForCustomer((float) $c->quoted_distance, $isScheduled),
                 'distance' => (float) $c->quoted_distance,
                 'is_new_vendor' => $c->is_new_vendor_slot,
+                // Já atendeu este cliente: a app mostra "Já te atendeu".
+                'knows_you' => (bool) $c->is_returning_vendor,
             ])->values(),
             // Menos do que a shortlist é normal: se só dois puderem, mostram-se dois.
             'expected_candidates' => $this->settings->shortlist_size,
