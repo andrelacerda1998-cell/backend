@@ -40,6 +40,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
 
     protected $fillable = [
         'customer_id',
+        'service_order_id',
         'vendor_id',
         'status',
         'services_type_id',
@@ -165,6 +166,65 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
      * Categorias de um pedido personalizado, escolhidas pelo backoffice. Sao
      * elas que decidem que profissionais sao convidados (ver MatchingScope).
      */
+    /**
+     * As linhas de uma visita com vários serviços (cesto). Vazio num pedido de
+     * um serviço só — que é o caso de todos os pedidos anteriores ao cesto.
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(ServiceItem::class)->orderBy('position')->orderBy('id');
+    }
+
+    /** A encomenda (cesto pedido) de onde esta visita veio, se veio de uma. */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(ServiceOrder::class, 'service_order_id');
+    }
+
+    /** Tem várias linhas? Uma visita do cesto com um só serviço não conta. */
+    public function isBundle(): bool
+    {
+        return $this->relationLoaded('items')
+            ? $this->items->count() > 1
+            : $this->items()->count() > 1;
+    }
+
+    /**
+     * O nome da visita para mostrar: o do tipo, ou "tipo principal + N
+     * serviços" quando tem várias linhas.
+     *
+     * O `services_type_id` de uma visita com várias linhas é a linha com mais
+     * minutos — é por ele que os 60 sítios que leem `serviceType` continuam a
+     * funcionar. Para mostrar ao cliente e ao técnico, isto diz a verdade toda.
+     */
+    public function titulo(?string $language = null): ?string
+    {
+        $language = $language ?? app()->getLocale();
+        $this->loadMissing('serviceType');
+        $nome = $this->serviceType?->getTranslation('name', $language);
+
+        if ($nome === null) {
+            return null;
+        }
+
+        $outros = $this->relationLoaded('items') ? $this->items->count() - 1 : $this->items()->count() - 1;
+
+        if ($outros <= 0) {
+            return $nome;
+        }
+
+        return trans_choice('internal/services.titulo_com_outros', $outros, ['nome' => $nome, 'n' => $outros], $language);
+    }
+
+    /** As linhas para os payloads. Lista vazia num pedido de um serviço só. */
+    public function itemsPayload(?string $language = null): array
+    {
+        $language = $language ?? app()->getLocale();
+        $this->loadMissing('items.serviceType');
+
+        return $this->items->map(fn (ServiceItem $i) => $i->payload($language))->values()->all();
+    }
+
     public function operationAreas(): BelongsToMany
     {
         return $this->belongsToMany(OperationArea::class, 'service_operation_area');
@@ -235,6 +295,16 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             $minutos = (int) ($this->custom_duration_minutes ?? 0);
 
             return $minutos > 0 ? $minutos : null;
+        }
+
+        // Visita com várias linhas: a soma, com os minutos congelados no
+        // pedido. É o que foi cotado e é o que se reserva na agenda.
+        $this->loadMissing('items');
+
+        if ($this->items->isNotEmpty()) {
+            $total = (int) $this->items->sum('minutes');
+
+            return $total > 0 ? $total : null;
         }
 
         $this->loadMissing('serviceType');
@@ -551,6 +621,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
                 ],
             ] : null,
             'custom' => $service->customPayload($language),
+            // Visita com vários serviços (cesto): as linhas, e o nome que as
+            // resume. `service_type` acima continua a ser o tipo principal,
+            // para as versões da app que só sabem ler um.
+            'items' => $service->itemsPayload($language),
+            'title' => $service->titulo($language),
+            'service_order_id' => $service->service_order_id,
             'address' => $address,
             'updated_at' => $service->updated_at,
             'rating_by_vendor' => $service->rating_by_vendor,
@@ -734,6 +810,9 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
                 ],
             ] : null,
             'custom' => $service->customPayload($language),
+            'items' => $service->itemsPayload($language),
+            'title' => $service->titulo($language),
+            'service_order_id' => $service->service_order_id,
             'address' => $service->address ? [
                 'name' => $service->address['name'] ?? null,
                 'additional_info' => $service->address['additional_info'] ?? null,

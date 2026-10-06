@@ -26,4 +26,6 @@ return [
         'refund' => 'Devolução',
         'service' => 'Serviço',
     ],
+    // Nome de uma visita com várias linhas (cesto): tipo principal + os outros.
+    'titulo_com_outros' => ':nome + :n serviço|:nome + :n serviços',
 ];

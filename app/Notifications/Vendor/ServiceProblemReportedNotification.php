@@ -48,7 +48,7 @@ class ServiceProblemReportedNotification extends Notification implements ShouldQ
         return [
             __('notifications.problemReportedVendor.title', [], $language),
             __('notifications.problemReportedVendor.description', [
-                'service_type' => $this->service->serviceType?->getTranslation('name', $language) ?? '',
+                'service_type' => $this->service->titulo($language) ?? '',
             ], $language),
         ];
     }

@@ -37,7 +37,7 @@ class NoShowPenaltyNotification extends Notification implements ShouldQueue
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
         $service = $this->service->loadMissing('serviceType');
-        $serviceType = $service->serviceType?->getTranslation('name', $language) ?? '';
+        $serviceType = $service->titulo($language) ?? '';
 
         return ExpoMessage::create(__('notifications.noShowPenalty.title', [], $language))
             ->body(__('notifications.noShowPenalty.description', [

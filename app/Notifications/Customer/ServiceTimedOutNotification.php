@@ -87,7 +87,7 @@ class ServiceTimedOutNotification extends Notification implements ShouldQueue
             : 'notifications.serviceTimedOut.description';
 
         return __($chave, [
-            'service_type' => $service->serviceType?->getTranslation('name', $language) ?? '',
+            'service_type' => $service->titulo($language) ?? '',
         ], $language);
     }
 }

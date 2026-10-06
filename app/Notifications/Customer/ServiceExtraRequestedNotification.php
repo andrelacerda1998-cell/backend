@@ -35,7 +35,7 @@ class ServiceExtraRequestedNotification extends Notification implements ShouldQu
 
     private function body($language): string
     {
-        $serviceType = $this->service->loadMissing('serviceType')->serviceType?->getTranslation('name', $language) ?? '';
+        $serviceType = $this->service->titulo($language) ?? '';
         $amount = number_format(((int) $this->extra->amount) / 100, 2, ',', '');
 
         if ($this->extra->type === 'time') {

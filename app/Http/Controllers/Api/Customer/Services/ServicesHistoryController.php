@@ -49,7 +49,7 @@ class ServicesHistoryController extends Controller
                 // Eager-load das relações acedidas no transform (evita N+1; resposta idêntica).
                 // Paginação mantida em limit($offSet+$limit) de propósito — a app faz replace da
                 // lista com offset=length (cumulativo); mudar para offset() partiria os apps em prod.
-                ->with('serviceType.operationArea', 'vendor.user', 'vendor.user.media', 'customer', 'customer.media', 'media')
+                ->with('items.serviceType', 'serviceType.operationArea', 'vendor.user', 'vendor.user.media', 'customer', 'customer.media', 'media')
                 ->orderByDesc('updated_at')
                 ->limit($offSet + $limit)
                 ->get();
@@ -71,6 +71,10 @@ class ServicesHistoryController extends Controller
                         // Duração real do trabalho, com as unidades pedidas.
                         'duration_minutes' => $service->durationMinutes(),
                         'quantity' => $service->quantity,
+                        // Visita do cesto: as linhas e o nome que as resume. `service_type`
+                        // continua a ser o tipo principal.
+                        'items' => $service->itemsPayload(),
+                        'title' => $service->titulo(),
                         'service_type' => $service->serviceType ? [
                             'id' => $service?->serviceType?->id,
                             'name' => $service?->serviceType?->name,

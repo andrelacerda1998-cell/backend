@@ -56,7 +56,7 @@ class ServiceAutoClosedNotification extends Notification implements ShouldQueue
         return [
             __('notifications.serviceAutoClosed.title', [], $language),
             __('notifications.serviceAutoClosed.description', [
-                'service_type' => $this->service->serviceType?->getTranslation('name', $language) ?? '',
+                'service_type' => $this->service->titulo($language) ?? '',
                 'hours' => Service::HORAS_ATE_FECHO_AUTOMATICO,
             ], $language),
         ];

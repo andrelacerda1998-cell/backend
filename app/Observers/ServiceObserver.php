@@ -130,6 +130,12 @@ class ServiceObserver
 
     public function updated(Service $service): void
     {
+        // Visita de um cesto: a encomenda fecha (ou fica cancelada) quando a
+        // última visita terminar. Lido das visitas, não contado aqui.
+        if ($service->service_order_id && $service->isDirty('status')) {
+            $service->order?->refreshStatus();
+        }
+
         if ($service->isDirty('status')) {
             if ($service->status === ServiceStatus::CLOSED && ! $service->is_test) {
                 CreateInvoiceJob::dispatch($service)->delay(now()->addSeconds(30));

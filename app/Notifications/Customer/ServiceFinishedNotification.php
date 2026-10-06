@@ -62,7 +62,7 @@ class ServiceFinishedNotification extends Notification implements ShouldQueue
         return [
             __('notifications.finishedService.title', [], $language),
             __('notifications.finishedService.description', [
-                'service_type' => $this->service->serviceType?->getTranslation('name', $language) ?? '',
+                'service_type' => $this->service->titulo($language) ?? '',
                 'hours' => Service::HORAS_ATE_FECHO_AUTOMATICO,
             ], $language),
         ];

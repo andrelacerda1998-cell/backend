@@ -27,7 +27,7 @@ class ServiceCanceledNotification extends Notification implements ShouldQueue
     public function toExpo($notifiable): ExpoMessage
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
-        $serviceType = $this->service->loadMissing('serviceType')->serviceType?->getTranslation('name', $language) ?? '';
+        $serviceType = $this->service->titulo($language) ?? '';
 
         return ExpoMessage::create(__('notifications.canceledService.title', [], $language))
             ->body(__('notifications.canceledService.description', [], $language).$serviceType)
@@ -42,7 +42,7 @@ class ServiceCanceledNotification extends Notification implements ShouldQueue
     public function toArray($notifiable): array
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
-        $serviceType = $this->service->loadMissing('serviceType')->serviceType?->getTranslation('name', $language) ?? '';
+        $serviceType = $this->service->titulo($language) ?? '';
 
         return [
             'title' => __('notifications.canceledService.title', [], $language),

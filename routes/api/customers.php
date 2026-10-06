@@ -63,6 +63,10 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
             // Pedido personalizado: abre em analise, sem convites; e o backoffice
             // que o envia aos profissionais (ver docs/matching.md).
             Route::post('/custom', [MatchingController::class, 'startCustom']);
+            // Cesto: uma encomenda com uma visita por técnico (ver PlanoDeVisitas).
+            Route::post('/orders', [MatchingController::class, 'startOrder']);
+            Route::get('/orders/{order}', [MatchingController::class, 'showOrder']);
+            Route::post('/orders/{order}/cancel', [MatchingController::class, 'cancelOrder']);
             // ANTES do /{service}: 'current' é um segmento literal e seria
             // apanhado pelo binding do modelo.
             Route::get('/current', CurrentMatchingRequestController::class)->middleware('throttle:60,1');

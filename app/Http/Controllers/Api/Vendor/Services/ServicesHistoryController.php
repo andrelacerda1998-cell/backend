@@ -84,7 +84,7 @@ class ServicesHistoryController extends Controller
                 // Eager-load dos media dos avatares acedidos no transform (evita N+1; resposta
                 // idêntica). Paginação mantida em limit($offSet+$limit) — ver nota no controller
                 // do customer / issue da paginação acoplada à app.
-                ->with('customerUser', 'customerUser.media', 'serviceType.operationArea', 'vendor.user', 'vendor.user.media', 'media')
+                ->with('items.serviceType', 'customerUser', 'customerUser.media', 'serviceType.operationArea', 'vendor.user', 'vendor.user.media', 'media')
                 ->orderByDesc('updated_at')
                 ->limit($offSet + $limit)
                 ->get();
@@ -104,6 +104,10 @@ class ServicesHistoryController extends Controller
                             'user' => $service->vendor->user->only('name', 'phone', 'email', 'avatar'),
                             'price_rate' => $service->vendor->price_rate,
                         ] : null,
+                        // Visita do cesto: as linhas e o nome que as resume. `service_type`
+                        // continua a ser o tipo principal.
+                        'items' => $service->itemsPayload(),
+                        'title' => $service->titulo(),
                         'service_type' => $service->serviceType ? [
                             'id' => $service->serviceType?->id,
                             'name' => $service->serviceType?->name,

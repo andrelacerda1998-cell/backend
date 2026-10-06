@@ -61,7 +61,7 @@ class MatchingFailedNotification extends Notification implements ShouldQueue
         $language = $this->language($notifiable);
 
         return __('notifications.matchingFailed.description', [
-            'service_type' => $this->service->serviceType?->getTranslation('name', $language) ?? '',
+            'service_type' => $this->service->titulo($language) ?? '',
         ], $language);
     }
 }

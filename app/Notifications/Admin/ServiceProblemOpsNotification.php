@@ -58,7 +58,7 @@ class ServiceProblemOpsNotification extends Notification implements ShouldQueue
 
         return [
             'service_id' => $s->id,
-            'service_type' => $s->serviceType?->getTranslation('name', $language) ?? '',
+            'service_type' => $s->titulo($language) ?? '',
             'reported_by' => __('notifications.mail.problemReportedOps.by_'.($s->problem_reported_by ?? 'customer'), [], $language),
             'reason' => __('notifications.mail.problemReportedOps.reasons.'.($s->problem_reason ?? 'other'), [], $language),
             'customer_name' => $s->customerUser?->name ?? '',

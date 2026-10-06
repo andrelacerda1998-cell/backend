@@ -25,7 +25,7 @@ class NewServiceAvailableNotification extends Notification implements ShouldQueu
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
         $title = __('notifications.newService.title', [], $language) .
-            $this->service->serviceType->getTranslation('name', $language);
+            $this->service->titulo($language);
         if ($this->service->schedule) {
             $body = __('notifications.newService.description_schedule', [], $language);
         }else{

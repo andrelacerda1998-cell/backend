@@ -67,7 +67,7 @@ class ServiceCanceledByVendorNotification extends Notification implements Should
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
         $service = $this->service->loadMissing(['serviceType', 'vendor.user']);
-        $serviceType = $service->serviceType?->getTranslation('name', $language) ?? '';
+        $serviceType = $service->titulo($language) ?? '';
         $vendorName = $service->vendor?->user?->name ?? '';
         $chave = $this->reaberto ? 'serviceCanceledByVendorReopened' : 'serviceCanceledByVendor';
 

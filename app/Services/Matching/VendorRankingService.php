@@ -226,10 +226,22 @@ class VendorRankingService
         // Num pedido de catalogo e elegivel quem faz AQUELE tipo. Num
         // personalizado nao ha tipo: e elegivel quem faz qualquer tipo de
         // uma das categorias que o backoffice escolheu.
-        $query = Vendor::query()
-            ->whereHas('servicesTypes', fn ($q) => $scope->isCustom()
+        $query = Vendor::query();
+
+        if ($scope->isBundle()) {
+            // Visita do cesto: so quem faz TODOS os servicos. Um whereHas por
+            // tipo — sao 2 a 4, e "faz um deles" convidaria quem nao pode
+            // fazer a visita inteira.
+            foreach ($scope->serviceTypeIds as $tipo) {
+                $query->whereHas('servicesTypes', fn ($q) => $q->where('services_types.id', $tipo));
+            }
+        } else {
+            $query->whereHas('servicesTypes', fn ($q) => $scope->isCustom()
                 ? $q->whereIn('services_types.operation_area_id', $scope->operationAreaIds)
-                : $q->where('services_types.id', $scope->serviceType->id))
+                : $q->where('services_types.id', $scope->serviceType->id));
+        }
+
+        $query
             // Contas de teste e contas reais nunca se cruzam — mesma regra que
             // o findVendor() já aplicava ao pedido direto.
             ->whereHas('user', fn ($q) => $q->where('is_test', $isCustomerTest));

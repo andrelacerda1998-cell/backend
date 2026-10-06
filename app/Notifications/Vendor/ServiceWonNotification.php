@@ -74,7 +74,7 @@ class ServiceWonNotification extends Notification implements ShouldQueue
 
         $nome = $service->is_custom
             ? $service->custom_description
-            : ($service->serviceType?->getTranslation('name', $language) ?? '');
+            : ($service->titulo($language) ?? '');
 
         return __('notifications.serviceWon.description', [
             'service_type' => $nome,

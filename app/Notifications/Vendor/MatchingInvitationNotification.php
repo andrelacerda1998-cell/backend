@@ -44,11 +44,12 @@ class MatchingInvitationNotification extends Notification implements ShouldQueue
     public function toArray($notifiable): array
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
-        $serviceType = $this->candidate->service?->serviceType;
+        // O titulo da visita: com varios servicos (cesto), "tipo + N".
+        $titulo = $this->candidate->service?->titulo($language);
 
         return [
             'title' => __('notifications.matchingInvitation.title', [], $language)
-                .($serviceType?->getTranslation('name', $language) ?? ''),
+                .($titulo ?? ''),
             'body' => __('notifications.matchingInvitation.description', [], $language),
             'service_id' => $this->candidate->service_id,
             'candidate_id' => $this->candidate->id,
@@ -58,10 +59,11 @@ class MatchingInvitationNotification extends Notification implements ShouldQueue
     public function toExpo($notifiable): ExpoMessage
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
-        $serviceType = $this->candidate->service?->serviceType;
+        // O titulo da visita: com varios servicos (cesto), "tipo + N".
+        $titulo = $this->candidate->service?->titulo($language);
 
         $title = __('notifications.matchingInvitation.title', [], $language)
-            .($serviceType?->getTranslation('name', $language) ?? '');
+            .($titulo ?? '');
 
         return ExpoMessage::create($title)
             ->body(__('notifications.matchingInvitation.description', [], $language))

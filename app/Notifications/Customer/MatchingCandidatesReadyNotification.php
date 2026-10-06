@@ -75,7 +75,7 @@ class MatchingCandidatesReadyNotification extends Notification implements Should
         return __('notifications.matchingCandidatesReady.description', [
             'service_type' => $this->service->is_custom
                 ? __('notifications.customRequest.label', [], $language)
-                : ($this->service->serviceType?->getTranslation('name', $language) ?? ''),
+                : ($this->service->titulo($language) ?? ''),
         ], $language);
     }
 }

@@ -69,7 +69,7 @@ class ServiceStuckInProgressNotification extends Notification implements ShouldQ
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
 
-        $serviceName = $this->service->serviceType?->getTranslation('name', $language)
+        $serviceName = $this->service->titulo($language)
             ?? $this->service->serviceType?->name
             ?? '';
 

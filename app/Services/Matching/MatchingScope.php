@@ -35,7 +35,39 @@ final class MatchingScope
          * dava dois precos diferentes para o mesmo trabalho.
          */
         public readonly ?CarbonImmutable $serviceAt = null,
+        /**
+         * Visita com varios servicos (cesto): todos os tipos. Elegivel e quem
+         * faz TODOS. Vazio num pedido de um tipo so ou personalizado; nesse
+         * caso manda `serviceType`.
+         *
+         * @var int[]
+         */
+        public readonly array $serviceTypeIds = [],
     ) {}
+
+    /**
+     * Para varios tipos de uma vez, fora de um `Service` (o plano de visitas
+     * conta tecnicos antes de haver pedido).
+     *
+     * @param  array<int, array{type: ServicesType, quantity: int}>  $linhas
+     */
+    public static function forTypes(array $linhas, ?CarbonImmutable $serviceAt = null): self
+    {
+        $linhas = array_values($linhas);
+        $minutos = array_map(fn (array $l) => (int) round(((float) ($l['type']->time ?? 0)) * max(1, (int) $l['quantity'])), $linhas);
+
+        // O principal e o que leva mais tempo: e o mesmo criterio que a visita
+        // grava em `services_type_id`.
+        $principal = $linhas[array_search(max($minutos), $minutos, true)]['type'];
+
+        return new self(
+            $principal,
+            array_values(array_unique(array_map(fn (array $l) => (int) $l['type']->operation_area_id, $linhas))),
+            array_sum($minutos),
+            $serviceAt,
+            count($linhas) > 1 ? array_map(fn (array $l) => (int) $l['type']->id, $linhas) : [],
+        );
+    }
 
     public static function forService(Service $service): self
     {
@@ -53,7 +85,20 @@ final class MatchingScope
             return new self(null, $areas, $minutes, $service->scheduledAt());
         }
 
-        $service->loadMissing('serviceType');
+        // Visita do cesto com varias linhas: os tipos e os minutos congelados
+        // no pedido, nao os do catalogo de agora.
+        $service->loadMissing('items.serviceType', 'serviceType');
+
+        if ($service->items->count() > 1) {
+            return new self(
+                $service->serviceType,
+                $service->items->map(fn ($i) => (int) $i->serviceType->operation_area_id)->unique()->values()->all(),
+                (int) $service->items->sum('minutes'),
+                $service->scheduledAt(),
+                $service->items->map(fn ($i) => (int) $i->services_type_id)->values()->all(),
+            );
+        }
+
         $type = $service->serviceType;
 
         if (! $type) {
@@ -72,11 +117,18 @@ final class MatchingScope
         return $this->serviceType === null;
     }
 
+    public function isBundle(): bool
+    {
+        return count($this->serviceTypeIds) > 1;
+    }
+
     /** Para logs. */
     public function label(): string
     {
-        return $this->isCustom()
-            ? 'personalizado[areas='.implode(',', $this->operationAreaIds).", {$this->minutes}min]"
-            : "tipo#{$this->serviceType->id}";
+        return match (true) {
+            $this->isCustom() => 'personalizado[areas='.implode(',', $this->operationAreaIds).", {$this->minutes}min]",
+            $this->isBundle() => 'cesto[tipos='.implode(',', $this->serviceTypeIds).", {$this->minutes}min]",
+            default => "tipo#{$this->serviceType->id}",
+        };
     }
 }

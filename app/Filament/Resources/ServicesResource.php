@@ -86,7 +86,9 @@ class ServicesResource extends Resource
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('serviceType.name')
-                    ->label(__('backoffice/service.table.service_type')),
+                    ->label(__('backoffice/service.table.service_type'))
+                    // Visita do cesto: "tipo principal + N serviços".
+                    ->formatStateUsing(fn ($state, Service $record): string => $record->titulo() ?? (string) $state),
                 TextColumn::make('distance')
                     ->label(__('backoffice/service.table.distance'))
                     ->numeric(2)
@@ -262,7 +264,11 @@ class ServicesResource extends Resource
                     TextEntry::make('vendor.user.name')
                         ->label(__('backoffice/service.infolist.vendor')),
                     TextEntry::make('serviceType.name')
-                        ->label(__('backoffice/service.infolist.service_type')),
+                        ->label(__('backoffice/service.infolist.service_type'))
+                        // Visita do cesto: todas as linhas, com a quantidade.
+                        ->formatStateUsing(fn ($state, Service $record): string => $record->items()->exists()
+                            ? $record->items()->with('serviceType')->get()->map(fn ($i) => $i->serviceType?->name.($i->quantity > 1 ? ' × '.$i->quantity : ''))->implode(', ')
+                            : (string) $state),
                     TextEntry::make('status')
                         ->label(__('backoffice/service.infolist.status'))
                         ->badge()

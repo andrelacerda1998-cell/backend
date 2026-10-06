@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Common\PaymentMethodsController;
 use App\Http\Controllers\Api\Common\PublicKeyController;
 use App\Http\Controllers\Api\Common\Services\ChatController;
 use App\Http\Controllers\Api\Common\Services\ListServicesTypeController;
+use App\Http\Controllers\Api\Common\Services\OrderPlanController;
 use App\Http\Controllers\Api\Customer\Services\CalculateValueController;
 use App\Http\Controllers\Api\Customer\Services\OperationAreasController;
 use App\Http\Controllers\Api\Customer\Services\RequestServiceController;
@@ -28,6 +29,8 @@ Route::group(['prefix' => 'common', 'middleware' => 'locale'], function () {
         Route::post('/operation-areas/search', [OperationAreasController::class, 'search'])->middleware('throttle:geocode');
         Route::post('/guest/vendors', [RequestServiceController::class, 'guestSearch']);
         Route::post('/guest/calculate', [CalculateValueController::class, 'guestCalculate'])->middleware('throttle:geocode');
+        // Cesto: como se divide em visitas, antes de pedir (ver PlanoDeVisitas).
+        Route::post('/orders/plan', OrderPlanController::class)->middleware('throttle:30,1');
         Route::group(['prefix' => '{service}',  'middleware' => 'auth:api'], function () {
             Route::get('/public-key', PublicKeyController::class);
             Route::post('message', [ChatController::class, 'store']);

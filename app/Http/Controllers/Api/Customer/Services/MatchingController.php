@@ -11,17 +11,22 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Customer\MatchingCheckoutRequest;
 use App\Http\Requests\Customer\StartCustomMatchingRequest;
 use App\Http\Requests\Customer\StartMatchingRequest;
+use App\Http\Requests\Customer\StartOrderRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Jobs\Services\MbwayPaymentCheckJob;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
+use App\DTO\Services\AddressCoordinatesDTO;
 use App\Models\ServiceCandidate;
+use App\Models\ServiceItem;
+use App\Models\ServiceOrder;
 use App\Models\Vendor;
 use App\Models\Voucher;
 use App\Notifications\Vendor\ServiceWonNotification;
 use App\Services\Common\Services\MaterializePendingSchedule;
 use App\Services\Matching\MatchingService;
+use App\Services\Matching\PlanoDeVisitas;
 use App\Settings\MatchingSettings;
 use App\Trait\Services\CalculateServicePriceForCustomer;
 use App\Trait\Services\ProcessesServicePayment;
@@ -45,6 +50,7 @@ class MatchingController extends Controller
     public function __construct(
         private MatchingService $matching,
         private MatchingSettings $settings,
+        private PlanoDeVisitas $plano,
     ) {}
 
     /**
@@ -73,6 +79,9 @@ class MatchingController extends Controller
             // do ponto de vista dele o toque funcionou.
             $existing = Service::query()
                 ->where('customer_id', $customer->id)
+                // As visitas de um cesto vivem a sua vida: um pedido avulso
+                // não as substitui nem é confundido com elas.
+                ->whereNull('service_order_id')
                 ->whereIn('status', [ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT])
                 ->latest('id')
                 ->first();
@@ -527,6 +536,207 @@ class MatchingController extends Controller
         return $paymentMethod;
     }
 
+    /**
+     * Pede um cesto: uma encomenda com uma visita por técnico.
+     *
+     * O plano é refeito aqui e não aceite da app: entre ver e pedir, alguém
+     * pode ter saído de online. Se as visitas forem outras, devolve 409 com o
+     * plano novo e não cria nada — nenhum cesto se divide sem o cliente ter
+     * visto a divisão. Um serviço sem ninguém na zona também é 409: a app
+     * mostra-o e o cliente tira-o do cesto.
+     *
+     * Cada visita é um pedido de matching como os outros, e é paga quando o
+     * seu técnico é escolhido (ver docs/cesto.md).
+     */
+    public function startOrder(StartOrderRequest $request): ApiSuccessResponse|ApiErrorResponse
+    {
+        DB::beginTransaction();
+
+        try {
+            $customer = $this->fetchCustomer();
+            $address = $request->filled('address_id')
+                ? $this->fetchCustomerAddressById($customer, $request->integer('address_id'))
+                : $this->fetchCustomerMainAddress($customer);
+            $isScheduled = $request->boolean('scheduled');
+            $quando = $isScheduled
+                ? Service::instanteDe($request->input('schedule.scheduled_day'), $request->input('schedule.scheduled_time_start'))
+                : null;
+
+            $plano = $this->plano->planear(
+                PlanoDeVisitas::linhasDe($request->input('items')),
+                new AddressCoordinatesDTO((float) $address->latitude, (float) $address->longitude),
+                $address->city,
+                $customer,
+                ! $isScheduled,
+                $quando,
+            );
+
+            $mudou = PlanoDeVisitas::assinatura(PlanoDeVisitas::tiposPorVisita($plano))
+                !== PlanoDeVisitas::assinatura($request->input('expected_visits'));
+
+            if ($mudou || $plano['unavailable'] !== []) {
+                DB::rollBack();
+
+                // 409 com o plano novo no corpo: a app mostra-o e pede outra
+                // confirmação. (O ApiErrorResponse não leva dados.)
+                return new ApiSuccessResponse(
+                    ['plan' => PlanoDeVisitas::payload($plano)],
+                    ['message' => 'The visits changed since you saw them'],
+                    409,
+                );
+            }
+
+            $morada = [
+                'name' => $address->name,
+                'street_name' => $address->street_name,
+                'street_number' => $address->street_number,
+                'additional_info' => $address->additional_info,
+                'postal_code' => $address->postal_code,
+                'city' => $address->city,
+                'state' => $address->state,
+                'country' => $address->country,
+                'latitude' => $address->latitude,
+                'longitude' => $address->longitude,
+            ];
+
+            $order = ServiceOrder::create([
+                'customer_id' => $customer->id,
+                'address' => $morada,
+                'mode' => $isScheduled ? ServiceOrder::MODO_AGENDADO : ServiceOrder::MODO_IMEDIATO,
+                'scheduled_day' => $request->input('schedule.scheduled_day'),
+                'scheduled_time_start' => $request->input('schedule.scheduled_time_start'),
+                'status' => ServiceOrder::ABERTA,
+                'is_test' => (bool) ($customer->is_test ?? false),
+            ]);
+
+            foreach ($plano['visits'] as $visita) {
+                $this->criarVisita($order, $visita['lines'], $morada, $isScheduled, $request);
+            }
+
+            $order->refreshStatus();
+            DB::commit();
+
+            return new ApiSuccessResponse($this->orderPayload($order->refresh()));
+        } catch (Exception $e) {
+            DB::rollBack();
+            \Log::error('[matching] falha ao abrir encomenda', [
+                'customer_id' => auth('api')->id(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return new ApiErrorResponse($e);
+        }
+    }
+
+    public function showOrder(ServiceOrder $order): ApiSuccessResponse|ApiErrorResponse
+    {
+        if ($order->customer_id !== auth('api')->id()) {
+            return new ApiErrorResponse(new Exception, 'Order not found', 404);
+        }
+
+        return new ApiSuccessResponse($this->orderPayload($order));
+    }
+
+    /**
+     * Cancela o que ainda não tem pagamento em curso.
+     *
+     * As visitas já com técnico e pagamento NÃO se cancelam em lote: cada uma
+     * tem as suas regras de cancelamento (e eventual taxa), e cancelar em lote
+     * algo que já foi pago é onde nascem as cobranças que ninguém entende. O
+     * cliente cancela-as uma a uma, e a resposta diz quais ficaram.
+     */
+    public function cancelOrder(ServiceOrder $order): ApiSuccessResponse|ApiErrorResponse
+    {
+        if ($order->customer_id !== auth('api')->id()) {
+            return new ApiErrorResponse(new Exception, 'Order not found', 404);
+        }
+
+        $ficaram = [];
+
+        foreach ($order->visits as $visita) {
+            if (in_array($visita->status, [ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT], true)
+                && $this->matching->cancelByCustomer($visita)) {
+                continue;
+            }
+
+            if (! in_array($visita->status, [ServiceStatus::CANCELED, ServiceStatus::CLOSED, ServiceStatus::MATCHING_FAILED], true)) {
+                $ficaram[] = $visita->id;
+            }
+        }
+
+        $order->refreshStatus();
+
+        return new ApiSuccessResponse($this->orderPayload($order->refresh()) + ['not_canceled' => $ficaram]);
+    }
+
+    /**
+     * Uma visita da encomenda. Com uma linha só é um pedido como os de hoje
+     * (tipo + quantidade, sem `service_items`) — tudo o que já existe funciona
+     * sem saber que veio de um cesto. Com várias, o tipo principal (o que leva
+     * mais tempo) vai para `services_type_id` e as linhas para `service_items`.
+     */
+    private function criarVisita(ServiceOrder $order, array $linhas, array $morada, bool $isScheduled, StartOrderRequest $request): Service
+    {
+        $minutos = array_map(fn (array $l) => (int) round(((float) ($l['type']->time ?? 0)) * $l['quantity']), $linhas);
+        $principal = $linhas[array_search(max($minutos), $minutos, true)];
+        $variasLinhas = count($linhas) > 1;
+
+        $service = new Service([
+            'customer_id' => $order->customer_id,
+            'service_order_id' => $order->id,
+            'vendor_id' => null,
+            'services_type_id' => $principal['type']->id,
+            'quantity' => $variasLinhas ? 1 : $principal['quantity'],
+            'status' => ServiceStatus::MATCHING,
+            'is_test' => $order->is_test,
+            'customer_notes' => $request->get('customer_notes'),
+            'address' => $morada,
+        ]);
+        $service->payment_status = PaymentStatus::PENDING;
+
+        if ($isScheduled) {
+            $service->pending_schedule_data = [
+                'scheduled' => true,
+                'schedule' => $request->input('schedule', []),
+            ];
+        }
+
+        $service->save();
+
+        if ($variasLinhas) {
+            foreach (array_values($linhas) as $posicao => $linha) {
+                ServiceItem::create([
+                    'service_id' => $service->id,
+                    'services_type_id' => $linha['type']->id,
+                    'quantity' => $linha['quantity'],
+                    'minutes' => $minutos[$posicao],
+                    'position' => $posicao,
+                ]);
+            }
+        }
+
+        if ($this->matching->dispatchNextWave($service)->isEmpty()) {
+            $this->matching->fail($service);
+        }
+
+        return $service;
+    }
+
+    private function orderPayload(ServiceOrder $order): array
+    {
+        return [
+            'order' => [
+                'id' => $order->id,
+                'status' => $order->status,
+                'mode' => $order->mode,
+                'scheduled_day' => $order->scheduled_day?->format('Y-m-d'),
+                'scheduled_time_start' => $order->scheduled_time_start,
+                'created_at' => $order->created_at?->toIso8601String(),
+            ],
+            'visits' => $order->visits()->get()->map(fn (Service $v) => $this->payload($v))->values()->all(),
+        ];
+    }
+
     private function owns(Service $service): bool
     {
         return $service->customer_id === auth('api')->id();
@@ -556,6 +766,10 @@ class MatchingController extends Controller
                 // diferentes, e so uma delas tem relogio.
                 'is_custom' => (bool) $service->is_custom,
                 'custom' => $service->customPayload(),
+                // Visita do cesto: as linhas e o nome que as resume.
+                'items' => $service->itemsPayload(),
+                'title' => $service->titulo(),
+                'service_order_id' => $service->service_order_id,
                 // Ate quando pode escolher e pagar. null enquanto ninguem
                 // aceitou — nao ha relogio do cliente antes de haver decisao.
                 //

@@ -40,7 +40,7 @@ class MatchingInvitationsController extends Controller
             // A expiração é avaliada por leitura: um convite cuja janela fechou
             // não deve aparecer, mesmo que ninguém o tenha marcado ainda.
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->with(['service.serviceType', 'service.schedule'])
+            ->with(['service.serviceType', 'service.schedule', 'service.items.serviceType'])
             ->orderBy('expires_at')
             ->get();
 
@@ -194,6 +194,12 @@ class MatchingInvitationsController extends Controller
             // duracao vem do backoffice. Vai sempre `duration_minutes` para a
             // app nao ter de saber de onde veio.
             'custom' => $service?->customPayload(auth()->user()->language ?? 'pt-pt'),
+            // Visita do cesto: todos os serviços que o técnico vai fazer, e o
+            // nome que os resume. `service_type` acima continua a ser o tipo
+            // principal, para as versões da app que só leem um; a duração
+            // total é a de `duration_minutes`.
+            'items' => $service?->itemsPayload(auth()->user()->language ?? 'pt-pt') ?? [],
+            'title' => $service?->titulo(auth()->user()->language ?? 'pt-pt'),
             // O que o cliente escreveu sobre o problema, se escreveu.
             //
             // Num convite de catálogo o técnico só via o tipo de serviço, o

@@ -34,7 +34,7 @@ class ServiceController extends Controller
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
         $query = Service::query()
-            ->with(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'media', 'operationAreas'])
+            ->with(['customerUser', 'vendor.user', 'serviceType', 'items.serviceType', 'schedule', 'media', 'operationAreas'])
             ->withCount([
                 'candidates as candidates_notified' => fn ($q) => $q->where('status', CandidateStatus::NOTIFIED),
                 'candidates as candidates_accepted' => fn ($q) => $q->where('status', CandidateStatus::ACCEPTED),
@@ -93,7 +93,7 @@ class ServiceController extends Controller
      */
     public function show(Service $service): ApiSuccessResponse
     {
-        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user', 'media', 'operationAreas']);
+        $service->load(['customerUser', 'vendor.user', 'serviceType', 'items.serviceType', 'schedule', 'candidates.vendor.user', 'media', 'operationAreas']);
 
         return ApiSuccessResponse::make([
             ...$this->present($service),
@@ -151,7 +151,11 @@ class ServiceController extends Controller
             'technician_name' => $service->vendor?->user?->name,
             'category_id' => $service->services_type_id,
             'category_name' => $service->serviceType?->name,
-            'service_name' => $service->serviceType?->name,
+            // Visita do cesto: "tipo principal + N serviços", e as linhas em
+            // `items`. Num pedido de um serviço é o nome do tipo, como antes.
+            'service_name' => $service->titulo('pt-pt') ?? $service->serviceType?->name,
+            'items' => $service->itemsPayload('pt-pt'),
+            'service_order_id' => $service->service_order_id,
             'location' => $morada['address'] ?? $morada['street'] ?? null,
             'city' => $morada['city'] ?? $morada['locality'] ?? null,
             'source' => 'app',

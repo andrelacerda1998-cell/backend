@@ -134,7 +134,7 @@ class InvoiceVendorService
 
         $amount = $service->amount;
 
-        $payload = $this->generateInvoicePayload($service->created_at, $service->created_at, $service->id, $customer, [$this->item('Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt'), $amount)]);
+        $payload = $this->generateInvoicePayload($service->created_at, $service->created_at, $service->id, $customer, [$this->item(self::descricaoDoServico($service), $amount)]);
         $response = $this->sendRequest('/invoice_receipts.json', 'POST', $payload);
         $service->invoice_id = $response['invoice_receipt']['id'];
         $service->save();
@@ -198,5 +198,30 @@ class InvoiceVendorService
         }
 
         return $response;
+    }
+
+    /**
+     * O que vai na linha da fatura.
+     *
+     * Uma visita do cesto tem vários serviços mas um preço só (minutos totais
+     * × valor/hora + uma deslocação). Vai numa linha com todos os nomes, e não
+     * numa linha por serviço: partir o valor por linha seria inventar uma
+     * divisão que o técnico não fez, e linhas a zero confundem quem lê a fatura.
+     */
+    public static function descricaoDoServico(\App\Models\Service $service): string
+    {
+        $service->loadMissing('items.serviceType', 'serviceType');
+
+        if ($service->items->count() > 1) {
+            $nomes = $service->items->map(function ($item) {
+                $nome = $item->serviceType->getTranslation('name', 'pt-pt');
+
+                return $item->quantity > 1 ? $nome.' (x'.$item->quantity.')' : $nome;
+            })->implode(', ');
+
+            return 'Serviços: '.$nomes;
+        }
+
+        return 'Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt');
     }
 }
