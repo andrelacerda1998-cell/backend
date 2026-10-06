@@ -123,6 +123,12 @@ class MatchingController extends Controller
                 ];
             }
 
+            // O regime decide-se AQUI, uma vez, antes de saírem convites: a
+            // janela de cada convite depende dele. Agendado com antecedência
+            // -> assíncrono (o técnico tem horas, o cliente é avisado por
+            // notificação). Ver MatchingSettings::$async_lead_hours.
+            $service->matching_async = $this->matching->shouldBeAsync($service);
+
             $service->save();
 
             $candidates = $this->matching->dispatchNextWave($service);
@@ -542,6 +548,16 @@ class MatchingController extends Controller
                 // diferentes, e so uma delas tem relogio.
                 'is_custom' => (bool) $service->is_custom,
                 'custom' => $service->customPayload(),
+                // Agendado com antecedência: o cliente NÃO precisa de ficar no
+                // ecrã. A app usa isto para lho dizer, e `respond_by` para dizer
+                // até quando os técnicos podem responder. As versões da app que
+                // não conhecem estes campos ignoram-nos e continuam a mostrar a
+                // espera de sempre — a notificação do primeiro sim trá-las de
+                // volta.
+                'async' => $this->matching->isAsync($service),
+                'respond_by' => $this->matching->isAsync($service)
+                    ? $this->matching->invitationDeadline($service)?->toIso8601String()
+                    : null,
                 // Ate quando pode escolher e pagar. null enquanto ninguem
                 // aceitou — nao ha relogio do cliente antes de haver decisao.
                 //

@@ -532,14 +532,15 @@ class MatchingService
     public function customerDeadline(Service $service): ?CarbonInterface
     {
         if ($service->is_custom) {
-            $readyAt = $service->candidates_ready_at
-                ?? $service->candidates()
-                    ->whereIn('status', [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED])
-                    ->min('responded_at');
+            return $this->desdeOPrimeiroSim($service, $this->settings->customer_choice_seconds_custom);
+        }
 
-            return $readyAt
-                ? Carbon::parse($readyAt)->addSeconds($this->settings->customer_choice_seconds_custom)
-                : null;
+        // AGENDADO COM ANTECEDÊNCIA: o mesmo modelo do personalizado, pela
+        // mesma razão. O cliente não está a olhar para o ecrã quando o primeiro
+        // técnico aceita — chega-lhe uma notificação, e o prazo tem de caber o
+        // tempo de a ver. Uma hora para escolher E pagar.
+        if ($this->isAsync($service)) {
+            return $this->desdeOPrimeiroSim($service, $this->settings->customer_choice_seconds_async);
         }
 
         if ($service->status === ServiceStatus::AWAITING_PAYMENT) {
@@ -581,6 +582,20 @@ class MatchingService
         return $prazo->lt($teto) ? $prazo : $teto;
     }
 
+    /**
+     * O primeiro sim mais `$segundos`. É o relógio do personalizado e do
+     * agendado assíncrono: um prazo só, para escolher E pagar.
+     */
+    private function desdeOPrimeiroSim(Service $service, int $segundos): ?CarbonInterface
+    {
+        $readyAt = $service->candidates_ready_at
+            ?? $service->candidates()
+                ->whereIn('status', [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED])
+                ->min('responded_at');
+
+        return $readyAt ? Carbon::parse($readyAt)->addSeconds($segundos) : null;
+    }
+
     /** Quanto tempo tem para escolher, por modo: 3 min agora, 10 min agendado. */
     private function customerChoiceSeconds(Service $service): int
     {
@@ -604,6 +619,88 @@ class MatchingService
         }
 
         return (bool) ($service->pending_schedule_data['scheduled'] ?? false);
+    }
+
+    /**
+     * O regime assíncrono, tal como ficou decidido quando o pedido entrou em
+     * seleção (`services.matching_async`).
+     *
+     * Lê-se do serviço e não se recalcula: um pedido feito com 25 h de
+     * antecedência não pode mudar de regras uma hora depois, a meio dos
+     * convites, só porque o relógio andou.
+     */
+    public function isAsync(Service $service): bool
+    {
+        return (bool) $service->matching_async;
+    }
+
+    /**
+     * Se um pedido que vai ENTRAR em seleção deve seguir o regime assíncrono.
+     *
+     * Só agendados, e só com pelo menos `async_lead_hours` de antecedência. Os
+     * personalizados ficam de fora: já têm o seu regime, e a seleção deles só
+     * arranca quando o backoffice os despacha. Sem hora marcada conhecida, não
+     * — na dúvida fica o regime de 29/09, que é o que o cliente espera no ecrã.
+     *
+     * Chamado UMA vez, antes de gravar o pedido. Ver `isAsync()`.
+     */
+    public function shouldBeAsync(Service $service): bool
+    {
+        if ($service->is_custom || ! $this->isScheduled($service)) {
+            return false;
+        }
+
+        $inicio = $this->scheduledStartAt($service);
+
+        return $inicio !== null
+            && $inicio->gte(now()->addHours($this->settings->async_lead_hours));
+    }
+
+    /** Quanto tempo o técnico tem para responder a um convite deste pedido. */
+    public function vendorResponseSeconds(Service $service): int
+    {
+        if ($this->isAsync($service)) {
+            return $this->settings->vendor_response_seconds_async;
+        }
+
+        return $this->isScheduled($service)
+            ? $this->settings->vendor_response_seconds_scheduled
+            : $this->settings->vendor_response_seconds_immediate;
+    }
+
+    /**
+     * Quanto se espera antes de alargar à onda seguinte.
+     *
+     * No imediato é a própria janela de resposta: não faz sentido esperar mais
+     * do que o tempo que se deu a quem já foi convidado, com o cliente parado
+     * num ecrã de espera.
+     */
+    public function waveIntervalSeconds(Service $service): int
+    {
+        if ($this->isAsync($service)) {
+            return $this->settings->wave_interval_seconds_async;
+        }
+
+        return $this->isScheduled($service)
+            ? $this->settings->wave_interval_seconds
+            : $this->settings->vendor_response_seconds_immediate;
+    }
+
+    /**
+     * Quando fecha a FASE DE CONVITES — antes do primeiro sim — a contar de
+     * quando o pedido entrou em seleção.
+     *
+     * Uma só conta para os dois sítios que a usam: o tecto da janela de cada
+     * convite (`persist`) e o `matching:advance`. Se fossem duas, um convite
+     * podia ficar de pé depois de o pedido ter morrido.
+     */
+    public function invitationDeadline(Service $service): ?CarbonInterface
+    {
+        $segundos = $this->isAsync($service)
+            ? $this->settings->request_deadline_seconds_async
+            : $this->settings->request_deadline_seconds;
+
+        return $service->matchingStartedAt()?->copy()->addSeconds($segundos);
     }
 
     /**
@@ -727,16 +824,13 @@ class MatchingService
      */
     private function persist(Service $service, Collection $ranked, CandidateStatus $status, int $wave): Collection
     {
-        // Janela por modo — mas em qualquer dos dois o cliente esta a olhar para
-        // um ecra de espera: no agendado tambem espera pelo matching, escolhe e
-        // so fecha a app depois de pagar. O que muda e a pergunta que se faz ao
-        // profissional ("podes agora?" ou "podes quinta as 15h?"), nao o tempo
-        // que ha para responder.
-        $window = now()->addSeconds(
-            $this->isScheduled($service)
-                ? $this->settings->vendor_response_seconds_scheduled
-                : $this->settings->vendor_response_seconds_immediate
-        );
+        // Janela por modo. No imediato e no agendado próximo o cliente está a
+        // olhar para um ecrã de espera: o que muda é a pergunta que se faz ao
+        // profissional ("podes agora?" ou "podes quinta às 15h?"), não o tempo
+        // que há para responder. No agendado com antecedência (assíncrono) o
+        // cliente não está à espera, e o técnico tem horas — ver
+        // `vendorResponseSeconds()`.
+        $window = now()->addSeconds($this->vendorResponseSeconds($service));
 
         // O prazo do convite nunca passa o prazo da FASE DE CONVITES.
         //
@@ -753,7 +847,7 @@ class MatchingService
         //
         // Do momento em que entrou em seleccao — num personalizado e o envio
         // pelo backoffice, nao a criacao.
-        $deadline = $service->matchingStartedAt()?->copy()->addSeconds($this->settings->request_deadline_seconds);
+        $deadline = $this->invitationDeadline($service);
 
         if ($deadline && $deadline->lt($window)) {
             $window = $deadline;

@@ -87,6 +87,8 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
 
     protected $casts = [
         'is_custom' => 'boolean',
+        // Regime assíncrono dos agendados com antecedência. Ver MatchingSettings.
+        'matching_async' => 'boolean',
         'custom_dispatched_at' => 'datetime',
         'custom_review_alerted_at' => 'datetime',
         'candidates_ready_at' => 'datetime',
