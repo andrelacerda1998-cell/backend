@@ -1045,6 +1045,31 @@ class Vendor extends Model implements Auditable
         })->shouldCache();
     }
 
+    /**
+     * Limites do valor/hora, em euros. Os mesmos da app (RATE_MIN/RATE_MAX no
+     * ecrã "Valor/hora").
+     *
+     * Só esse ecrã os aplicava. O registo e o ecrã de pagamentos aceitavam a
+     * partir de 1 €, e o servidor não validava nada — a 06/10/2026 havia três
+     * técnicos reais a 1 €/h, a aparecer aos clientes como "Mais barato" com
+     * uma rotura de cano de 2 h por 4,59 €. Validar aqui trava também as
+     * versões da app que já estão instaladas.
+     */
+    public const VALOR_HORA_MINIMO = 8;
+
+    public const VALOR_HORA_MAXIMO = 50;
+
+    /** A regra de validação do valor/hora, partilhada pelos três endpoints. */
+    public static function regraDoValorHora(bool $obrigatorio = true): array
+    {
+        return [$obrigatorio ? 'required' : 'nullable', 'numeric', 'between:'.self::VALOR_HORA_MINIMO.','.self::VALOR_HORA_MAXIMO];
+    }
+
+    public static function mensagemDoValorHora(): string
+    {
+        return __('request/validation.valor_hora_fora_dos_limites', ['min' => self::VALOR_HORA_MINIMO, 'max' => self::VALOR_HORA_MAXIMO]);
+    }
+
     public function priceRate(): Attribute
     {
         return Attribute::make(get: function ($value) {

@@ -58,4 +58,6 @@ return [
         'postal_code' => 'postal code',
         'locality' => 'district',
     ],
+    // Valor/hora do técnico fora dos limites da app (Vendor::VALOR_HORA_MINIMO/MAXIMO).
+    'valor_hora_fora_dos_limites' => 'The hourly rate must be between €:min and €:max.',
 ];
