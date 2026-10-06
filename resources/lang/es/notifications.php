@@ -299,4 +299,8 @@ return [
             'description' => 'No has confirmado el pago con MB Way a tiempo y la solicitud se ha cancelado: ',
         ],
     ],
+    'onlineSemLocalizacao' => [
+        'title' => 'Estás en línea, pero sin ubicación',
+        'description' => 'No recibimos tu ubicación desde hace más de una hora, así que no te llegan pedidos para ahora. Abre la app para volver a recibirlos.',
+    ],
 ];

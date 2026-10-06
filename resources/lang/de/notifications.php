@@ -282,4 +282,8 @@ return [
             'description' => 'Du hast die MB Way-Zahlung nicht rechtzeitig bestätigt, und die Anfrage wurde storniert: ',
         ],
     ],
+    'onlineSemLocalizacao' => [
+        'title' => 'Du bist online, aber ohne Standort',
+        'description' => 'Wir haben deinen Standort seit über einer Stunde nicht erhalten, daher bekommst du keine Sofortaufträge. Öffne die App, um sie wieder zu erhalten.',
+    ],
 ];
