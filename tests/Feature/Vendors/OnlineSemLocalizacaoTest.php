@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -123,6 +124,73 @@ class OnlineSemLocalizacaoTest extends TestCase
     }
 
     /** Técnico com o onboarding completo (ver MatchingFlowTest::makeVendor). */
+    /**
+     * O que aconteceu em produção a 06/10.
+     *
+     * Cada deploy corre `cache:clear` no arranque do contentor
+     * (infra/entrypoint.sh), e a proteção dos seis horas vivia só na cache:
+     * saíram 127 avisos para 43 técnicos em quatro horas, três deploys, três
+     * rondas.
+     *
+     * Com `Notification::fake()` a fila não escreve a linha em
+     * `notifications`, por isso grava-se à mão a que teria ficado do aviso
+     * anterior.
+     */
+    public function test_um_deploy_nao_volta_a_avisar_quem_ja_foi_avisado(): void
+    {
+        $vendor = $this->tecnico(localizacaoHaMinutos: 120);
+        $this->avisoGravado($vendor, haHoras: 1);
+
+        Cache::flush(); // o `cache:clear` do arranque do contentor
+
+        $this->artisan('vendors:avisar-online-sem-localizacao')->assertSuccessful();
+
+        Notification::assertNotSentTo($vendor->user, OnlineSemLocalizacaoNotification::class);
+    }
+
+    public function test_passadas_as_seis_horas_volta_a_ser_avisado(): void
+    {
+        $vendor = $this->tecnico(localizacaoHaMinutos: 120);
+        $this->avisoGravado($vendor, haHoras: 7);
+
+        $this->artisan('vendors:avisar-online-sem-localizacao')->assertSuccessful();
+
+        Notification::assertSentTo($vendor->user, OnlineSemLocalizacaoNotification::class);
+    }
+
+    /** Só conta ESTE aviso: outra notificação recente não o cala. */
+    public function test_outra_notificacao_recente_nao_impede_este_aviso(): void
+    {
+        $vendor = $this->tecnico(localizacaoHaMinutos: 120);
+        $this->avisoGravado($vendor, haHoras: 1, tipo: 'App\\Notifications\\Vendor\\OutroAvisoQualquer');
+
+        $this->artisan('vendors:avisar-online-sem-localizacao')->assertSuccessful();
+
+        Notification::assertSentTo($vendor->user, OnlineSemLocalizacaoNotification::class);
+    }
+
+    /** O `--dry-run` diz a verdade sobre quem seria avisado. */
+    public function test_o_dry_run_tambem_salta_quem_ja_foi_avisado(): void
+    {
+        $vendor = $this->tecnico(localizacaoHaMinutos: 120);
+        $this->avisoGravado($vendor, haHoras: 1);
+
+        $this->artisan('vendors:avisar-online-sem-localizacao', ['--dry-run' => true])
+            ->doesntExpectOutput("avisaria vendor {$vendor->id}")
+            ->assertSuccessful();
+    }
+
+    /** A linha que o canal `database` teria escrito, há `$haHoras`. */
+    private function avisoGravado(Vendor $vendor, int $haHoras, string $tipo = OnlineSemLocalizacaoNotification::class): void
+    {
+        $aviso = $vendor->user->notifications()->create([
+            'id' => (string) Str::uuid(),
+            'type' => $tipo,
+            'data' => [],
+        ]);
+        $aviso->forceFill(['created_at' => now()->subHours($haHoras)])->save();
+    }
+
     private function tecnico(?int $localizacaoHaMinutos, StatusVendor $status = StatusVendor::ONLINE, bool $completo = true): Vendor
     {
         $user = User::factory()->create([

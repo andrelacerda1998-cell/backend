@@ -79,6 +79,23 @@ class AvisarOnlineSemLocalizacaoCommand extends Command
         $avisados = 0;
 
         foreach ($vendors as $vendor) {
+            // A PROTEÇÃO QUE SOBREVIVE A UM DEPLOY.
+            //
+            // A de baixo vive na cache, e o arranque do contentor
+            // (infra/entrypoint.sh) corre `cache:clear`: cada deploy apagava-a,
+            // e no ciclo seguinte toda a gente voltava a ser avisada. A 06/10
+            // saíram 127 avisos para 43 técnicos em quatro horas — três deploys,
+            // três rondas — quando a regra é um a cada seis horas. É exactamente
+            // a insistência que ensina a desligar as notificações, e com elas
+            // os convites.
+            //
+            // O aviso já fica gravado (canal `database`), por isso é aí que se
+            // pergunta. Antes do `--dry-run`, para ele dizer a verdade sobre
+            // quem seria avisado.
+            if ($this->avisadoHaPouco($vendor)) {
+                continue;
+            }
+
             if ($this->option('dry-run')) {
                 $this->line("avisaria vendor {$vendor->id}");
                 $avisados++;
@@ -88,6 +105,10 @@ class AvisarOnlineSemLocalizacaoCommand extends Command
 
             // Cache::add só grava se a chave não existir: dois processos ao
             // mesmo tempo nunca mandam dois avisos.
+            //
+            // Fica, por cima da verificação acima: o aviso vai pela fila, e a
+            // linha em `notifications` só aparece quando a fila o processa.
+            // Durante esses segundos é esta chave que impede um segundo aviso.
             if (! Cache::add("online-sem-localizacao:{$vendor->id}", true, now()->addHours(self::HORAS_ENTRE_AVISOS))) {
                 continue;
             }
@@ -99,5 +120,14 @@ class AvisarOnlineSemLocalizacaoCommand extends Command
         $this->info("Avisados: {$avisados}.");
 
         return self::SUCCESS;
+    }
+
+    /** Recebeu este aviso nas últimas HORAS_ENTRE_AVISOS, segundo o que ficou gravado. */
+    private function avisadoHaPouco(Vendor $vendor): bool
+    {
+        return $vendor->user->notifications()
+            ->where('type', OnlineSemLocalizacaoNotification::class)
+            ->where('created_at', '>=', now()->subHours(self::HORAS_ENTRE_AVISOS))
+            ->exists();
     }
 }
