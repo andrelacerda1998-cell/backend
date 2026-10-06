@@ -358,8 +358,11 @@ class MatchingService
         return DB::transaction(function () use ($service) {
             $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
 
-            // Pode ter pago entre a leitura e este ponto.
-            if (! $locked || $locked->status !== ServiceStatus::AWAITING_PAYMENT) {
+            // Pode ter pago entre a leitura e este ponto — ou ter começado a
+            // pagar: com uma ordem de pagamento a meio (MB Way à espera do
+            // telemóvel), quem decide é a janela do meio de pagamento. Ver
+            // AdvanceMatchingCommand::expireAbandonedCheckouts.
+            if (! $locked || $locked->status !== ServiceStatus::AWAITING_PAYMENT || $locked->payment_order_id !== null) {
                 return false;
             }
 
@@ -501,69 +504,86 @@ class MatchingService
     }
 
     /**
-     * O prazo do CLIENTE: ate quando pode escolher e pagar.
+     * O prazo do CLIENTE, conforme a fase. Dois relogios (decisao do Andre,
+     * 06/10/2026):
      *
-     * `null` enquanto ninguem aceitou — nao ha nada para escolher, e por isso
-     * nao ha relogio do cliente a correr. Ate la quem manda e o prazo da fase
-     * de convites (`request_deadline_seconds`).
+     *  · A ESCOLHER (`Matching`): a contar do ULTIMO profissional que
+     *    aceitou — cada novo "sim" recomeca a contagem, porque chegou uma
+     *    opcao nova. Pedir agora: 3 min, com teto de 6 min a contar do
+     *    PRIMEIRO sim (`customer_choice_cap_seconds`). Agendado: 10 min, sem
+     *    teto (sem urgencia, o servico e noutro dia).
+     *  · A PAGAR (`AwaitingPayment`): `checkout_seconds` (5 min) a contar da
+     *    escolha. Um relogio novo, so dele: escolher ao ultimo segundo ja nao
+     *    lhe tira o tempo de pagar.
      *
-     * Conta do PRIMEIRO aceite, e nao da criacao: e esse o momento em que o
-     * cliente passa a ter alguma coisa para decidir. Num personalizado pode
-     * haver muito tempo entre uma coisa e outra — o backoffice tem de definir
-     * a duracao e as categorias antes de alguem ser chamado.
+     * `null` enquanto ninguem aceitou: nao ha nada para escolher. Ate la quem
+     * manda e o prazo da fase de convites (`request_deadline_seconds`).
      *
-     * NAO E CORTADO pela fase de convites, em nenhum dos tres modos. O tempo
-     * que os profissionais levaram a responder e problema deles, nao do
-     * cliente: descontar-lho dava-lhe menos do que os 5 minutos prometidos, e
-     * quanto mais depressa alguem aceitasse mais tempo ele teria — o incentivo
-     * ao contrario. As duas fases tem orcamentos proprios, em cadeia.
+     * O PERSONALIZADO fica como estava: uma hora para escolher e pagar, a
+     * contar do primeiro aceite. A notificacao chega quando o cliente ja nao
+     * esta a espera dela, e tres minutos depois de um push que pode nem ver
+     * matavam o pedido.
      *
-     * Um so metodo para os tres modos porque este valor e lido em tres sitios
-     * — o `matching:advance` a decidir se mata o pedido, o mesmo comando a
-     * decidir se mata um checkout abandonado, e o endpoint que alimenta a
-     * contagem no ecra do cliente. Se divergissem, o cliente veria um relogio
-     * a chegar a zero e o pedido vivo, ou pior: o pedido a morrer com o
-     * relogio ainda a andar.
+     * Este valor e lido em tres sitios — o `matching:advance` a decidir se
+     * mata o pedido ou o checkout, e os endpoints que alimentam a contagem no
+     * ecra do cliente. Um so metodo, para o relogio que ele ve e o que o
+     * servidor aplica serem o mesmo.
      */
     public function customerDeadline(Service $service): ?CarbonInterface
     {
-        $readyAt = $service->candidates_ready_at
-            // Pedidos que ja existiam antes da coluna. Serve durante a
-            // transicao e nao substitui o carimbo: assim que o cliente
-            // escolhe, os aceites passam a SELECTED/LOST e este conjunto
-            // esvazia-se — e por isso e que a coluna existe.
-            ?? $service->candidates()
-                ->whereIn('status', [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED])
-                ->min('responded_at');
+        if ($service->is_custom) {
+            $readyAt = $service->candidates_ready_at
+                ?? $service->candidates()
+                    ->whereIn('status', [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED])
+                    ->min('responded_at');
 
-        if (! $readyAt) {
+            return $readyAt
+                ? Carbon::parse($readyAt)->addSeconds($this->settings->customer_choice_seconds_custom)
+                : null;
+        }
+
+        if ($service->status === ServiceStatus::AWAITING_PAYMENT) {
+            // Quando escolheu: o candidato passa a SELECTED nesse instante e
+            // nao volta a ser mexido enquanto o servico espera o pagamento. O
+            // `updated_at` do servico nao serve — o proprio checkout grava-o.
+            $escolhidoEm = $service->candidates()
+                ->where('status', CandidateStatus::SELECTED)
+                ->max('updated_at');
+
+            return $escolhidoEm
+                ? Carbon::parse($escolhidoEm)->addSeconds($this->settings->checkout_seconds)
+                : null;
+        }
+
+        $ultimoSim = $service->candidates()
+            ->where('status', CandidateStatus::ACCEPTED)
+            ->max('responded_at');
+
+        if (! $ultimoSim) {
             return null;
         }
 
-        return Carbon::parse($readyAt)->addSeconds($this->customerWindowSeconds($service));
-    }
+        $prazo = Carbon::parse($ultimoSim)->addSeconds($this->customerChoiceSeconds($service));
 
-    /**
-     * Quanto tempo o cliente tem, por modo. E o prazo real, nao um tecto.
-     *
-     * Cobre escolher E pagar, nos tres modos. Nao ha um segundo relogio a
-     * arrancar na escolha: um cliente que escolhe ao ultimo segundo nao ganha
-     * tempo por isso, e o contador que ele ve no ecra vale ate ao fim.
-     *
-     * Imediato e agendado tem hoje o mesmo numero — em ambos o cliente fica a
-     * espera do matching, escolhe, e so sai depois de pagar. Ficam separados
-     * para poderem voltar a divergir se o trafego o justificar.
-     *
-     * O personalizado e o unico com razao para ser diferente: a notificacao
-     * chega quando o cliente ja nao esta a espera dela, e cinco minutos a
-     * partir de um push que ele pode nem ver matavam o pedido.
-     */
-    private function customerWindowSeconds(Service $service): int
-    {
-        if ($service->is_custom) {
-            return $this->settings->customer_choice_seconds_custom;
+        if ($this->isScheduled($service)) {
+            return $prazo;
         }
 
+        // Pedir agora: cada "sim" recomeça a contagem, mas não para sempre —
+        // nunca para lá do teto a contar do PRIMEIRO. Sem isto, respostas
+        // espaçadas esticavam o prazo e prendiam quem aceitou primeiro.
+        $primeiroSim = $service->candidates_ready_at
+            ?? $service->candidates()
+                ->whereIn('status', [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED])
+                ->min('responded_at');
+        $teto = Carbon::parse($primeiroSim)->addSeconds($this->settings->customer_choice_cap_seconds);
+
+        return $prazo->lt($teto) ? $prazo : $teto;
+    }
+
+    /** Quanto tempo tem para escolher, por modo: 3 min agora, 10 min agendado. */
+    private function customerChoiceSeconds(Service $service): int
+    {
         return $this->isScheduled($service)
             ? $this->settings->customer_choice_seconds_scheduled
             : $this->settings->customer_choice_seconds;

@@ -57,20 +57,26 @@ class MatchingSettings extends Settings
     public int $request_deadline_seconds;
 
     /**
-     * Quanto tempo o cliente tem para escolher E pagar, num pedido imediato.
-     *
-     * É o prazo a sério: nem é cortado pela fase de convites, nem lhe é somado
-     * um segundo relógio na escolha. É o número que o contador mostra no ecrã.
+     * Quanto tempo o cliente tem para ESCOLHER, num pedido imediato, a contar
+     * do ÚLTIMO profissional que aceitou. Cada novo "sim" recomeça a contagem.
+     * Pagar tem relógio próprio (`checkout_seconds`). Ver
+     * MatchingService::customerDeadline.
      */
     public int $customer_choice_seconds;
 
     /**
-     * O mesmo, num pedido agendado — e hoje é o MESMO valor do imediato.
+     * Teto do relógio de escolher, no imediato, a contar do PRIMEIRO "sim".
      *
-     * A razão de existir separado já não se aplica. Foi escrito a pensar num
-     * cliente que marcava para quinta-feira e fechava a app; mas no agendado ele
-     * espera pelo matching, escolhe e só fecha depois de pagar — a mesma
-     * situação do imediato. Fica para poder voltar a divergir.
+     * Como cada "sim" recomeça a contagem, profissionais a aceitar espaçados
+     * esticavam o prazo sem fim — e os que aceitaram primeiro ficavam presos.
+     * Decisão do André (06/10/2026): 6 minutos.
+     */
+    public int $customer_choice_cap_seconds;
+
+    /**
+     * O mesmo, num pedido agendado: mais largo, porque não há urgência — o
+     * serviço é noutro dia e o cliente pode querer pensar. Sem teto: as
+     * respostas param de chegar quando acabam as ondas.
      */
     public int $customer_choice_seconds_scheduled;
 

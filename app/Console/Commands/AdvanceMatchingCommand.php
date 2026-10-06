@@ -154,25 +154,6 @@ class AdvanceMatchingCommand extends Command
     }
 
     /**
-     * Serviços escolhidos que nunca chegaram a ser pagos.
-     *
-     * UMA conta, porque e uma so promessa: o prazo do cliente cobre escolher E
-     * pagar. Nos tres modos.
-     *
-     * Antes eram duas. No personalizado dissemos ao cliente que tem uma hora
-     * para as duas coisas, e o relogio anda no ecra dele desde o primeiro
-     * aceite; nos outros dois arrancava aqui um relogio novo na escolha, que
-     * somava por cima. Quem escolhesse ao ultimo segundo dos seus minutos
-     * ganhava cinco de bonus que o contador nunca mostrou — e um contador que
-     * chega a zero sem nada acontecer ensina o cliente a nao acreditar nele.
-     *
-     * O `checkout_seconds` sobrevive como tecto da fase de pagamento: continua
-     * a contar da escolha (`updated_at` do serviço, gravado no momento em que
-     * passou a AwaitingPayment — não há coluna própria para isso e não vale a
-     * pena acrescentar uma, o serviço não muda por mais nenhuma razão neste
-     * estado), mas só corta se for mais curto do que o que resta ao cliente.
-     */
-    /**
      * Pedidos personalizados esquecidos em análise.
      *
      * Um personalizado nasce em PendingReview e só sai de lá quando alguém no
@@ -243,32 +224,33 @@ class AdvanceMatchingCommand extends Command
         return ['avisados' => $avisados, 'falhados' => $falhados];
     }
 
+    /**
+     * Serviços escolhidos que nunca chegaram a ser pagos.
+     *
+     * O prazo é o do cliente na fase de pagamento: `checkout_seconds` (5 min)
+     * a contar da escolha — ver MatchingService::customerDeadline. Até 06/10
+     * havia um só relógio para escolher E pagar; quem escolhia no fim ficava
+     * sem tempo para pagar.
+     *
+     * UM PAGAMENTO JÁ EM CURSO NÃO É CORTADO AQUI. Com um MB Way à espera de
+     * confirmação no telemóvel, este relógio matava o pedido a meio: o
+     * `MatchingFailed` não liberta a cativação, e o trabalho do MB Way, ao ver
+     * o estado terminal, já não faz nada — se o cliente confirmasse depois,
+     * ficava com o dinheiro cativo e sem serviço. Quem decide é a janela do
+     * próprio meio de pagamento (MbwayPaymentCheckJob, 4 min), que termina em
+     * ExpiredMbway e liberta o dinheiro pelo ServiceObserver.
+     */
     private function expireAbandonedCheckouts(MatchingService $matching, MatchingSettings $settings): int
     {
         $stuck = Service::query()
             ->where('status', ServiceStatus::AWAITING_PAYMENT)
+            ->whereNull('payment_order_id')
             ->get();
 
         $count = 0;
 
         foreach ($stuck as $service) {
             $deadline = $matching->customerDeadline($service);
-
-            // O `checkout_seconds` e o TECTO da fase de pagamento, e nao um
-            // prazo proprio: se for mais curto do que o que sobra ao cliente,
-            // corta primeiro. Aos 300 s de hoje nunca corta — e por isso que
-            // esta a seguir e nao no lugar do prazo do cliente.
-            //
-            // No personalizado nao se aplica: ali a promessa e uma hora para
-            // escolher e pagar, e cinco minutos a contar da escolha eram um
-            // prazo que o cliente nunca viu em sitio nenhum.
-            if (! $service->is_custom) {
-                $checkout = $service->updated_at?->copy()->addSeconds($settings->checkout_seconds);
-
-                if ($checkout && (! $deadline || $checkout->lt($deadline))) {
-                    $deadline = $checkout;
-                }
-            }
 
             if (! $deadline || $deadline->isFuture()) {
                 continue;
