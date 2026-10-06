@@ -64,5 +64,9 @@ Schedule::command('services:notify-stuck-in-progress')->hourly()->withoutOverlap
 // so seria avisado bem depois. `withoutOverlapping` para nao duplicar envios.
 Schedule::command('services:detect-no-show')->everyMinute()->withoutOverlapping();
 
+// Técnicos Online que não mandam a localização há uma hora: ficam invisíveis
+// para "Pedir agora". Avisa-os para abrirem a app (ver o comando).
+Schedule::command('vendors:avisar-online-sem-localizacao')->everyFifteenMinutes()->withoutOverlapping();
+
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
 

@@ -314,4 +314,8 @@ return [
             'description' => 'Não confirmou o pagamento MBWay a tempo e o pedido foi cancelado: ',
         ],
     ],
+    'onlineSemLocalizacao' => [
+        'title' => 'Estás online, mas sem localização',
+        'description' => 'Não recebemos a tua localização há mais de uma hora, por isso não te chegam pedidos para agora. Abre a app para voltares a recebê-los.',
+    ],
 ];

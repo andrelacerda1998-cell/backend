@@ -299,4 +299,8 @@ return [
             'description' => 'Tu n\'as pas confirmé le paiement MBWay à temps et la demande a été annulée : ',
         ],
     ],
+    'onlineSemLocalizacao' => [
+        'title' => 'Vous êtes en ligne, mais sans localisation',
+        'description' => 'Nous n\'avons pas reçu votre localisation depuis plus d\'une heure, vous ne recevez donc pas de demandes immédiates. Ouvrez l\'app pour les recevoir à nouveau.',
+    ],
 ];

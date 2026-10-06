@@ -294,4 +294,8 @@ return [
             'description' => 'You did not confirm the MBWay payment in time and the request was cancelled: ',
         ],
     ],
+    'onlineSemLocalizacao' => [
+        'title' => 'You\'re online, but without location',
+        'description' => 'We haven\'t received your location for over an hour, so you won\'t get requests for right now. Open the app to start receiving them again.',
+    ],
 ];
