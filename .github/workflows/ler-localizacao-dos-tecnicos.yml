@@ -1,0 +1,175 @@
+name: Ler a localização dos técnicos e o que aconteceu aos pedidos
+
+# Só leitura, por accionamento manual. Responde a UMA pergunta: porque é que a
+# procura imediata não encontra ninguém.
+#
+# O QUE JÁ SE SABE: em 01/10, 02/10 e 06/10 havia 1, 0 e 0 técnicos com
+# localização da última hora. A procura imediata exige essa hora -- no índice e
+# também no recurso à base de dados (`VendorSearchService::searchInDatabase`) --
+# por isso, nesses momentos, um pedido imediato não tinha a quem chegar.
+#
+# O QUE ISTO MEDE, para escolher entre as causas possíveis:
+#   1. A distribuição da última localização (< 1 h, 1-24 h, 1-7 dias, > 7 dias,
+#      nunca) dos técnicos Online e dos que podem aceitar serviço. "Nunca" e
+#      "> 7 dias" apontam para a app ou a permissão; "1-24 h" aponta para a
+#      app fechada ou morta pelo sistema.
+#   2. O que aconteceu aos pedidos dos últimos 30 dias, separados em imediatos,
+#      agendados e personalizados: quantos não notificaram ninguém, quantos
+#      notificaram e ninguém aceitou, quantos tiveram aceitação.
+#   3. Se o aviso do #142 ("abre a app, estás Online sem localização") já está
+#      agendado em produção e quantos já saíram -- é a medida de se resulta.
+#
+# Usa as MESMAS definições do código que decide: a janela vem de
+# `services.request.location_update_threshold`, "pode aceitar" é o
+# `can_accept_service`, imediato contra agendado é `MatchingService::isScheduled()`
+# (que olha também para `pending_schedule_data`, porque um agendado em seleção
+# ainda não tem linha em `schedules`). Medir com outra definição era medir
+# outra coisa.
+on:
+  workflow_dispatch:
+
+# De propósito SEM o grupo `deploy-production`: é uma leitura, não deve segurar
+# o lugar a um deploy nem ficar atrás de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler localização e pedidos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Os mesmos segredos do deploy, e com eles o portão de aprovação manual.
+    # Abrir uma sessão SSH a produção merece uma aprovação, mesmo só para ler.
+    environment: production
+    steps:
+      - name: Ler no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          # O comando é FIXO neste ficheiro, e NÃO um input do workflow. Aceitar
+          # um comando por parâmetro transformava este botão numa shell remota
+          # para produção. Para ler outra coisa, altera-se o ficheiro.
+          script: |
+            # SEM `-e`: uma leitura que falhe não pode levar as outras atrás.
+            set -uo pipefail
+            cd ~/project-laravel
+
+            ART="docker compose exec -T laravel-prod php artisan"
+
+            # A saída é capturada e impressa DEPOIS: o `ssh-action` perde o que
+            # tinha em buffer quando um comando falha (ver reindexar-profissionais).
+            correr() {
+              local nome="$1"; shift
+              local saida codigo
+              saida=$("$@" 2>&1); codigo=$?
+              echo "$saida"
+              [ "$codigo" -ne 0 ] && echo ">>> ${nome} FALHOU com código ${codigo}"
+              return 0
+            }
+
+            echo "hora em Lisboa: $(TZ=Europe/Lisbon date '+%a %d/%m %H:%M')"
+            echo "(de madrugada é normal haver poucos; o que interessa é de dia)"
+
+            echo
+            echo "=========== 1. A ÚLTIMA LOCALIZAÇÃO DE CADA TÉCNICO ==========="
+            # "Prontos agora" é a interseção que a procura imediata exige:
+            # Online, pode aceitar serviço, e posição dentro da janela.
+            correr "localização" $ART tinker --execute='
+              $janela = (int) config("services.request.location_update_threshold");
+              $faixa = function ($v) use ($janela) {
+                  $t = $v->currentLocation?->updated_at;
+                  if (! $t) { return "nunca"; }
+                  $m = (int) abs($t->diffInMinutes(now()));
+                  if ($m < $janela) { return "< janela"; }
+                  if ($m < 1440) { return "ate 24 h"; }
+                  if ($m < 10080) { return "1-7 dias"; }
+                  return "> 7 dias";
+              };
+              $ordem = ["< janela", "ate 24 h", "1-7 dias", "> 7 dias", "nunca"];
+              $online = []; $elegiveis = []; $ambos = [];
+              foreach ($ordem as $k) { $online[$k] = 0; $elegiveis[$k] = 0; $ambos[$k] = 0; }
+              $tot = [0, 0, 0];
+              App\Models\Vendor::query()
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->with(["currentLocation", "user"])
+                  ->chunkById(50, function ($lote) use ($faixa, &$online, &$elegiveis, &$ambos, &$tot) {
+                      foreach ($lote as $v) {
+                          $f = $faixa($v);
+                          $on = $v->status === App\Enums\Vendors\StatusVendor::ONLINE
+                              || $v->status === "Online";
+                          $pode = (bool) $v->can_accept_service;
+                          if ($on) { $online[$f]++; $tot[0]++; }
+                          if ($pode) { $elegiveis[$f]++; $tot[1]++; }
+                          if ($on && $pode) { $ambos[$f]++; $tot[2]++; }
+                      }
+                  });
+              echo "janela da procura imediata = " . $janela . " min" . PHP_EOL . PHP_EOL;
+              printf("%-12s %8s %12s %18s%s", "ultima pos.", "Online", "podem aceitar", "Online e podem", PHP_EOL);
+              foreach ($ordem as $k) {
+                  printf("%-12s %8d %12d %18d%s", $k, $online[$k], $elegiveis[$k], $ambos[$k], PHP_EOL);
+              }
+              printf("%-12s %8d %12d %18d%s", "total", $tot[0], $tot[1], $tot[2], PHP_EOL);
+              echo PHP_EOL . "PRONTOS PARA UM PEDIDO IMEDIATO AGORA = " . $ambos["< janela"] . PHP_EOL;
+            '
+
+            echo
+            echo "=========== 2. OS PEDIDOS DOS ÚLTIMOS 30 DIAS ==========="
+            # "Aceitou" conta quem aceitou ALGUMA VEZ: accepted, selected e lost.
+            # Quem aceitou passa depois a selected (escolhido) ou lost (outro foi
+            # escolhido) -- contar só "accepted" dava zero em todo o pedido que
+            # avançou.
+            correr "pedidos" $ART tinker --execute='
+              $ms = app(App\Services\Matching\MatchingService::class);
+              $valor = fn ($e) => $e instanceof \BackedEnum ? $e->value : (string) $e;
+              $res = [];
+              App\Models\Service::query()
+                  ->where("is_test", false)
+                  ->where("created_at", ">=", now()->subDays(30))
+                  ->with(["schedule", "candidates"])
+                  ->chunkById(200, function ($lote) use ($ms, $valor, &$res) {
+                      foreach ($lote as $s) {
+                          $modo = $s->is_custom ? "personalizado" : ($ms->isScheduled($s) ? "agendado" : "imediato");
+                          $res[$modo] ??= ["total" => 0, "sem tecnico, ninguem notificado" => 0, "com tecnico, sem candidatos" => 0, "notificados, ninguem aceitou" => 0, "pelo menos 1 aceitou" => 0, "estados" => []];
+                          $r = &$res[$modo];
+                          $r["total"]++;
+                          $notif = $s->candidates->count();
+                          $aceit = $s->candidates->filter(fn ($c) => in_array($valor($c->status), ["accepted", "selected", "lost"], true))->count();
+                          // Sem candidatos há dois casos que NÃO são o mesmo: ninguém
+                          // disponível, ou um fluxo que atribuiu técnico sem registar
+                          // candidatos. Somá-los fazia a falta de oferta parecer maior.
+                          if ($notif === 0) { $s->vendor_id ? $r["com tecnico, sem candidatos"]++ : $r["sem tecnico, ninguem notificado"]++; }
+                          elseif ($aceit === 0) { $r["notificados, ninguem aceitou"]++; }
+                          else { $r["pelo menos 1 aceitou"]++; }
+                          $e = $valor($s->status);
+                          $r["estados"][$e] = ($r["estados"][$e] ?? 0) + 1;
+                          unset($r);
+                      }
+                  });
+              if (! $res) { echo "nenhum pedido nos ultimos 30 dias" . PHP_EOL; }
+              foreach ($res as $modo => $r) {
+                  echo PHP_EOL . "== " . strtoupper($modo) . " (" . $r["total"] . ") ==" . PHP_EOL;
+                  foreach (["sem tecnico, ninguem notificado", "com tecnico, sem candidatos", "notificados, ninguem aceitou", "pelo menos 1 aceitou"] as $k) {
+                      printf("  %-33s %5d%s", $k, $r[$k], PHP_EOL);
+                  }
+                  arsort($r["estados"]);
+                  echo "  estado final: ";
+                  foreach ($r["estados"] as $e => $n) { echo $e . " " . $n . "   "; }
+                  echo PHP_EOL;
+              }
+            '
+
+            echo
+            echo "=========== 3. O AVISO DO #142 ==========="
+            echo "agendado em produção?"
+            $ART schedule:list 2>&1 | grep -i "online-sem-localizacao" \
+              || echo "  NÃO -- o #142 ainda não chegou a produção (o deploy dele está por aprovar?)"
+            correr "avisos enviados" $ART tinker --execute='
+              $tipo = App\Notifications\Vendor\OnlineSemLocalizacaoNotification::class;
+              $q = Illuminate\Support\Facades\DB::table("notifications")->where("type", $tipo);
+              echo "avisos enviados (total)        = " . (clone $q)->count() . PHP_EOL;
+              echo "avisos enviados (ultimas 24 h) = " . (clone $q)->where("created_at", ">=", now()->subDay())->count() . PHP_EOL;
+              echo "tecnicos diferentes avisados   = " . (clone $q)->distinct()->count("notifiable_id") . PHP_EOL;
+            '
