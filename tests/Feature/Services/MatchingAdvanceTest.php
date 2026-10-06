@@ -191,14 +191,13 @@ class MatchingAdvanceTest extends TestCase
         $chosen = $this->candidate($service, 1, CandidateStatus::SELECTED);
 
         $service->update(['status' => ServiceStatus::AWAITING_PAYMENT, 'vendor_id' => $chosen->vendor_id]);
-        // Escolhido há mais tempo do que o prazo para pagar.
-        // forceFill e não update(): `updated_at` não está no $fillable do Service,
-        // por isso a atribuição em massa era descartada em silêncio — o serviço
-        // continuava com a hora de agora, o varrimento não o apanhava e o teste
-        // falhava por não ter envelhecido nada.
-        $service->timestamps = false;
-        $service->forceFill(['updated_at' => now()->subSeconds(400)])->save();
-        $service->timestamps = true;
+        // Escolhido há mais tempo do que o prazo para pagar. O relógio de
+        // pagamento conta da ESCOLHA, que fica no `updated_at` do candidato
+        // (passa a SELECTED nesse instante) — não no do serviço, que o próprio
+        // checkout grava.
+        \Illuminate\Support\Facades\DB::table('service_candidates')
+            ->where('id', $chosen->id)
+            ->update(['updated_at' => now()->subSeconds(400)]);
 
         $this->artisan('matching:advance')->assertSuccessful();
 

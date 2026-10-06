@@ -214,24 +214,38 @@ class DoisPrazosTest extends TestCase
         $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
     }
 
-    // --------------------------------------------- os mesmos minutos a pagar
+    // -------------------------------------- um relógio próprio para pagar
 
     /**
-     * Escolher ao ultimo segundo nao da um relogio novo.
-     *
-     * Antes arrancava aqui um `checkout_seconds` proprio, a contar da escolha, e
-     * somava por cima: quem escolhesse ao segundo 299 ficava com 599 no total. O
-     * contador no ecra nunca mostrou esse bonus — e um contador que chega a zero
-     * sem nada acontecer ensina o cliente a nao acreditar nele.
+     * Desde 06/10/2026 pagar tem relógio próprio: `checkout_seconds` a contar
+     * da escolha. Escolher ao último segundo já não tira ao cliente o tempo de
+     * pagar — que era o que acontecia com um só relógio para as duas coisas.
      */
-    public function test_os_cinco_minutos_cobrem_tambem_pagar(): void
+    private function escolhidoHa(ServiceCandidate $candidato, int $segundos): void
     {
-        $service = $this->pedido(340, ServiceStatus::AWAITING_PAYMENT);
-        $this->aceite($service, 301, CandidateStatus::SELECTED);
+        \Illuminate\Support\Facades\DB::table('service_candidates')
+            ->where('id', $candidato->id)
+            ->update(['updated_at' => now()->subSeconds($segundos)]);
+    }
 
-        // Escolheu agora mesmo: pelo prazo de checkout ainda tinha cinco
-        // minutos, mas os dele acabaram.
-        $service->forceFill(['updated_at' => now()])->saveQuietly();
+    public function test_escolher_no_fim_ainda_deixa_os_cinco_minutos_para_pagar(): void
+    {
+        $service = $this->pedido(400, ServiceStatus::AWAITING_PAYMENT);
+        // O relógio de escolher já tinha acabado há muito...
+        $candidato = $this->aceite($service, 350, CandidateStatus::SELECTED);
+        // ...mas escolheu há um minuto: tem quatro para pagar.
+        $this->escolhidoHa($candidato, 60);
+
+        $this->avanca();
+
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->refresh()->status);
+    }
+
+    public function test_passados_cinco_minutos_da_escolha_o_pagamento_cai(): void
+    {
+        $service = $this->pedido(400, ServiceStatus::AWAITING_PAYMENT);
+        $candidato = $this->aceite($service, 350, CandidateStatus::SELECTED);
+        $this->escolhidoHa($candidato, 301);
 
         $this->avanca();
 
@@ -241,32 +255,12 @@ class DoisPrazosTest extends TestCase
     public function test_dentro_dos_cinco_minutos_o_pagamento_nao_e_cancelado(): void
     {
         $service = $this->pedido(240, ServiceStatus::AWAITING_PAYMENT);
-        $this->aceite($service, 200, CandidateStatus::SELECTED);
-        $service->forceFill(['updated_at' => now()])->saveQuietly();
+        $candidato = $this->aceite($service, 200, CandidateStatus::SELECTED);
+        $this->escolhidoHa($candidato, 200);
 
         $this->avanca();
 
         $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->refresh()->status);
-    }
-
-    /**
-     * O `checkout_seconds` nao ficou morto: continua a ser o TECTO da fase de
-     * pagamento. Aos 300 s de hoje nunca corta primeiro, mas encurta-se e corta.
-     * Uma definicao que nao faz nada e pior do que nao existir.
-     */
-    public function test_um_checkout_mais_curto_continua_a_cortar_primeiro(): void
-    {
-        MatchingSettings::fake($this->definicoes(['checkout_seconds' => 60]));
-
-        $service = $this->pedido(120, ServiceStatus::AWAITING_PAYMENT);
-        $this->aceite($service, 90, CandidateStatus::SELECTED);
-
-        // Escolheu ha 61 s. Dos cinco minutos dele faltavam mais de tres.
-        $service->forceFill(['updated_at' => now()->subSeconds(61)])->saveQuietly();
-
-        $this->avanca();
-
-        $this->assertSame(ServiceStatus::MATCHING_FAILED, $service->refresh()->status);
     }
 
     // ------------------------------------------- enquanto ninguem aceitou
