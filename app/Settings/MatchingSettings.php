@@ -145,6 +145,50 @@ class MatchingSettings extends Settings
      */
     public int $max_radius_km;
 
+    /*
+     * AGENDADOS COM ANTECEDÊNCIA (06/10/2026).
+     *
+     * A regra de 29/09 deu ao técnico 120 s para responder, igual no imediato e
+     * no agendado, porque o cliente do agendado espera pelo matching no ecrã.
+     * O diagnóstico de produção de 06/10 mostrou o custo dessa premissa: os 3
+     * agendados do mês estavam marcados para 48 a 71 h depois do pedido, e os
+     * três morreram em 2 a 3 minutos com TODOS os convites expirados e zero
+     * recusas -- 40 dos 42 técnicos elegíveis não abriam a app há uma semana.
+     *
+     * Um serviço para daqui a dois dias não precisa de resposta em dois
+     * minutos. Acima de `async_lead_hours` de antecedência, o pedido passa a
+     * ser assíncrono, como o personalizado: os técnicos têm horas para
+     * responder, o cliente é avisado por notificação quando há propostas e tem
+     * uma hora para escolher e pagar. Abaixo, fica tudo como em 29/09.
+     *
+     * Decidido UMA vez, quando o pedido entra em seleção, e gravado no serviço
+     * (`services.matching_async`): um pedido não muda de regras a meio só
+     * porque o relógio andou.
+     */
+
+    /** Antecedência mínima, em horas, para um agendado ser assíncrono. */
+    public int $async_lead_hours;
+
+    /** Janela de resposta do técnico num agendado assíncrono. */
+    public int $vendor_response_seconds_async;
+
+    /** Espera antes de alargar à onda seguinte, num agendado assíncrono. */
+    public int $wave_interval_seconds_async;
+
+    /**
+     * Fim da fase de convites num agendado assíncrono. Com 24 h de antecedência
+     * mínima e 4 h de fase, o pedido resolve-se sempre pelo menos 20 h antes do
+     * serviço: não é preciso outro tecto a contar da hora marcada.
+     */
+    public int $request_deadline_seconds_async;
+
+    /**
+     * Tempo do cliente para escolher E pagar, a contar do primeiro sim. O mesmo
+     * modelo do personalizado: a notificação chega quando ele já não está a
+     * olhar, e minutos depois de um push que pode nem ver matavam o pedido.
+     */
+    public int $customer_choice_seconds_async;
+
     public static function group(): string
     {
         return 'matching';

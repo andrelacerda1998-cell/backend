@@ -84,7 +84,9 @@ class AdvanceMatchingCommand extends Command
             $customerClockRules = $customerDeadline !== null;
 
             if (! $customerClockRules) {
-                $deadline = $service->matchingStartedAt()?->copy()->addSeconds($settings->request_deadline_seconds);
+                // A mesma conta que o tecto de cada convite: num agendado com
+                // antecedência a fase de convites dura horas, e não minutos.
+                $deadline = $matching->invitationDeadline($service);
 
                 if ($deadline && $deadline->isPast()) {
                     $matching->fail($service);
@@ -116,9 +118,7 @@ class AdvanceMatchingCommand extends Command
             // No imediato o intervalo é a própria janela de resposta: não faz
             // sentido esperar mais do que o tempo que se deu a quem já foi
             // convidado, com o cliente parado num ecrã de espera.
-            $interval = $matching->isScheduled($service)
-                ? $settings->wave_interval_seconds
-                : $settings->vendor_response_seconds_immediate;
+            $interval = $matching->waveIntervalSeconds($service);
 
             $lastNotifiedAt = $service->candidates()->max('notified_at');
 

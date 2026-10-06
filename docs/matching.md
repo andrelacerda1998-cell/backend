@@ -290,6 +290,11 @@ Nenhum destes números é inventado aqui; são pontos de calibração com dados 
 | `new_vendor_min_ratings` | 5 | abaixo disto conta como profissional novo |
 | `require_recent_activity_minutes` | 15 | para entrar na shortlist do imediato |
 | `max_radius_km` | 50 | raio a partir da morada do serviço (abre-se quando não sobra ninguém dentro) |
+| `async_lead_hours` | 24 | antecedência mínima para um agendado ser **assíncrono** (ver abaixo) |
+| `vendor_response_seconds_async` | 7200 | janela de resposta do profissional num agendado assíncrono |
+| `wave_interval_seconds_async` | 1800 | espera antes da onda seguinte, no assíncrono |
+| `request_deadline_seconds_async` | 14400 | fim da fase de convites, no assíncrono |
+| `customer_choice_seconds_async` | 3600 | prazo do cliente para escolher **e** pagar, do primeiro sim — o mesmo modelo do personalizado |
 
 ### Os dois prazos
 
@@ -418,3 +423,26 @@ Aos poucos segundos já tem uma opção, e decide se quer esperar por mais.
 
 Os três dirigidos ao profissional existem pelo mesmo motivo: **nunca silêncio**.
 Um "sim" que fica sem resposta é o que ensina alguém a deixar de responder.
+
+## Agendados com antecedência são assíncronos (06/10/2026)
+
+A regra de 29/09 dá ao profissional 120 s para responder em qualquer agendado,
+porque o cliente espera pelo matching no ecrã. O diagnóstico de produção de
+06/10 mostrou o custo: os 3 agendados do mês estavam marcados para 48 a 71 h
+depois do pedido e os três morreram em 2 a 3 minutos, com os 10 convites
+expirados e **zero** recusas. A 1.ª onda esgotava a lista de elegíveis (1 a 5),
+os 120 s passavam, e o `matching:advance` desistia.
+
+A partir de `async_lead_hours` de antecedência o pedido passa a seguir o modelo
+do personalizado: o profissional tem horas para responder, o cliente é avisado
+pela notificação do primeiro sim (`MatchingCandidatesReadyNotification`, que já
+existia) e tem uma hora para escolher e pagar. Abaixo dessa antecedência, e no
+imediato e no personalizado, nada muda.
+
+O regime decide-se **uma vez**, ao abrir o pedido, e fica em
+`services.matching_async`. Recalculado, um pedido feito com 25 h de
+antecedência mudava de regras uma hora depois, a meio dos convites.
+
+A app do cliente recebe `async` e `respond_by` no payload do matching. As
+versões que não conhecem os campos mostram a espera de sempre; a notificação do
+primeiro sim trá-las de volta.
