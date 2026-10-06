@@ -19,6 +19,13 @@ name: Ler a localização dos técnicos e o que aconteceu aos pedidos
 #   3. Se o aviso do #142 ("abre a app, estás Online sem localização") já está
 #      agendado em produção e quantos já saíram -- é a medida de se resulta.
 #
+# Acrescentado depois da primeira corrida (06/10): os 3 agendados do mês tinham
+# técnicos notificados e ninguém aceitou. Para saber se é o PRAZO (deixaram
+# expirar) ou o PEDIDO (recusaram), a parte 2 separa expirados de recusados,
+# mostra a onda mais alta a que se chegou, e lista cada pedido não servido com
+# a antecedência a que estava marcado e quanto tempo viveu antes de falhar. A
+# parte 0 imprime todas as definições do matching que governam esses prazos.
+#
 # Usa as MESMAS definições do código que decide: a janela vem de
 # `services.request.location_update_threshold`, "pode aceitar" é o
 # `can_accept_service`, imediato contra agendado é `MatchingService::isScheduled()`
@@ -74,6 +81,37 @@ jobs:
             echo "(de madrugada é normal haver poucos; o que interessa é de dia)"
 
             echo
+            echo "=========== 0. AS DEFINIÇÕES DO MATCHING, TODAS ==========="
+            # TODAS as propriedades da classe, e não uma lista escrita à mão: o
+            # `ler-definicoes-matching` lê 11 das 18 e deixa de fora o
+            # `request_deadline_seconds` (quanto dura a fase de convites), que é
+            # precisamente o que decide se um técnico que demora a abrir a app
+            # ainda chega a tempo. Uma definição nova aparece aqui sozinha.
+            correr "definições" $ART tinker --execute='
+              // Primeiro pela CLASSE, que é o que a aplicação usa: se faltar uma
+              // definição na base de dados, o pacote recusa carregar TODAS e é
+              // isso que se quer ver. Por reflexão e não `get_object_vars`: o
+              // pacote só carrega as propriedades quando são lidas.
+              $classe = App\Settings\MatchingSettings::class;
+              try {
+                  $s = app($classe);
+                  foreach ((new ReflectionClass($s))->getProperties(ReflectionProperty::IS_PUBLIC) as $p) {
+                      if ($p->isStatic()) { continue; }
+                      $k = $p->getName();
+                      $v = $s->$k;
+                      echo str_pad($k, 36) . " = " . (is_array($v) ? json_encode($v) : var_export($v, true)) . PHP_EOL;
+                  }
+              } catch (Throwable $e) {
+                  // A aplicação não as consegue carregar -- o matching está a
+                  // falhar por isto. Diz qual falta e mostra o que está gravado.
+                  echo "A APLICACAO NAO CONSEGUE CARREGAR AS DEFINICOES: " . $e->getMessage() . PHP_EOL;
+                  echo "o que esta gravado na tabela settings:" . PHP_EOL;
+                  $linhas = Illuminate\Support\Facades\DB::table("settings")->where("group", $classe::group())->orderBy("name")->get(["name", "payload"]);
+                  foreach ($linhas as $l) { echo "  " . str_pad($l->name, 34) . " = " . $l->payload . PHP_EOL; }
+                  if ($linhas->isEmpty()) { echo "  (nenhuma linha)" . PHP_EOL; }
+              }
+            '
+            echo
             echo "=========== 1. A ÚLTIMA LOCALIZAÇÃO DE CADA TÉCNICO ==========="
             # "Prontos agora" é a interseção que a procura imediata exige:
             # Online, pode aceitar serviço, e posição dentro da janela.
@@ -124,40 +162,53 @@ jobs:
             correr "pedidos" $ART tinker --execute='
               $ms = app(App\Services\Matching\MatchingService::class);
               $valor = fn ($e) => $e instanceof \BackedEnum ? $e->value : (string) $e;
+              $grupos = ["sem tecnico, ninguem notificado", "com tecnico, sem candidatos", "notificados, ninguem respondeu", "notificados, houve recusas", "pelo menos 1 aceitou"];
               $res = [];
               App\Models\Service::query()
                   ->where("is_test", false)
                   ->where("created_at", ">=", now()->subDays(30))
                   ->with(["schedule", "candidates"])
-                  ->chunkById(200, function ($lote) use ($ms, $valor, &$res) {
+                  ->chunkById(200, function ($lote) use ($ms, $valor, $grupos, &$res) {
                       foreach ($lote as $s) {
                           $modo = $s->is_custom ? "personalizado" : ($ms->isScheduled($s) ? "agendado" : "imediato");
-                          $res[$modo] ??= ["total" => 0, "sem tecnico, ninguem notificado" => 0, "com tecnico, sem candidatos" => 0, "notificados, ninguem aceitou" => 0, "pelo menos 1 aceitou" => 0, "estados" => []];
+                          if (! isset($res[$modo])) {
+                              $res[$modo] = array_fill_keys($grupos, 0) + ["total" => 0, "estados" => [], "convites" => [], "ondas" => [], "pedidos" => []];
+                          }
                           $r = &$res[$modo];
                           $r["total"]++;
-                          $notif = $s->candidates->count();
-                          $aceit = $s->candidates->filter(fn ($c) => in_array($valor($c->status), ["accepted", "selected", "lost"], true))->count();
-                          // Sem candidatos há dois casos que NÃO são o mesmo: ninguém
-                          // disponível, ou um fluxo que atribuiu técnico sem registar
-                          // candidatos. Somá-los fazia a falta de oferta parecer maior.
+                          $est = $s->candidates->map(fn ($c) => $valor($c->status));
+                          $notif = $est->count();
+                          $aceit = $est->filter(fn ($e) => in_array($e, ["accepted", "selected", "lost"], true))->count();
+                          $recus = $est->filter(fn ($e) => $e === "declined")->count();
+                          foreach ($est as $e) { $r["convites"][$e] = ($r["convites"][$e] ?? 0) + 1; }
                           if ($notif === 0) { $s->vendor_id ? $r["com tecnico, sem candidatos"]++ : $r["sem tecnico, ninguem notificado"]++; }
-                          elseif ($aceit === 0) { $r["notificados, ninguem aceitou"]++; }
-                          else { $r["pelo menos 1 aceitou"]++; }
-                          $e = $valor($s->status);
-                          $r["estados"][$e] = ($r["estados"][$e] ?? 0) + 1;
+                          elseif ($aceit > 0) { $r["pelo menos 1 aceitou"]++; }
+                          elseif ($recus > 0) { $r["notificados, houve recusas"]++; }
+                          else { $r["notificados, ninguem respondeu"]++; }
+                          if ($notif > 0) { $o = "onda " . (int) $s->candidates->max("wave"); $r["ondas"][$o] = ($r["ondas"][$o] ?? 0) + 1; }
+                          $estado = $valor($s->status);
+                          $r["estados"][$estado] = ($r["estados"][$estado] ?? 0) + 1;
+                          // Uma linha por pedido que nao foi servido: com quanto tempo de
+                          // antecedencia era, e quanto tempo viveu antes de falhar.
+                          if ($aceit === 0) {
+                              $inicio = $ms->scheduledStartAt($s);
+                              $r["pedidos"][] = sprintf("#%d  %s  convites %d (recusas %d)  viveu %d min  %s",
+                                  $s->id, $estado, $notif, $recus,
+                                  (int) abs($s->created_at->diffInMinutes($s->updated_at)),
+                                  $inicio ? "marcado para " . (int) round($s->created_at->diffInHours($inicio, false)) . " h depois do pedido" : "sem hora marcada");
+                          }
                           unset($r);
                       }
                   });
               if (! $res) { echo "nenhum pedido nos ultimos 30 dias" . PHP_EOL; }
               foreach ($res as $modo => $r) {
                   echo PHP_EOL . "== " . strtoupper($modo) . " (" . $r["total"] . ") ==" . PHP_EOL;
-                  foreach (["sem tecnico, ninguem notificado", "com tecnico, sem candidatos", "notificados, ninguem aceitou", "pelo menos 1 aceitou"] as $k) {
-                      printf("  %-33s %5d%s", $k, $r[$k], PHP_EOL);
-                  }
-                  arsort($r["estados"]);
-                  echo "  estado final: ";
-                  foreach ($r["estados"] as $e => $n) { echo $e . " " . $n . "   "; }
-                  echo PHP_EOL;
+                  foreach ($grupos as $k) { printf("  %-33s %5d%s", $k, $r[$k], PHP_EOL); }
+                  $lista = function ($t, $m) { if (! $m) { return; } arsort($m); echo "  " . $t . ": "; foreach ($m as $k => $n) { echo $k . " " . $n . "   "; } echo PHP_EOL; };
+                  $lista("convites por estado", $r["convites"]);
+                  $lista("onda mais alta usada", $r["ondas"]);
+                  $lista("estado final", $r["estados"]);
+                  if ($r["pedidos"]) { echo "  pedidos sem ninguem a aceitar:" . PHP_EOL; foreach ($r["pedidos"] as $l) { echo "    " . $l . PHP_EOL; } }
               }
             '
 
