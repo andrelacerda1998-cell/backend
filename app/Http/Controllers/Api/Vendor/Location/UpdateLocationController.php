@@ -52,13 +52,40 @@ class UpdateLocationController extends Controller
             $vendor->load('currentLocation');
             $vendor->searchable();
 
-            $service = $vendor->services()
+            /**
+             * O CLIENTE DE UM SERVIÇO AGENDADO TAMBÉM O VÊ A CAMINHO.
+             *
+             * Isto tinha `whereDoesntHave('schedule')`: a posição só era
+             * emitida para serviços imediatos, e quem tinha marcado para
+             * sábado às 15h ficava sem o mapa -- via o técnico aceitar e
+             * depois silêncio até alguém tocar à campainha. O ecrã do mapa
+             * existe e funciona nos dois casos; só nunca recebia os dados.
+             *
+             * MAS SÓ DEPOIS DE ELE SAIR. Um agendamento pode estar marcado
+             * para daqui a uma semana, e emitir a posição do técnico desde o
+             * momento em que aceita era dar ao cliente um rastreador por sete
+             * dias. O `on_the_way_at` é o carimbo de "vou a caminho": antes
+             * disso não há nada que o cliente precise de ver, e depois disso é
+             * exactamente o que ele quer.
+             *
+             * Nos IMEDIATOS fica como estava -- aceitar já significa ir a
+             * caminho, e exigir-lhes o carimbo tirava o mapa a quem o tem hoje.
+             */
+            $servicos = $vendor->services()
                 ->whereIn('status', [ServiceStatus::FINISHED, ServiceStatus::ACCEPTED])
-                ->whereDoesntHave('schedule')
-                ->get()
-                ->first();
+                ->where(fn ($q) => $q
+                    ->whereDoesntHave('schedule')
+                    ->orWhereNotNull('on_the_way_at'))
+                ->get();
 
-            if ($service) {
+            /**
+             * TODOS, e não `->first()`.
+             *
+             * Com um imediato e um agendado a caminho ao mesmo tempo, o
+             * `first()` escolhia um e o outro cliente ficava sem mapa. Cada
+             * evento vai para o canal do seu serviço, por isso não há mistura.
+             */
+            foreach ($servicos as $service) {
                 UpdateLocationEvent::dispatch($service->formatDataForCustomer());
                 VendorUpdateLocationEvent::dispatch($service->formatDataForVendor(), $vendor->user->id);
             }

@@ -58,4 +58,5 @@ return [
         'postal_code' => 'postal code',
         'locality' => 'district',
     ],
+    'agendamento_fora_da_janela' => 'Bookings are only possible up to :data. Please pick an earlier date.',
 ];

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\Customer\Services;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Rules\AgendamentoDentroDaJanelaDePagamento;
 
 class CalculateValueRequest extends FormRequest
 {
@@ -18,7 +19,7 @@ class CalculateValueRequest extends FormRequest
             // Dia e hora do trabalho. Opcionais para nao partir clientes
             // antigos, mas sem eles um agendado e cotado com a hora do
             // checkout — que e precisamente o que se quer deixar de fazer.
-            'scheduled_day' => 'date|nullable|required_with:scheduled_time_start',
+            'scheduled_day' => ['date', 'nullable', 'required_with:scheduled_time_start', new AgendamentoDentroDaJanelaDePagamento],
             'scheduled_time_start' => 'string|nullable|required_with:scheduled_day',
             'voucher_id' => 'integer|nullable|exists:App\Models\Voucher,id',
             'is_guest' => 'nullable|boolean',

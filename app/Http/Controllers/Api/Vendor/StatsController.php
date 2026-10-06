@@ -28,7 +28,20 @@ class StatsController extends Controller
             ->whereNotNull('rating_by_customer')
             ->avg('rating_by_customer');
 
-        // Taxa de aceitação: dos serviços que lhe chegaram, quantos não recusou.
+        /**
+         * Taxa de aceitação: dos serviços que lhe chegaram, quantos não recusou.
+         *
+         * OS PEDIDOS QUE EXPIRARAM FICAM DE FORA — do numerador E do
+         * denominador. Desde que o servidor passou a expirar pedidos
+         * (`services:expirar-pedidos-pendentes`), um pedido não respondido
+         * acaba em REFUSED como uma recusa a sério, e só a justificação os
+         * distingue. Contá-los aqui mudaria o significado deste número de "dos
+         * que recusaste" para "dos que não apanhaste" — e fazia a percentagem
+         * de toda a gente cair de um dia para o outro por uma regra nova que
+         * ninguém lhes explicou. Se um dia se quiser penalizar quem não
+         * responde, isso é uma decisão de negócio e merece uma métrica própria.
+         */
+        $naoSaoRecusa = \App\Services\Common\Services\RefuseService::MOTIVOS_QUE_NAO_SAO_RECUSA;
         $assigned = $vendor->services()
             ->whereIn('status', [
                 ServiceStatus::CLOSED,
@@ -36,8 +49,15 @@ class StatsController extends Controller
                 ServiceStatus::ARRIVED,
                 ServiceStatus::FINISHED,
                 ServiceStatus::REFUSED,
-            ])->count();
-        $refused = $vendor->services()->where('status', ServiceStatus::REFUSED)->count();
+            ])
+            ->where(fn ($q) => $q->whereNull('status_justification')
+                ->orWhereNotIn('status_justification', $naoSaoRecusa))
+            ->count();
+        $refused = $vendor->services()
+            ->where('status', ServiceStatus::REFUSED)
+            ->where(fn ($q) => $q->whereNull('status_justification')
+                ->orWhereNotIn('status_justification', $naoSaoRecusa))
+            ->count();
         $acceptanceRate = $assigned > 0 ? (int) round((($assigned - $refused) / $assigned) * 100) : null;
 
         // Últimas 4 semanas (da mais recente para a mais antiga), incluindo a atual.

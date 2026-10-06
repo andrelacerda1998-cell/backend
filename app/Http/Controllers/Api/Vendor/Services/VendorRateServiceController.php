@@ -31,7 +31,12 @@ class VendorRateServiceController extends Controller
             return new ApiErrorResponse(null, 'You have already rated this service', 409);
         }
 
-        $service->update(['rating_by_vendor' => $request->get('rate')]);
+        $service->update([
+            'rating_by_vendor' => $request->get('rate'),
+            // Opcional. Uma nota baixa sem uma linha a dizer porquê não serve a
+            // quem tem de decidir o que fazer com ela.
+            'rating_comment_by_vendor' => $request->get('comment'),
+        ]);
 
         return new ApiSuccessResponse(compact('service'));
     }

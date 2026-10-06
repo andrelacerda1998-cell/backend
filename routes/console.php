@@ -37,6 +37,13 @@ Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOver
 // expira os não confirmados). Read-only no Payshop (details()); não chama cancel() — ver item 15.
 Schedule::command('services:expire-pending-3ds')->everyFiveMinutes()->withoutOverlapping();
 
+/*
+ * Fecha pedidos diretos que o profissional deixou passar. Ao minuto porque a
+ * janela é de dois: de cinco em cinco, metade dos pedidos ficava com o dobro do
+ * tempo que o ecrã prometeu.
+ */
+Schedule::command('services:expirar-pedidos-pendentes')->everyMinute()->withoutOverlapping();
+
 // Seleção de profissional: fecha convites expirados, alarga as ondas e desiste
 // dos pedidos sem resposta (docs/matching.md). Ao minuto porque as janelas do
 // fluxo imediato são de 60 segundos — de cinco em cinco minutos, um cliente

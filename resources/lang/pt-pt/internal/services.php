@@ -3,6 +3,8 @@
 return [
     'refused' => [
         'vendor' => 'O profissional recusou o serviço.',
+        'timeout' => 'O prazo de resposta do profissional terminou.',
+        'vendor_busy' => 'O profissional aceitou outro pedido imediato.',
     ],
     'refunds' => [
         'refused' => 'Devolução do valor do serviço.',
