@@ -16,7 +16,6 @@ use App\Filament\Resources\VendorResource\Pages;
 use App\Filament\Resources\VendorResource\RelationManagers\ServicesRelationManager;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Vendor;
-use App\Rules\NifRule;
 use App\Services\Customer\Services\VendorSearchService;
 use Exception;
 use Filament\Actions\Exports\Enums\ExportFormat;
@@ -108,13 +107,17 @@ class VendorResource extends Resource
                         TextInput::make('user.nif')
                             ->label(__('backoffice/vendor.form.nif'))
                             ->required()
-                            ->rules(function (?Vendor $record) {
-                                if (! $record && ! is_null($record)) {
-                                    return ['unique:users,nif,'.$record->user->id, new NifRule];
-                                }
-
-                                return [];
-                            })
+                            // Único entre as contas, menos a do próprio técnico. A
+                            // condição que aqui estava (`! $record && ! is_null($record)`)
+                            // era sempre falsa: a verificação nunca corria. O NifRule
+                            // fica de fora de propósito — validar o formato agora
+                            // bloqueava a edição de técnicos antigos com NIF de teste.
+                            ->rules(fn (?Vendor $record) => [
+                                \Illuminate\Validation\Rule::unique('users', 'nif')->ignore($record?->user_id),
+                            ])
+                            ->validationMessages([
+                                'unique' => __('backoffice/vendor.form.nif_taken'),
+                            ])
                             ->maxLength(255),
                         Select::make('user.gender_id')
                             ->label(__('backoffice/vendor.form.gender'))
@@ -148,13 +151,17 @@ class VendorResource extends Resource
                     ]),
                 \Filament\Forms\Components\Section::make(__('backoffice/vendor.form.contacts'))->columns()->schema([
                     TextInput::make('user.email')
-                        ->rules(function (?Vendor $record) {
-                            if (! $record && ! is_null($record)) {
-                                return ['unique:users,email,'.$record->user->id];
-                            }
-
-                            return [];
-                        })
+                        // Único entre as contas, menos a do próprio técnico. A
+                        // condição que aqui estava (`! $record && ! is_null($record)`)
+                        // era sempre falsa: com um email já usado noutra conta, a
+                        // base de dados rejeitava-o e o backoffice mostrava
+                        // "Server error" em vez de dizer porquê (técnico 418, 06/10).
+                        ->rules(fn (?Vendor $record) => [
+                            \Illuminate\Validation\Rule::unique('users', 'email')->ignore($record?->user_id),
+                        ])
+                        ->validationMessages([
+                            'unique' => __('backoffice/vendor.form.email_taken'),
+                        ])
                         ->required(),
                     TextInput::make('user.phone_number')
                         ->label(__('backoffice/vendor.form.phone_number'))
