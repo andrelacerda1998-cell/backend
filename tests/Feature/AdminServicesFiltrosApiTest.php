@@ -30,6 +30,9 @@ class AdminServicesFiltrosApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** @var list<int> Os serviços criados por ESTE teste. */
+    private array $criados = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -46,7 +49,7 @@ class AdminServicesFiltrosApiTest extends TestCase
     /** INSERT direto: 'status' e 'payment_status' são os NOT NULL sem default. */
     private function servico(ServiceStatus $status, array $extra = []): int
     {
-        return DB::table('services')->insertGetId([
+        return $this->criados[] = DB::table('services')->insertGetId([
             'status' => $status->value,
             'payment_status' => PaymentStatus::PAID->value,
             'is_test' => false,
@@ -56,10 +59,25 @@ class AdminServicesFiltrosApiTest extends TestCase
         ]);
     }
 
+    /**
+     * Os ids devolvidos, de entre os que este teste criou. Um serviço deixado
+     * na base por outro teste não deve decidir se este passa.
+     */
     private function ids(string $query = ''): array
     {
-        return collect($this->withAuth()->getJson('/api/v1/admin/services'.$query)->assertOk()->json('data.items'))
-            ->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        return collect($this->withAuth()->getJson('/api/v1/admin/services'.$query.(str_contains($query, '?') ? '&' : '?').'per_page=100')->assertOk()->json('data.items'))
+            ->pluck('id')->map(fn ($id) => (int) $id)
+            ->intersect($this->criados)->sort()->values()->all();
+    }
+
+    /** Um serviço da listagem, pelo id — não pela posição. */
+    private function item(int $id): array
+    {
+        $item = collect($this->withAuth()->getJson('/api/v1/admin/services?per_page=100')->assertOk()->json('data.items'))
+            ->firstWhere('id', $id);
+        $this->assertNotNull($item, "O serviço {$id} não veio na listagem.");
+
+        return $item;
     }
 
     // ---------------------------------------------------------- estados
@@ -120,8 +138,7 @@ class AdminServicesFiltrosApiTest extends TestCase
         $this->servico(ServiceStatus::CLOSED, ['services_type_id' => $tomada->id]);
 
         $this->assertSame([$deCanalizacao], $this->ids("?operation_area_id={$canalizacao->id}"));
-        $this->withAuth()->getJson('/api/v1/admin/services')->assertOk()
-            ->assertJsonPath('data.items.1.operation_area_id', $canalizacao->id);
+        $this->assertSame($canalizacao->id, $this->item($deCanalizacao)['operation_area_id']);
     }
 
     // ---------------------------------------------------------- pesquisa
@@ -198,16 +215,15 @@ class AdminServicesFiltrosApiTest extends TestCase
     /** Quem aceitou e depois foi escolhido (ou perdeu) continua a ter aceitado. */
     public function test_aceitaram_conta_quem_foi_escolhido_e_quem_perdeu(): void
     {
-        $this->pedidoComCincoConvites();
+        $id = $this->pedidoComCincoConvites();
 
-        $this->withAuth()->getJson('/api/v1/admin/services')->assertOk()
-            ->assertJsonPath('data.items.0.candidates', [
-                'invited' => 5,
-                'notified' => 1,
-                'accepted' => 2,
-                'declined' => 1,
-                'expired' => 1,
-            ]);
+        $this->assertSame([
+            'invited' => 5,
+            'notified' => 1,
+            'accepted' => 2,
+            'declined' => 1,
+            'expired' => 1,
+        ], $this->item($id)['candidates']);
     }
 
     /**
