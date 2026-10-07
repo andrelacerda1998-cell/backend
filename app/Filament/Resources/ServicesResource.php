@@ -65,15 +65,7 @@ class ServicesResource extends Resource
                     ->tooltip(fn (Service $record): string => $record->status_justification ?? '')
                     ->badge()
                     ->formatStateUsing(fn (ServiceStatus $state) => __("$state->value"))
-                    ->color(fn (ServiceStatus $state): string => match ($state) {
-                        ServiceStatus::PENDING, ServiceStatus::CLOSED_PENDING_PAYMENT => 'warning',
-                        // Em seleccao / em analise: a espera de alguem — do
-                        // profissional, do cliente ou do backoffice.
-                        ServiceStatus::PENDING_REVIEW, ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT => 'warning',
-                        ServiceStatus::CANCELED, ServiceStatus::REFUSED, ServiceStatus::REFUSED_MBWAY, ServiceStatus::MATCHING_FAILED => 'danger',
-                        ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED, ServiceStatus::CLOSED, ServiceStatus::SCHEDULED => 'success',
-                        ServiceStatus::PENDING_3DS, ServiceStatus::ARCHIVED, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::CANCELED_MBWAY => 'gray',
-                    }),
+                    ->color(fn (ServiceStatus $state): string => self::corDoEstado($state)),
                 TextColumn::make('payment_status')
                     ->label(__('backoffice/service.table.payment_status'))
                     ->badge()
@@ -267,12 +259,7 @@ class ServicesResource extends Resource
                         ->label(__('backoffice/service.infolist.status'))
                         ->badge()
                         ->formatStateUsing(fn (ServiceStatus $state) => __("$state->value"))
-                        ->color(fn (ServiceStatus $state): string => match ($state) {
-                            ServiceStatus::PENDING, ServiceStatus::PENDING_REVIEW, ServiceStatus::MATCHING, ServiceStatus::AWAITING_PAYMENT => 'warning',
-                            ServiceStatus::CANCELED, ServiceStatus::REFUSED, ServiceStatus::REFUSED_MBWAY, ServiceStatus::MATCHING_FAILED => 'danger',
-                            ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED, ServiceStatus::CLOSED, ServiceStatus::SCHEDULED => 'success',
-                            ServiceStatus::PENDING_3DS, ServiceStatus::ARCHIVED, ServiceStatus::EXPIRED_MBWAY, ServiceStatus::CANCELED_MBWAY => 'gray',
-                        }),
+                        ->color(fn (ServiceStatus $state): string => self::corDoEstado($state)),
                     TextEntry::make('payment_status')
                         ->label(__('backoffice/service.infolist.payment_status'))
                         ->badge()
@@ -543,5 +530,45 @@ class ServicesResource extends Resource
     public static function getPluralLabel(): string
     {
         return __('backoffice/service.plural');
+    }
+
+    /**
+     * A cor do estado de um serviço, na tabela e no detalhe.
+     *
+     * Estava escrita duas vezes, e as duas esqueciam estados: a da tabela não
+     * tinha `Expired3DS`, a do detalhe não tinha `Expired3DS` nem
+     * `ClosedPendingPayment`. Um `match` sem o caso rebenta, e qualquer tabela
+     * com um serviço nesse estado dava "Server error" — foi o que impediu
+     * gravar o técnico 418 (a página dele mostra os serviços dele) a 06/10.
+     *
+     * O `default` existe para um estado novo nunca mais derrubar o
+     * backoffice: fica cinzento até alguém lhe dar uma cor.
+     */
+    public static function corDoEstado(ServiceStatus $state): string
+    {
+        return match ($state) {
+            // À espera de alguém — do profissional, do cliente, do pagamento
+            // ou do backoffice.
+            ServiceStatus::PENDING,
+            ServiceStatus::PENDING_REVIEW,
+            ServiceStatus::MATCHING,
+            ServiceStatus::AWAITING_PAYMENT,
+            ServiceStatus::CLOSED_PENDING_PAYMENT => 'warning',
+            ServiceStatus::CANCELED,
+            ServiceStatus::REFUSED,
+            ServiceStatus::REFUSED_MBWAY,
+            ServiceStatus::MATCHING_FAILED => 'danger',
+            ServiceStatus::ACCEPTED,
+            ServiceStatus::FINISHED,
+            ServiceStatus::ARRIVED,
+            ServiceStatus::CLOSED,
+            ServiceStatus::SCHEDULED => 'success',
+            ServiceStatus::PENDING_3DS,
+            ServiceStatus::ARCHIVED,
+            ServiceStatus::EXPIRED_MBWAY,
+            ServiceStatus::CANCELED_MBWAY,
+            ServiceStatus::EXPIRED_3DS => 'gray',
+            default => 'gray',
+        };
     }
 }
