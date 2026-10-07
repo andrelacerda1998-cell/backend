@@ -23,6 +23,7 @@ use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -220,11 +221,41 @@ class MatchingFlowTest extends TestCase
         $this->assertVendorWindowIs(120);
     }
 
-    public function test_a_scheduled_invitation_gives_the_same_120_seconds(): void
+    /**
+     * O RELÓGIO FICA FIXO, e não por acaso.
+     *
+     * O `start()` marca o agendado para o próximo dia útil às 10:00. Desde o
+     * #147, um agendado com 24 h ou mais de antecedência é assíncrono e dá 2 h
+     * ao técnico — por isso a antecedência deste teste dependia da hora a que
+     * corria: à noite eram ~14 h (120 s), de manhã ~26 h (2 h), e à sexta
+     * sempre mais de dois dias. Passou na CI do #147 às 21h e falhou na do
+     * #148 de manhã, sem nada ter mudado no código.
+     *
+     * Terça às 20:00 deixa o serviço a ~14 h: o regime de 120 s, que é o que
+     * este teste existe para prender. O par dele, abaixo, prende o outro lado.
+     *
+     * A hora escreve-se em Lisboa e converte-se para UTC (`->utc()`), que é o
+     * fuso da aplicação. Um relógio fixo noutro fuso misturava instantes com
+     * fusos diferentes, e a comparação entre a janela e o tecto dava o
+     * resultado errado.
+     */
+    public function test_a_scheduled_invitation_for_less_than_a_day_away_gives_the_same_120_seconds(): void
     {
+        $this->travelTo(Carbon::now('Europe/Lisbon')->next(Carbon::TUESDAY)->setTime(20, 0)->utc());
+
         $this->start(scheduled: true)->assertOk();
 
         $this->assertVendorWindowIs(120);
+    }
+
+    /** Terça às 07:00: o serviço de quarta às 10:00 fica a mais de 24 h, e é assíncrono. */
+    public function test_a_scheduled_invitation_a_day_or_more_away_gives_two_hours(): void
+    {
+        $this->travelTo(Carbon::now('Europe/Lisbon')->next(Carbon::TUESDAY)->setTime(7, 0)->utc());
+
+        $this->start(scheduled: true)->assertOk();
+
+        $this->assertVendorWindowIs(7200);
     }
 
     private function assertVendorWindowIs(int $seconds): void
