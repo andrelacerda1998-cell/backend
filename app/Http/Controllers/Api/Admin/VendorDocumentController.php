@@ -21,6 +21,23 @@ use Illuminate\Http\Request;
 class VendorDocumentController extends Controller
 {
     /**
+     * O técnico e a conta dele, mesmo que tenham sido apagados (soft delete).
+     *
+     * Com `vendor.user` simples, um documento de um técnico apagado vinha com
+     * `vendor` a null e o `present()` rebentava em `->user` — e uma linha
+     * dessas derrubava a fila inteira de revisão no dashboard (erro repetido
+     * nos registos a 06 e 07/10/2026).
+     */
+    private static function relacoes(): array
+    {
+        return [
+            'vendor' => fn ($q) => $q->withTrashed(),
+            'vendor.user' => fn ($q) => $q->withTrashed(),
+            'type',
+        ];
+    }
+
+    /**
      * GET /v1/admin/vendor-documents — por omissão só os pendentes (fila de
      * revisão); ?status=approved|declined|pending para ver outros estados.
      */
@@ -30,7 +47,7 @@ class VendorDocumentController extends Controller
         $status = $request->string('status')->trim()->value() ?: 'pending';
 
         $query = VendorDocuments::query()
-            ->with(['vendor.user', 'type'])
+            ->with(self::relacoes())
             ->where('status', $status)
             ->latest('created_at');
 
@@ -67,7 +84,7 @@ class VendorDocumentController extends Controller
     public function show(VendorDocuments $vendorDocument): ApiSuccessResponse
     {
         return ApiSuccessResponse::make(
-            $this->present($vendorDocument->load(['vendor.user', 'type']))
+            $this->present($vendorDocument->load(self::relacoes()))
         );
     }
 
@@ -81,9 +98,10 @@ class VendorDocumentController extends Controller
             'status' => 'approved',
             'expiration_date' => $request->validated('expiration_date'),
         ]);
-        $vendorDocument->vendor->user->notify(new AcceptNotification($vendorDocument));
+        // Sem técnico ou sem conta (apagados) não há a quem avisar.
+        $vendorDocument->vendor?->user?->notify(new AcceptNotification($vendorDocument));
 
-        return ApiSuccessResponse::make($this->present($vendorDocument->fresh(['vendor.user', 'type'])));
+        return ApiSuccessResponse::make($this->present($vendorDocument->fresh(self::relacoes())));
     }
 
     public function decline(DeclineVendorDocumentRequest $request, VendorDocuments $vendorDocument): ApiSuccessResponse|ApiErrorResponse
@@ -96,9 +114,9 @@ class VendorDocumentController extends Controller
             'status' => 'declined',
             'reason' => $request->validated('reason'),
         ]);
-        $vendorDocument->vendor->user->notify(new DenyNotification($vendorDocument));
+        $vendorDocument->vendor?->user?->notify(new DenyNotification($vendorDocument));
 
-        return ApiSuccessResponse::make($this->present($vendorDocument->fresh(['vendor.user', 'type'])));
+        return ApiSuccessResponse::make($this->present($vendorDocument->fresh(self::relacoes())));
     }
 
     private function present(VendorDocuments $document): array
@@ -107,12 +125,15 @@ class VendorDocumentController extends Controller
         // user->full_name, que não existe no User (mesma família do bug já
         // encontrado em User::setNameAttribute() -- ver SystemProfitController).
         // first_name/last_name são as colunas reais.
-        $user = $document->vendor->user;
+        $user = $document->vendor?->user;
 
         return [
             'id' => $document->id,
             'vendor_id' => $document->vendor_id,
-            'vendor_name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: null,
+            'vendor_name' => trim(($user?->first_name ?? '').' '.($user?->last_name ?? '')) ?: null,
+            // Para o dashboard poder assinalar (ou esconder) documentos de
+            // técnicos que já não existem.
+            'vendor_deleted' => ! $document->vendor || $document->vendor->trashed(),
             'document_type' => $document->type?->name,
             'status' => $document->status,
             'reason' => $document->reason,

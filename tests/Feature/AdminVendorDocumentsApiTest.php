@@ -196,4 +196,50 @@ class AdminVendorDocumentsApiTest extends TestCase
             ->putJson("/api/v1/admin/vendor-documents/{$doc->id}/approve", [])
             ->assertStatus(409);
     }
+
+    /**
+     * Um documento de um técnico apagado derrubava a fila inteira:
+     * `vendor` vinha a null e `->user` rebentava (06 e 07/10/2026).
+     */
+    public function test_a_fila_abre_com_um_documento_de_um_tecnico_apagado(): void
+    {
+        $doTecnicoApagado = $this->makeVendorDocument('pending');
+        $doTecnicoApagado->vendor->delete();
+        $outro = $this->makeVendorDocument('pending');
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/vendor-documents')
+            ->assertOk()
+            ->assertJsonCount(2, 'data.items')
+            ->assertJsonFragment(['id' => $doTecnicoApagado->id, 'vendor_name' => 'Ana Ferreira', 'vendor_deleted' => true])
+            ->assertJsonFragment(['id' => $outro->id, 'vendor_deleted' => false]);
+    }
+
+    public function test_um_documento_cujo_tecnico_ja_nao_existe_abre_sem_nome(): void
+    {
+        $document = $this->makeVendorDocument('pending');
+        // Técnico removido de vez (linha já não existe na tabela).
+        \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        \Illuminate\Support\Facades\DB::table('vendors')->where('id', $document->vendor_id)->delete();
+        \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+        $this->withAuth()
+            ->getJson("/api/v1/admin/vendor-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.vendor_name', null)
+            ->assertJsonPath('data.vendor_deleted', true);
+    }
+
+    public function test_aprovar_o_documento_de_um_tecnico_apagado_nao_rebenta(): void
+    {
+        Notification::fake();
+        $document = $this->makeVendorDocument('pending');
+        $document->vendor->user->delete();
+        $document->vendor->delete();
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-documents/{$document->id}/approve", ['expiration_date' => '2027-01-01'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+    }
 }
