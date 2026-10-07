@@ -224,3 +224,28 @@ jobs:
               echo "avisos enviados (ultimas 24 h) = " . (clone $q)->where("created_at", ">=", now()->subDay())->count() . PHP_EOL;
               echo "tecnicos diferentes avisados   = " . (clone $q)->distinct()->count("notifiable_id") . PHP_EOL;
             '
+
+            echo
+            echo "=========== 4. O ONLINE QUE EXPIRA (#154) ==========="
+            # Quem passou a Offline por estar 72 h sem localização, e quantos
+            # voltaram a pôr-se Online depois do aviso. A linha da notificação
+            # só aparece quando a fila a processa, por isso pode haver uns
+            # segundos de atraso em relação ao estado do técnico.
+            echo "agendado em produção?"
+            $ART schedule:list 2>&1 | grep -i "expirar-online" \
+              || echo "  NÃO -- o #154 ainda não chegou a produção"
+            correr "online expirado" $ART tinker --execute='
+              $tipo = App\Notifications\Vendor\OnlineExpirouNotification::class;
+              $q = Illuminate\Support\Facades\DB::table("notifications")->where("type", $tipo);
+              $avisados = (clone $q)->distinct()->pluck("notifiable_id");
+              $voltaram = App\Models\Vendor::query()
+                  ->whereIn("user_id", $avisados)
+                  ->where("status", App\Enums\Vendors\StatusVendor::ONLINE)
+                  ->count();
+              echo "notificacoes \"passaste a offline\" (total)        = " . (clone $q)->count() . PHP_EOL;
+              echo "notificacoes \"passaste a offline\" (ultimas 24 h) = " . (clone $q)->where("created_at", ">=", now()->subDay())->count() . PHP_EOL;
+              echo "tecnicos diferentes que expiraram                = " . $avisados->count() . PHP_EOL;
+              echo "  destes, voltaram a estar Online                = " . $voltaram . PHP_EOL;
+              $ultima = (clone $q)->max("created_at");
+              echo "ultima notificacao                               = " . ($ultima ?? "nenhuma") . PHP_EOL;
+            '
