@@ -107,17 +107,11 @@ class VendorResource extends Resource
                         TextInput::make('user.nif')
                             ->label(__('backoffice/vendor.form.nif'))
                             ->required()
-                            // Único entre as contas, menos a do próprio técnico. A
-                            // condição que aqui estava (`! $record && ! is_null($record)`)
-                            // era sempre falsa: a verificação nunca corria. O NifRule
-                            // fica de fora de propósito — validar o formato agora
-                            // bloqueava a edição de técnicos antigos com NIF de teste.
-                            ->rules(fn (?Vendor $record) => [
-                                \Illuminate\Validation\Rule::unique('users', 'nif')->ignore($record?->user_id),
-                            ])
-                            ->validationMessages([
-                                'unique' => __('backoffice/vendor.form.nif_taken'),
-                            ])
+                            // Pode repetir-se entre contas: vários técnicos da mesma
+                            // empresa faturam com o NIF dela (o 62 e o 418 partilham
+                            // um, 07/10/2026). O NifRule fica de fora de propósito —
+                            // validar o formato agora bloqueava a edição de técnicos
+                            // antigos com NIF de teste.
                             ->maxLength(255),
                         Select::make('user.gender_id')
                             ->label(__('backoffice/vendor.form.gender'))

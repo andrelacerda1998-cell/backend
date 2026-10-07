@@ -13,10 +13,9 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Editar um técnico no backoffice com um email (ou NIF) já usado noutra conta
+ * Editar um técnico no backoffice com um email já usado noutra conta
  * dava "Server error": a regra de unicidade tinha uma condição sempre falsa e
- * nunca corria, e era a base de dados a rejeitar. Foi o que aconteceu ao
- * tentar pôr o técnico 418 a 8 €/h (06/10/2026).
+ * nunca corria, e era a base de dados a rejeitar.
  */
 class EditarTecnicoTest extends TestCase
 {
@@ -67,15 +66,19 @@ class EditarTecnicoTest extends TestCase
         $this->assertSame('o.meu@piquet.test', $vendor->user->fresh()->email);
     }
 
-    public function test_um_nif_de_outra_conta_da_erro_no_campo(): void
+    public function test_dois_tecnicos_da_mesma_empresa_podem_ter_o_mesmo_nif(): void
     {
-        $this->tecnico('outro@piquet.test', '333333333');
-        $vendor = $this->tecnico('eu@piquet.test', '444444444');
+        // O NIF da empresa é partilhado pelos técnicos dela (62 e 418).
+        $this->tecnico('colega@piquet.test', '333333333');
+        $vendor = $this->tecnico('eu@piquet.test', '333333333');
 
         Livewire::test(EditVendor::class, ['record' => $vendor->getRouteKey()])
-            ->fillForm(['user.nif' => '333333333'])
+            ->fillForm(['price_rate' => 8])
             ->call('save')
-            ->assertHasFormErrors(['user.nif' => 'unique']);
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(800, (int) $vendor->fresh()->getRawOriginal('price_rate'));
+        $this->assertSame('333333333', $vendor->user->fresh()->nif);
     }
 
     public function test_mantendo_o_proprio_email_grava_o_valor_hora(): void
