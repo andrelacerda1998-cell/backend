@@ -303,4 +303,8 @@ return [
         'title' => 'Vous êtes en ligne, mais sans localisation',
         'description' => 'Nous n\'avons pas reçu votre localisation depuis plus d\'une heure, vous ne recevez donc pas de demandes immédiates. Ouvrez l\'app pour les recevoir à nouveau.',
     ],
+    'onlineExpirou' => [
+        'title' => 'Vous êtes maintenant hors ligne',
+        'description' => 'Nous n\'avons pas reçu votre localisation depuis :dias jours, nous avons donc cessé de vous envoyer des demandes. Ouvrez l\'app et passez en ligne quand vous voulez les recevoir à nouveau.',
+    ],
 ];

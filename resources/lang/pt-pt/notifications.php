@@ -318,4 +318,8 @@ return [
         'title' => 'Estás online, mas sem localização',
         'description' => 'Não recebemos a tua localização há mais de uma hora, por isso não te chegam pedidos para agora. Abre a app para voltares a recebê-los.',
     ],
+    'onlineExpirou' => [
+        'title' => 'Passaste a offline',
+        'description' => 'Há :dias dias que não recebemos a tua localização, por isso deixámos de te enviar pedidos. Abre a app e liga-te quando quiseres voltar a recebê-los.',
+    ],
 ];

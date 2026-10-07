@@ -286,4 +286,8 @@ return [
         'title' => 'Du bist online, aber ohne Standort',
         'description' => 'Wir haben deinen Standort seit über einer Stunde nicht erhalten, daher bekommst du keine Sofortaufträge. Öffne die App, um sie wieder zu erhalten.',
     ],
+    'onlineExpirou' => [
+        'title' => 'Du bist jetzt offline',
+        'description' => 'Wir haben deinen Standort seit :dias Tagen nicht erhalten und senden dir daher keine Aufträge mehr. Öffne die App und geh online, wenn du wieder Aufträge erhalten möchtest.',
+    ],
 ];
