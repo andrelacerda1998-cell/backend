@@ -109,6 +109,21 @@ class AdminServicesFiltrosApiTest extends TestCase
         $this->assertSame([$deCanos], $this->ids("?category_id={$canos->id}"));
     }
 
+    /** A categoria que a equipa escolhe na lista é a área do tipo de serviço. */
+    public function test_filtra_pela_categoria_do_tipo_de_servico(): void
+    {
+        $canalizacao = \App\Models\GeneralSettings\OperationArea::factory()->create();
+        $eletricidade = \App\Models\GeneralSettings\OperationArea::factory()->create();
+        $desentupir = ServicesType::factory()->create(['operation_area_id' => $canalizacao->id]);
+        $tomada = ServicesType::factory()->create(['operation_area_id' => $eletricidade->id]);
+        $deCanalizacao = $this->servico(ServiceStatus::CLOSED, ['services_type_id' => $desentupir->id]);
+        $this->servico(ServiceStatus::CLOSED, ['services_type_id' => $tomada->id]);
+
+        $this->assertSame([$deCanalizacao], $this->ids("?operation_area_id={$canalizacao->id}"));
+        $this->withAuth()->getJson('/api/v1/admin/services')->assertOk()
+            ->assertJsonPath('data.items.1.operation_area_id', $canalizacao->id);
+    }
+
     // ---------------------------------------------------------- pesquisa
 
     public function test_procura_pelo_numero_do_servico_com_e_sem_cardinal(): void

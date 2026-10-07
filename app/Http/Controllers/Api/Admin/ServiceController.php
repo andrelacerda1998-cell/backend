@@ -86,6 +86,16 @@ class ServiceController extends Controller
         }
 
         /*
+         * A CATEGORIA que a equipa conhece (Canalização, Eletricidade…) é a área
+         * de operação do tipo de serviço. É por ela que o filtro do backoffice
+         * pergunta — o tipo é demasiado fino para escolher numa lista.
+         */
+        if ($request->filled('operation_area_id')) {
+            $area = $request->integer('operation_area_id');
+            $query->whereHas('serviceType', fn ($t) => $t->where('operation_area_id', $area));
+        }
+
+        /*
          * Procura por nome ou telefone do cliente. É por aqui que se resolve um
          * caso ao telefone, por isso o telefone conta tanto como o nome.
          */
@@ -247,6 +257,8 @@ class ServiceController extends Controller
             'technician_name' => $service->vendor?->user?->name,
             'category_id' => $service->services_type_id,
             'category_name' => $service->serviceType?->name,
+            // A categoria que a equipa conhece, para o backoffice filtrar por ela.
+            'operation_area_id' => $service->serviceType?->operation_area_id,
             'service_name' => $service->serviceType?->name,
             'location' => $morada['address'] ?? $morada['street'] ?? null,
             'city' => $morada['city'] ?? $morada['locality'] ?? null,
