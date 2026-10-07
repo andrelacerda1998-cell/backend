@@ -14,6 +14,8 @@ return [
         'all' => 'Todos',
     ],
     'form' => [
+        'email_taken' => 'Este email já está a ser usado por outra conta.',
+        'nif_taken' => 'Este NIF já está a ser usado por outra conta.',
         'personal_data' => 'Dados pessoais',
         'contacts' => 'Contactos',
         'name' => 'Nome',
