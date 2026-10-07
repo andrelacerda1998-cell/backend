@@ -298,4 +298,8 @@ return [
         'title' => 'You\'re online, but without location',
         'description' => 'We haven\'t received your location for over an hour, so you won\'t get requests for right now. Open the app to start receiving them again.',
     ],
+    'onlineExpirou' => [
+        'title' => 'You\'re now offline',
+        'description' => 'We haven\'t received your location for :dias days, so we\'ve stopped sending you requests. Open the app and go online whenever you want to receive them again.',
+    ],
 ];

@@ -6,6 +6,11 @@ return [
      * Time in minutes
      */
     'location_update_threshold' => 60,
+    /**
+     * Horas sem localização ao fim das quais o "Online" expira sozinho
+     * (vendors:expirar-online). Ver ExpirarOnlineCommand.
+     */
+    'online_expira_horas' => (int) env('ONLINE_EXPIRA_HORAS', 72),
     'mock_location' => env('MOCK_LOCATION', false),
     /**
      * Time in seconds for instant services

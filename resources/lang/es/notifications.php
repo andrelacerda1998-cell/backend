@@ -303,4 +303,8 @@ return [
         'title' => 'Estás en línea, pero sin ubicación',
         'description' => 'No recibimos tu ubicación desde hace más de una hora, así que no te llegan pedidos para ahora. Abre la app para volver a recibirlos.',
     ],
+    'onlineExpirou' => [
+        'title' => 'Ahora estás desconectado',
+        'description' => 'Hace :dias días que no recibimos tu ubicación, así que dejamos de enviarte pedidos. Abre la app y conéctate cuando quieras volver a recibirlos.',
+    ],
 ];

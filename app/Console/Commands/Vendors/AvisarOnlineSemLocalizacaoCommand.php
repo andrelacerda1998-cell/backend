@@ -23,8 +23,8 @@ use Illuminate\Support\Facades\Cache;
  *
  * O QUE ISTO NÃO FAZ, DE PROPÓSITO: não o passa a Offline. "Online" é também
  * o interruptor dos convites agendados, e esses não precisam de posição ao
- * vivo — desligá-lo cortava os pedidos que hoje funcionam para resolver os
- * que não funcionam.
+ * vivo: umas horas sem a app aberta não são motivo para os cortar. Ao fim de
+ * DIAS já são — isso é o ExpirarOnlineCommand (07/10), que vem depois deste.
  *
  * Só de dia (8h–21h, hora de Lisboa) e no máximo um aviso a cada
  * HORAS_ENTRE_AVISOS por técnico: um técnico Online à noite sem a app aberta
