@@ -26,6 +26,12 @@ class CancelService
             || $this->service->status === ServiceStatus::SCHEDULED) {
             \DB::beginTransaction();
             try {
+                // Um agendado já foi aceite e pago: largá-lo conta para a
+                // regra de fiabilidade. Um PENDING (fluxo antigo, por aceitar)
+                // ainda não era compromisso nenhum, e não conta.
+                if ($this->service->status === ServiceStatus::SCHEDULED) {
+                    $this->service->vendor_canceled_at = now();
+                }
                 $this->service->status = ServiceStatus::CANCELED;
                 $this->service->status_justification = 'internal/services.cancel.description';
                 $this->service->save();
@@ -376,9 +382,23 @@ class CancelService
             return;
         }
 
-        if ($this->service->status === ServiceStatus::ACCEPTED) {
+        // ARRIVED entra aqui, e NUNCA na regra do cliente.
+        //
+        // O controlador do técnico mandava os serviços aceites e no local para
+        // o `cancelOpenService`, que é a regra de quando o CLIENTE desiste:
+        // com o técnico a caminho ou no local, cobra 100% ao cliente e paga
+        // metade ao técnico. Ou seja, o técnico que largava um serviço depois
+        // de sair de casa recebia por isso, e o cliente pagava. Quem cancela
+        // é o técnico: o cliente é reembolsado por inteiro (o observer liberta
+        // o cativo) e o técnico não recebe nada.
+        //
+        // Cliente ausente não é isto: tem caminho próprio, decidido pelo
+        // backoffice.
+        if ($this->service->status === ServiceStatus::ACCEPTED
+            || $this->service->status === ServiceStatus::ARRIVED) {
             \DB::beginTransaction();
             try {
+                $this->service->vendor_canceled_at = now();
                 $this->service->status = ServiceStatus::CANCELED;
                 $this->service->status_justification = 'internal/services.cancel.description';
                 $this->service->save();
@@ -396,7 +416,15 @@ class CancelService
                 }
 
                 \DB::commit();
-                CreateVendorCancellationInvoiceJob::dispatch($this->service);
+
+                // A fatura da taxa só quando HÁ taxa. O job emite uma
+                // fatura-recibo real na AT (10% do valor do técnico), e com a
+                // taxa a zero isso era declarar um pagamento que nunca existiu.
+                // Até aqui não se notava porque a rota do técnico não chegava a
+                // este ramo (mandava os aceites para o `cancelOpenService`).
+                if ($cancellationFee > 0) {
+                    CreateVendorCancellationInvoiceJob::dispatch($this->service);
+                }
 
             } catch (\Exception $e) {
                 \DB::rollBack();

@@ -30,6 +30,8 @@ class FinishService
         \DB::beginTransaction();
         try {
             $this->service->status = ServiceStatus::FINISHED;
+            // A partir daqui contam as horas até ao fecho automático.
+            $this->service->finished_at = now();
             $this->service->save();
 
             \DB::commit();

@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Vendor\Schedule\ScheduleController;
 use App\Http\Controllers\Api\Vendor\Schedule\UnavailableDaysController;
 use App\Http\Controllers\Api\Vendor\Services\AcceptServiceController;
 use App\Http\Controllers\Api\Vendor\Services\ArrivedServiceController;
+use App\Http\Controllers\Api\Vendor\Services\CustomerAbsentController;
 use App\Http\Controllers\Api\Vendor\Services\CancelServiceController;
 use App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServiceOpenController;
 use App\Http\Controllers\Api\Vendor\Services\CheckHasAnyServicePendingController;
@@ -88,6 +89,7 @@ Route::group(['prefix' => 'vendor', 'middleware' => ['auth:api', 'locale', 'isVe
             Route::post('/refuse', RefuseServiceController::class);
             Route::post('/on-the-way', OnTheWayController::class);
             Route::post('/arrived', ArrivedServiceController::class);
+            Route::post('/customer-absent', CustomerAbsentController::class);
             Route::put('/rate', VendorRateServiceController::class);
 
             // Tempo extra / peças (aprovados pelo cliente) e fotos antes/depois

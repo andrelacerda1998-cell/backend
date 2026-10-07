@@ -6,6 +6,7 @@ use App\DTO\Services\AddressCoordinatesDTO;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
 use App\Models\Address;
+use App\Models\GeneralSettings\City;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\Service;
 use App\Models\User;
@@ -45,8 +46,27 @@ class VendorRankingService
         User $customer,
         bool $immediate,
         ?CarbonInterface $scheduledFor = null,
+        array $excluir = [],
+        ?string $cidadeDaMorada = null,
     ): Collection {
-        $vendors = $this->eligibleVendors($scope, $customer, $immediate, $scheduledFor);
+        $vendors = $this->eligibleVendors($scope, $customer, $immediate, $scheduledFor)
+            // Antes da área, e não depois: quem já foi convidado em ondas
+            // anteriores tem de sair ANTES de se decidir se ainda há alguém
+            // dentro das cidades — senão o recurso nunca chegava a abrir.
+            ->reject(fn (Vendor $v) => in_array($v->id, $excluir, true))
+            ->values();
+
+        if ($vendors->isEmpty()) {
+            return collect();
+        }
+
+        // Fiabilidade: quem está em pausa (3 cancelamentos depois de aceitar,
+        // no mesmo mês) não é convidado; quem faltou recentemente desce de
+        // faixa. São as regras que o técnico vê na app — ver Vendor.
+        $fiabilidade = Vendor::fiabilidadeDe($vendors->pluck('id')->all());
+        $vendors = $vendors
+            ->reject(fn (Vendor $v) => Vendor::pausaAte($fiabilidade[$v->id] ?? []) !== null)
+            ->values();
 
         if ($vendors->isEmpty()) {
             return collect();
@@ -55,25 +75,26 @@ class VendorRankingService
         $ratings = $this->ratingsFor($vendors->pluck('id')->all(), $scope);
 
         $ranked = $vendors
-            ->map(fn (Vendor $vendor) => $this->describe($vendor, $scope, $address, $ratings, $immediate))
+            ->map(fn (Vendor $vendor) => $this->describe($vendor, $scope, $address, $ratings, $immediate, (int) ($fiabilidade[$vendor->id]['faltas'] ?? 0)))
             ->filter()
             ->values();
 
-        return $this->sortAndNumber($this->dentroDoRaio($ranked));
+        $lat = (float) ($address instanceof Address ? $address->latitude : $address->latitude);
+        $lng = (float) ($address instanceof Address ? $address->longitude : $address->longitude);
+        $cidade = $cidadeDaMorada ?? ($address instanceof Address ? $address->city : null);
+
+        return $this->sortAndNumber($this->naAreaDeTrabalho($ranked, $lat, $lng, $cidade));
     }
 
     /**
-     * Quem está dentro do raio é convidado primeiro.
+     * Raio máximo a partir da morada do serviço. Exclusão DURA.
      *
-     * Não é exclusão dura: se não sobrar ninguém dentro — porque não há
-     * cobertura, ou porque os de dentro já foram todos convidados em ondas
-     * anteriores — devolve-se a lista inteira e o raio abre-se. Em zonas com
-     * pouca cobertura o pedido continua a ter hipótese.
+     * Abria-se a toda a gente quando não sobrava ninguém dentro — e aparecia a
+     * um cliente de Lisboa uma proposta a 398 km por 554,98 €. Decisão do
+     * André (05/10/2026): nunca a 400 km. Sem ninguém dentro, o pedido falha
+     * e o cliente pode agendar; é melhor do que uma proposta absurda.
      *
-     * Antes disto o motor não tinha predicado geográfico nenhum: a distância
-     * entrava só como terceiro critério de desempate, e para um serviço em
-     * Lisboa apareciam lado a lado uma proposta a 1 km por 34,11 € e outra a
-     * 398 km por 554,98 €.
+     * A zero, desliga-se (é uma definição, não uma constante).
      *
      * @param  Collection<int, RankedVendor>  $ranked
      * @return Collection<int, RankedVendor>
@@ -86,9 +107,72 @@ class VendorRankingService
             return $ranked;
         }
 
-        $perto = $ranked->filter(fn (RankedVendor $v) => $v->distance <= $raio)->values();
+        return $ranked->filter(fn (RankedVendor $v) => $v->distance <= $raio)->values();
+    }
 
-        return $perto->isNotEmpty() ? $perto : $ranked;
+    /** Até onde vai o recurso quando ninguém das cidades pode: perto, mesmo fora delas. */
+    public const RECURSO_FORA_DA_AREA_KM = 30;
+
+    /**
+     * As cidades que o técnico escolheu passam a ser a área dele.
+     *
+     * Serviam só para a página de densidade do backoffice; o matching usava a
+     * posição GPS e mais nada, e quem escolhia "Lisboa" recebia convites de
+     * onde calhasse. Agora:
+     *
+     *  1. Primeiro, quem tem a morada do serviço dentro de uma das suas
+     *     cidades (centro + raio da cidade; ver City::contem). Quem não
+     *     escolheu cidades nenhumas não tem restrição — técnicos antigos não
+     *     ficam sem pedidos de um dia para o outro.
+     *  2. Se não houver ninguém assim, quem está a menos de
+     *     RECURSO_FORA_DA_AREA_KM, mesmo fora das cidades — e o convite diz
+     *     "fora das tuas cidades". Um pedido sem ninguém é pior do que um
+     *     convite ligeiramente fora da área.
+     *  3. Nunca para lá do raio máximo (dentroDoRaio).
+     *
+     * @param  Collection<int, RankedVendor>  $ranked
+     * @return Collection<int, RankedVendor>
+     */
+    public function naAreaDeTrabalho(Collection $ranked, float $lat, float $lng, ?string $cidadeDaMorada): Collection
+    {
+        $ranked = $this->dentroDoRaio($ranked);
+
+        if ($ranked->isEmpty()) {
+            return $ranked;
+        }
+
+        $ids = $ranked->map(fn (RankedVendor $v) => $v->vendor->id)->all();
+
+        $cidadesPorTecnico = DB::table('vendor_available_cities')
+            ->whereIn('vendor_id', $ids)
+            ->get(['vendor_id', 'city_id'])
+            ->groupBy('vendor_id');
+
+        $cidades = City::query()
+            ->whereIn('id', $cidadesPorTecnico->flatten()->pluck('city_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        $dentro = $ranked->filter(function (RankedVendor $v) use ($cidadesPorTecnico, $cidades, $lat, $lng, $cidadeDaMorada) {
+            $dele = $cidadesPorTecnico->get($v->vendor->id);
+
+            if (! $dele || $dele->isEmpty()) {
+                return true;
+            }
+
+            return $dele->contains(fn ($linha) => $cidades->get($linha->city_id)?->contem($lat, $lng, $cidadeDaMorada) ?? false);
+        })->values();
+
+        if ($dentro->isNotEmpty()) {
+            return $dentro;
+        }
+
+        return $ranked
+            ->filter(fn (RankedVendor $v) => $v->distance <= self::RECURSO_FORA_DA_AREA_KM)
+            ->each(function (RankedVendor $v) {
+                $v->outsideArea = true;
+            })
+            ->values();
     }
 
     /**
@@ -314,6 +398,7 @@ class VendorRankingService
         AddressCoordinatesDTO|Address $address,
         array $ratings,
         bool $immediate,
+        int $faltasRecentes = 0,
     ): ?RankedVendor {
         try {
             $prices = $this->calculatePricesForMinutes($scope->minutes, $address, $vendor, ! $immediate, $scope->serviceAt);
@@ -339,6 +424,7 @@ class VendorRankingService
             distance: (float) $prices['distance'],
             quotedAmount: $prices['customer_amount'],
             quotedAmountForVendor: $prices['vendor_amount'],
+            recentNoShows: $faltasRecentes,
         );
     }
 

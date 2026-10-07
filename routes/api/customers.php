@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\Customer\Services\CancelServiceController;
 use App\Http\Controllers\Api\Customer\Services\CheckHasAnyServiceOpenController;
 use App\Http\Controllers\Api\Customer\Services\CheckHasAnyServicePendingController;
 use App\Http\Controllers\Api\Customer\Services\CloseServiceController;
+use App\Http\Controllers\Api\Customer\Services\ReportProblemController;
 use App\Http\Controllers\Api\Customer\Services\CurrentMatchingRequestController;
 use App\Http\Controllers\Api\Customer\Services\CustomerRateServiceController;
 use App\Http\Controllers\Api\Customer\Services\CustomerServicePhotosController;
@@ -80,6 +81,7 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
             Route::post('/cancel', CancelServiceController::class);
             Route::post('/cancel-pending-3ds', CancelPending3DSController::class);
             Route::post('/close', CloseServiceController::class);
+            Route::post('/report', ReportProblemController::class);
             Route::put('/rate', CustomerRateServiceController::class);
 
             // Tempo extra / peças pedidos pelo técnico — o cliente aprova ou recusa

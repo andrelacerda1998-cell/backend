@@ -299,14 +299,24 @@ class CancelServiceTest extends TestCase
 
     // ── o técnico cancela ──────────────────────────────────────────────────
 
-    public function test_o_tecnico_cancela_um_servico_aceite_e_gera_se_a_fatura(): void
+    /**
+     * Sem taxa de cancelamento não há fatura da taxa.
+     *
+     * Este teste exigia a fatura. Mas a taxa está a zero (`$cancellationFee =
+     * 0` no CancelService) e o job emite uma fatura-recibo REAL na AT por 10%
+     * do valor do técnico — um pagamento que ninguém fez. Não se via porque a
+     * rota do técnico não passava por aqui; passou a passar quando se corrigiu
+     * o cancelamento pelo técnico que cobrava o cliente.
+     */
+    public function test_o_tecnico_cancela_um_servico_aceite_sem_fatura_de_uma_taxa_que_nao_existe(): void
     {
         $service = $this->servico(ServiceStatus::ACCEPTED);
 
         (new CancelService($service))->vendorCancelService();
 
         $this->assertSame(ServiceStatus::CANCELED, $service->fresh()->status);
-        Queue::assertPushed(CreateVendorCancellationInvoiceJob::class);
+        $this->assertNotNull($service->fresh()->vendor_canceled_at);
+        Queue::assertNotPushed(CreateVendorCancellationInvoiceJob::class);
     }
 
     public function test_o_tecnico_cancela_um_agendado_sem_gerar_fatura(): void

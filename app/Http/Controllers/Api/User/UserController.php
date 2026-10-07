@@ -147,6 +147,11 @@ class UserController extends Controller
                  * Com isto a app sabe que o passo está feito.
                  */
                 'available_cities_count' => $vendor->availableCities()->count(),
+                // As regras de fiabilidade e onde ele está nelas: quantos
+                // cancelamentos leva este mês, se está em pausa e até quando,
+                // e quantas faltas recentes lhe estão a custar posição. A app
+                // mostra-as ANTES de ele cancelar, não depois.
+                'reliability' => $vendor->reliabilitySummary(),
             ]);
         }
 

@@ -447,4 +447,102 @@ class MatchingFlowTest extends TestCase
         $this->assertSame(ServiceStatus::MATCHING_FAILED->value, $response->json('data.service.status'));
         $this->assertCount(0, $response->json('data.candidates'));
     }
+    // ---------------------------------------------------------- desistir
+
+    /**
+     * O ecrã de espera só tinha "voltar", e voltar não fechava nada: o pedido
+     * continuava a convidar técnicos para um trabalho que já ninguém queria.
+     */
+    public function test_the_customer_can_cancel_a_request_still_searching(): void
+    {
+        $id = $this->start()->assertOk()->json('data.service.id');
+
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/{$id}/cancel")
+            ->assertOk()
+            ->assertJsonPath('data.status', ServiceStatus::CANCELED->value);
+
+        $this->assertSame(ServiceStatus::CANCELED, Service::find($id)->status);
+        // Ninguém fica com um convite vivo para um pedido que já não existe.
+        $this->assertSame(0, ServiceCandidate::where('service_id', $id)
+            ->whereIn('status', [CandidateStatus::NOTIFIED, CandidateStatus::ACCEPTED])->count());
+        Event::assertDispatched(MatchingRequestClosedEvent::class);
+    }
+
+    public function test_the_customer_can_cancel_after_choosing_and_before_paying(): void
+    {
+        $id = $this->start()->assertOk()->json('data.service.id');
+        $service = Service::find($id);
+        $candidate = $service->candidates()->orderBy('rank')->first();
+        app(MatchingService::class)->accept($candidate);
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/matching/{$id}/select/{$candidate->id}")->assertOk();
+
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/{$id}/cancel")
+            ->assertOk();
+
+        $service->refresh();
+        $this->assertSame(ServiceStatus::CANCELED, $service->status);
+        $this->assertNull($service->vendor_id);
+        // O escolhido é avisado de que o pedido fechou, não fica pendurado.
+        $this->assertSame(CandidateStatus::LOST, $candidate->refresh()->status);
+    }
+
+    /**
+     * Com um pagamento a meio (MB Way à espera do banco, 3DS por validar) não
+     * se cancela por este caminho: podia cruzar-se com a confirmação.
+     */
+    public function test_a_request_with_a_payment_in_progress_is_not_cancelled_here(): void
+    {
+        $id = $this->start()->assertOk()->json('data.service.id');
+        $service = Service::find($id);
+        $candidate = $service->candidates()->orderBy('rank')->first();
+        app(MatchingService::class)->accept($candidate);
+        app(MatchingService::class)->select($candidate->refresh());
+
+        $order = \RwInteractive\PayshopSdk\Models\PaymentOrder::create([
+            'user_id' => $this->customer->id,
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'amount' => 100,
+            'paid' => false,
+            'status' => \RwInteractive\PayshopSdk\Enums\Payment\Status::CREATED,
+            'type' => \RwInteractive\PayshopSdk\Enums\Payment\OperationType::DEFERRED,
+            'refunded' => 0,
+            'service' => 'fake',
+            'service_uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'token' => 'fake-token',
+        ]);
+        $service->refresh()->forceFill(['payment_order_id' => $order->id])->save();
+
+        $this->assertFalse(app(MatchingService::class)->cancelByCustomer($service->refresh()));
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->refresh()->status);
+    }
+
+    /**
+     * Devolvia-se o pedido aberto fosse ele qual fosse: quem desistia de um
+     * serviço e pedia outro recebia o primeiro de volta.
+     */
+    public function test_a_request_for_another_service_replaces_the_open_one(): void
+    {
+        $first = $this->start()->assertOk()->json('data.service.id');
+
+        $outro = ServicesType::factory()->create([
+            'operation_area_id' => $this->type->operation_area_id,
+            'time' => 60,
+        ]);
+        Vendor::all()->each(fn (Vendor $v) => $v->servicesTypes()->attach($outro->id));
+
+        $second = $this->actingAs($this->customer, 'api')
+            ->postJson('/api/v1/customer/services/matching', [
+                'service_type' => $outro->id,
+                'scheduled' => false,
+            ])
+            ->assertOk()
+            ->json('data.service.id');
+
+        $this->assertNotSame($first, $second);
+        $this->assertSame(ServiceStatus::CANCELED, Service::find($first)->status);
+        $this->assertSame($outro->id, Service::find($second)->services_type_id);
+    }
 }

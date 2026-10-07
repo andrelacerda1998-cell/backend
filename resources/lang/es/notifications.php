@@ -6,6 +6,23 @@ return [
         'description' => 'Pago enviado por un importe de :value€',
     ],
     'mail' => [
+        'problemReportedOps' => [
+            'subject' => 'Problema informado — servicio #:service_id',
+            'line1' => 'El servicio #:service_id (:service_type) tiene un problema informado por :reported_by: :reason.',
+            'line2' => 'Cliente: :customer_name (:customer_phone). Profesional: :vendor_name.',
+            'line3' => 'El cierre automático está parado hasta que alguien decida: cerrar y pagar, reembolsar o enviar otro profesional.',
+            'by_customer' => 'el cliente',
+            'by_vendor' => 'el profesional',
+            'reasons' => [
+                'not_done' => 'el trabajo no se hizo',
+                'poor_quality' => 'trabajo mal hecho',
+                'damage' => 'daños en casa',
+                'price' => 'un problema con el precio',
+                'no_show' => 'el profesional no apareció',
+                'customer_absent' => 'el cliente no estaba',
+                'other' => 'otro motivo',
+            ],
+        ],
         'paymentSent' => [
             'subject' => 'Pago enviado',
             'greeting' => 'Hola',
@@ -175,9 +192,21 @@ return [
         'title' => 'Servicio aceptado',
         'description' => 'El profesional ha aceptado tu propuesta para el servicio del tipo: ',
     ],
+    'serviceAutoClosed' => [
+        'title' => 'Servicio cerrado',
+        'description' => 'Pasaron :hours horas sin ningún problema informado, así que cerramos tu servicio de :service_type. Cuéntanos qué tal fue.',
+    ],
+    'problemReportedVendor' => [
+        'title' => 'El cliente informó de un problema',
+        'description' => 'El cliente informó de un problema en el servicio de :service_type. Piquet lo revisará; el pago queda en espera hasta entonces.',
+    ],
+    'vendorCantFindCustomer' => [
+        'title' => 'El profesional no te encuentra',
+        'description' => ':vendor_name está en la dirección del servicio y no te encuentra. Llámale o responde en el chat.',
+    ],
     'finishedService' => [
-        'title' => 'Servicio terminado',
-        'description' => 'El profesional dice haber terminado el servicio del tipo: ',
+        'title' => 'El profesional terminó el servicio',
+        'description' => 'Tu servicio de :service_type está terminado. Si algo no está bien, informa de un problema en las próximas :hours horas; después cerramos el servicio automáticamente.',
     ],
     'vendorArrivedService' => [
         'title' => 'El profesional ha llegado',
@@ -248,6 +277,10 @@ return [
                 'description' => 'No hemos podido cobrar el extra que has aprobado. Revisa tu método de pago: ',
             ],
         ],
+    ],
+    'serviceCanceledByVendorReopened' => [
+        'title' => 'El profesional canceló — ya buscamos otro',
+        'description' => 'Ya estamos buscando otro profesional para tu servicio de :service_type. Lo que pagaste se ha devuelto.',
     ],
     'serviceCanceledByVendor' => [
         'title' => 'Servicio cancelado',

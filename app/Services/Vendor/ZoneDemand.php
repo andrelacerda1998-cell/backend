@@ -29,7 +29,10 @@ class ZoneDemand
      */
     public function recentRequestCount(Vendor $vendor): int
     {
-        $cities = $vendor->allowedZones()->pluck('city')->filter()->unique();
+        // As cidades que ele escolheu AGORA. Lia as zonas do inquérito antigo
+        // (allowed_zones), que a app deixou de gravar: quem se registou depois
+        // tinha sempre 0 e nunca via este aviso.
+        $cities = $vendor->availableCities()->pluck('name')->filter()->unique();
 
         if ($cities->isEmpty()) {
             return 0;

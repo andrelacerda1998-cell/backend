@@ -26,6 +26,12 @@ final class RankedVendor
         public readonly int $quotedAmountForVendor,
         public bool $isNewVendorSlot = false,
         public int $rank = 0,
+        /** Faltas nos últimos Vendor::DIAS_DAS_FALTAS_NO_RANKING dias. */
+        public readonly int $recentNoShows = 0,
+        /** Já atendeu este cliente, e correu bem. Entra na onda fora do ranking. */
+        public bool $isReturningVendor = false,
+        /** Convidado fora das cidades dele (recurso: não havia ninguém dentro). */
+        public bool $outsideArea = false,
     ) {
     }
 
@@ -40,11 +46,20 @@ final class RankedVendor
      *
      * Quem não tem avaliações fica atrás de todas as faixas. Não é um castigo
      * — é a razão de existir a vaga reservada, que os traz de volta.
+     *
+     * Cada falta recente faz descer UMA faixa, até à última. É a regra que o
+     * técnico vê na app: faltar custa posição, não dinheiro a mais.
      */
     public function sortKey(int $bandCount): array
     {
+        $faixa = $this->ratingBand ?? $bandCount + 1;
+
+        if ($this->recentNoShows > 0 && $faixa <= $bandCount) {
+            $faixa = min($bandCount, $faixa + $this->recentNoShows);
+        }
+
         return [
-            $this->ratingBand ?? $bandCount + 1,
+            $faixa,
             $this->quotedAmount,
             $this->distance,
         ];

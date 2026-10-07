@@ -8,7 +8,13 @@ use Illuminate\Foundation\Http\FormRequest;
 class SaveCitiesRequest extends FormRequest
 {
     /** Minimo de cidades onde o tecnico aceita trabalhar. */
-    public const MIN_AVAILABLE = 3;
+    /**
+     * Uma chega. Eram três, e quem só trabalha em Lisboa tinha de inventar
+     * mais duas — o que, além de mentir, enchia a densidade de técnicos por
+     * cidade com gente que lá não vai. Agora as cidades decidem os convites,
+     * e inventar uma é receber pedidos de onde não se quer ir.
+     */
+    public const MIN_AVAILABLE = 1;
 
     /** O top de maior interesse tem tamanho fixo. */
     public const PREFERRED_COUNT = 3;

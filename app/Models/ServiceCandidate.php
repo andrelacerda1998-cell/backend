@@ -25,6 +25,8 @@ class ServiceCandidate extends Model
         'quoted_amount_for_vendor',
         'quoted_distance',
         'is_new_vendor_slot',
+        'is_returning_vendor',
+        'is_outside_area',
         'notified_at',
         'responded_at',
         'expires_at',
@@ -33,6 +35,8 @@ class ServiceCandidate extends Model
     protected $casts = [
         'status' => CandidateStatus::class,
         'is_new_vendor_slot' => 'boolean',
+        'is_returning_vendor' => 'boolean',
+        'is_outside_area' => 'boolean',
         'quoted_distance' => 'decimal:2',
         'notified_at' => 'datetime',
         'responded_at' => 'datetime',

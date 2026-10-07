@@ -59,6 +59,10 @@ Schedule::command('vendors:remind-incomplete-profile')->dailyAt('10:00')->withou
 // dinheiro que o tecnico ainda nao recebeu (e uma fatura que o cliente nao tem).
 Schedule::command('services:notify-stuck-in-progress')->hourly()->withoutOverlapping();
 
+// Fecha e cobra os serviços concluídos há mais de 24h sem problema reportado.
+// Ver AutoCloseFinishedServicesCommand.
+Schedule::command('services:auto-close')->everyFifteenMinutes()->withoutOverlapping();
+
 // Nao-comparencia: agendamento que passou a hora e continua por iniciar (SCHEDULED).
 // Ao minuto porque as etapas sao a T+10/15/20min — de cinco em cinco minutos, o ops
 // so seria avisado bem depois. `withoutOverlapping` para nao duplicar envios.

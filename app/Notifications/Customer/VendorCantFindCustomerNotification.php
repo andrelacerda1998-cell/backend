@@ -9,17 +9,13 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\Expo\ExpoMessage;
 
 /**
- * O técnico concluiu.
+ * O técnico está à porta e não encontra o cliente.
  *
- * Diz ao cliente o que acontece a seguir: tem `Service::HORAS_ATE_FECHO_AUTOMATICO`
- * horas para reportar um problema; depois disso o serviço fecha sozinho. Antes
- * dizia só "o profissional diz ter terminado" — e o cliente não sabia que o
- * pagamento do técnico estava à espera dele.
- *
- * Abre o serviço (open_type 'service'), onde estão o "Confirmar" e o
- * "Reportar um problema".
+ * Muitas vezes é uma campainha que não toca ou um andar errado: avisar o
+ * cliente na hora resolve mais casos do que qualquer regra. Abre o serviço,
+ * onde estão o telefone e o chat do técnico.
  */
-class ServiceFinishedNotification extends Notification implements ShouldQueue
+class VendorCantFindCustomerNotification extends Notification implements ShouldQueue
 {
     use \App\Notifications\Concerns\RoutesExpoToPushQueue;
     use Queueable;
@@ -46,25 +42,18 @@ class ServiceFinishedNotification extends Notification implements ShouldQueue
     {
         [$title, $body] = $this->textos($notifiable);
 
-        return [
-            'title' => $title,
-            'body' => $body,
-            'open_type' => 'service',
-            'open_id' => $this->service->id,
-        ];
+        return ['title' => $title, 'body' => $body, 'open_type' => 'service', 'open_id' => $this->service->id];
     }
 
     /** @return array{0: string, 1: string} */
     private function textos($notifiable): array
     {
         $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
+        $nome = $this->service->loadMissing('vendor.user')->vendor?->user?->name ?? '';
 
         return [
-            __('notifications.finishedService.title', [], $language),
-            __('notifications.finishedService.description', [
-                'service_type' => $this->service->serviceType?->getTranslation('name', $language) ?? '',
-                'hours' => Service::HORAS_ATE_FECHO_AUTOMATICO,
-            ], $language),
+            __('notifications.vendorCantFindCustomer.title', [], $language),
+            __('notifications.vendorCantFindCustomer.description', ['vendor_name' => $nome], $language),
         ];
     }
 }
