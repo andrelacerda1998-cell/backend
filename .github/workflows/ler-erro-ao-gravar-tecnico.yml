@@ -1,0 +1,108 @@
+name: Ler o erro ao gravar um técnico no backoffice
+
+# Só por accionamento manual. Responde a UMA pergunta: porque é que gravar o
+# técnico 418 no backoffice dá "Server error" (06/10/2026), quando o 62 e o
+# 420 gravaram bem com o mesmo formulário.
+#
+# SÓ LEITURAS. Nada aqui escreve na base de dados, no índice ou na fila.
+#
+# SEM DADOS PESSOAIS NO RESULTADO: dos campos do técnico só sai "vazio?" e
+# "repetido noutra conta?"; nas mensagens de erro, emails e telefones são
+# mascarados antes de sair do servidor (o registo de uma violação de chave
+# única traz o valor em claro).
+on:
+  workflow_dispatch:
+
+# De propósito SEM o grupo `deploy-production`: é uma leitura, não deve
+# segurar o lugar a um deploy nem ficar atrás de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler o erro e os campos do técnico 418
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Traz o portão de aprovação manual: abrir uma sessão SSH à produção
+    # merece aprovação explícita, mesmo só para ler.
+    environment: production
+    steps:
+      - name: Ler no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Comando FIXO, e não um input: aceitar um comando por parâmetro
+          # transformava este botão numa shell remota para produção.
+          script: |
+            set -uo pipefail
+            cd ~/project-laravel
+            ART="docker compose exec -T laravel-prod php artisan"
+            MASCARA='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[email]/g; s/\+?351 ?[0-9]{9}/[telefone]/g; s/\b9[0-9]{8}\b/[telefone]/g'
+
+            echo "=============================================="
+            echo " 1. ÚLTIMOS ERROS NO REGISTO DO LARAVEL"
+            echo "=============================================="
+            docker compose exec -T laravel-prod sh -c '
+              f=$(ls -t storage/logs/*.log 2>/dev/null | head -1)
+              echo "ficheiro: $f"
+              grep -E "^\[[0-9-]+ [0-9:]+\] [a-z]+\.(ERROR|CRITICAL|EMERGENCY)" "$f" | tail -15 | cut -c1-700
+            ' | sed -E "$MASCARA" || echo "(não deu para ler o registo)"
+
+            echo
+            echo "=============================================="
+            echo " 2. ÚLTIMAS EXCEÇÕES NO TELESCOPE (48 h)"
+            echo "=============================================="
+            $ART tinker --execute='
+              if (! Illuminate\Support\Facades\Schema::hasTable("telescope_entries")) { echo "sem tabela do Telescope".PHP_EOL; return; }
+              $linhas = DB::table("telescope_entries")->where("type", "exception")
+                  ->where("created_at", ">=", now()->subHours(48))->orderByDesc("sequence")->limit(10)->get(["created_at", "content"]);
+              if ($linhas->isEmpty()) { echo "nenhuma exceção nas últimas 48 h".PHP_EOL; }
+              foreach ($linhas as $l) {
+                  $c = json_decode($l->content, true) ?: [];
+                  echo $l->created_at." | ".($c["class"] ?? "?")." | ".($c["file"] ?? "?").":".($c["line"] ?? "?").PHP_EOL;
+                  echo "   ".mb_substr((string) ($c["message"] ?? ""), 0, 500).PHP_EOL;
+              }
+            ' 2>&1 | sed -E "$MASCARA"
+
+            echo
+            echo "=============================================="
+            echo " 3. CAMPOS DO TÉCNICO 418 QUE O FORMULÁRIO GRAVA"
+            echo "    (só sim/não e contagens; 62 e 420 para comparar)"
+            echo "=============================================="
+            $ART tinker --execute='
+              $sn = fn ($b) => $b ? "SIM" : "não";
+              foreach ([418, 62, 420] as $id) {
+                  $v = App\Models\Vendor::withTrashed()->with(["user" => fn ($q) => $q->withTrashed()])->find($id);
+                  echo "--- técnico $id".PHP_EOL;
+                  if (! $v) { echo "   não existe".PHP_EOL; continue; }
+                  $u = $v->user;
+                  if (! $u) { echo "   SEM UTILIZADOR".PHP_EOL; continue; }
+                  $outros = fn (string $col, $val) => $val === null || $val === "" ? "-" : App\Models\User::withTrashed()->where($col, $val)->where("id", "!=", $u->id)->count();
+                  foreach ([
+                      "técnico apagado (soft)" => $sn($v->trashed()),
+                      "utilizador apagado (soft)" => $sn($u->trashed()),
+                      "first_name vazio" => $sn(blank($u->first_name)),
+                      "last_name vazio" => $sn(blank($u->last_name)),
+                      "date_birthday vazio" => $sn(blank($u->date_birthday)),
+                      "email vazio" => $sn(blank($u->email)),
+                      "outras contas com o mesmo email" => $outros("email", $u->email),
+                      "telefone vazio" => $sn(blank($u->phone_number)),
+                      "outras contas com o mesmo telefone" => $outros("phone_number", $u->phone_number),
+                      "nif vazio" => $sn(blank($u->nif)),
+                      "outras contas com o mesmo nif" => $outros("nif", $u->nif),
+                      "gender_id vazio" => $sn(blank($u->gender_id)),
+                      "gender existe" => $sn($u->gender_id && DB::table("genders")->where("id", $u->gender_id)->exists()),
+                      "username vazio" => $sn(blank($v->username)),
+                      "outros técnicos com o mesmo username" => blank($v->username) ? "-" : App\Models\Vendor::withTrashed()->where("username", $v->username)->where("id", "!=", $v->id)->count(),
+                      "company_name vazio" => $sn(blank($v->company_name)),
+                      "iban vazio" => $sn(blank($v->iban)),
+                      "price_rate (cêntimos)" => $v->getRawOriginal("price_rate"),
+                      "áreas de operação" => $v->operationAreas()->count(),
+                      "tem linha no índice de agendamento" => $sn(App\Models\VendorScheduleSearch::find($v->id) !== null),
+                  ] as $k => $val) {
+                      echo "   ".str_pad($k, 40)." = ".$val.PHP_EOL;
+                  }
+              }
+            ' 2>&1 | sed -E "$MASCARA"
