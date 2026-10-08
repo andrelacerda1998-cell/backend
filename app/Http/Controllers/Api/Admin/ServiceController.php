@@ -161,10 +161,18 @@ class ServiceController extends Controller
      */
     public function show(Service $service): ApiSuccessResponse
     {
-        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user', 'media', 'operationAreas']);
+        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user', 'media', 'operationAreas', 'paymentOrder']);
 
         return ApiSuccessResponse::make([
             ...$this->present($service),
+            /*
+             * Para resolver o pedido sem sair dele: o telefone do técnico (o do
+             * cliente já vem no present()) e o pagamento a que o pedido está
+             * ligado, que é o que o reembolso do backoffice precisa. Só no
+             * detalhe -- a listagem não tem de espalhar telefones.
+             */
+            'technician_phone' => $service->vendor?->user?->phone_number,
+            'payment_order_uuid' => $service->paymentOrder?->uuid,
             /*
              * As fotografias que o cliente anexou, com URL assinado.
              *
