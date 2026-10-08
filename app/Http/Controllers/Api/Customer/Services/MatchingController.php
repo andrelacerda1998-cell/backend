@@ -378,7 +378,10 @@ class MatchingController extends Controller
             $service->amount_for_vendor = $total['amount_for_vendor'];
             $service->original_amount = $total['original_amount'];
             $service->discount_amount = $total['discount_amount'];
-            $service->credit_used = $total['balance_total_used'];
+            // Cada parte da Carteira no seu campo: um cancelamento devolve cada uma
+            // à carteira de onde saiu (CarteiraDoCliente::devolver).
+            $service->credit_used = $total['balance_saldo_used'] ?? $total['balance_total_used'];
+            $service->referral_credit_used = $total['balance_convites_used'] ?? 0;
             $service->voucher_id = $voucher?->id;
             $service->payment_status = PaymentStatus::PENDING;
 

@@ -413,6 +413,9 @@ class ServicesResource extends Resource
                     TextEntry::make('credit_used')
                         ->label(__('backoffice/service.infolist.credit_used'))
                         ->money('EUR', 100),
+                    TextEntry::make('referral_credit_used')
+                        ->label(__('backoffice/service.infolist.referral_credit_used'))
+                        ->money('EUR', 100),
                     TextEntry::make('paymentOrder.uuid')
                         ->label(__('backoffice/service.infolist.payment_reference'))
                         ->copyable()

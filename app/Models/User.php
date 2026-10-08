@@ -21,6 +21,7 @@ use Bavix\Wallet\Interfaces\WalletFloat;
 use Bavix\Wallet\Traits\CanPay;
 use Bavix\Wallet\Traits\HasWallet;
 use Bavix\Wallet\Traits\HasWalletFloat;
+use Bavix\Wallet\Traits\HasWallets;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
@@ -52,7 +53,9 @@ use Tymon\JWTAuth\Contracts\JWTSubject;
 #[ObservedBy(UserObserver::class)]
 class User extends Authenticatable implements Auditable, ContractCanResetPassword, Customer, FilamentUser, HasAvatar, HasLocalePreference, HasMedia, JWTSubject, Wallet, WalletFloat
 {
-    use CanPay, HasWallet, HasWalletFloat, PayShopCustomer;
+    // HasWallets: a segunda carteira do cliente, a dos convites (ver
+    // App\Services\Carteira\CarteiraDoCliente). A `default` continua a ser o Saldo.
+    use CanPay, HasWallet, HasWalletFloat, HasWallets, PayShopCustomer;
     use CanResetPassword, HasFactory, HasRoles, InteractsWithMedia, Notifiable,
         \OwenIt\Auditing\Auditable, SoftDeletes, TwoFactorAuthenticatable;
 

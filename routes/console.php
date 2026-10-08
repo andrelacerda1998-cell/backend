@@ -76,3 +76,6 @@ Schedule::command('vendors:expirar-online')->everyFifteenMinutes()->withoutOverl
 
 Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
 
+
+// Crédito de convites fora de prazo volta à Piquet (CarteiraDoCliente::expirar).
+Schedule::command('carteira:expirar')->dailyAt('03:40')->withoutOverlapping();

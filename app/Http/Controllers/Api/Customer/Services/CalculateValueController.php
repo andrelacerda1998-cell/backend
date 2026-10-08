@@ -81,6 +81,10 @@ class CalculateValueController extends Controller
                     'balance_after_payment_formated' => '0.00',
                     'balance_total_used' => 0,
                     'balance_total_used_formated' => '0.00',
+                    'balance_saldo' => 0,
+                    'balance_convites' => 0,
+                    'balance_saldo_used' => 0,
+                    'balance_convites_used' => 0,
                 ]);
             }
 

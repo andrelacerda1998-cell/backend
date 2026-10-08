@@ -2,6 +2,7 @@
 
 namespace App\Trait\Services;
 
+use App\Services\Carteira\CarteiraDoCliente;
 use App\DTO\Services\AddressCoordinatesDTO;
 use App\Exceptions\Api\Customer\CustomerCantRequestServices;
 use App\Exceptions\Api\Customer\CustomerDontHaveMainAddress;
@@ -188,6 +189,10 @@ trait CalculateServicePriceForCustomer
             'balance_after_payment_formated' => '0.00',
             'balance_total_used' => 0,
             'balance_total_used_formated' => '0.00',
+            'balance_saldo' => 0,
+            'balance_convites' => 0,
+            'balance_saldo_used' => 0,
+            'balance_convites_used' => 0,
         ];
     }
 
@@ -353,25 +358,28 @@ trait CalculateServicePriceForCustomer
             $amount = $originalAmount - $discountAmount;
         }
 
+        // A Carteira: Saldo (reembolsos) + Crédito de convites. Paga-se primeiro
+        // com os convites, que expiram (ver CarteiraDoCliente). `balance` e
+        // `balance_total_used` continuam a ser o TOTAL das duas, para a app que
+        // já está nas lojas ler o mesmo que lia; as partes vão ao lado.
+        $saldoDisponivel = 0;
+        $convitesDisponivel = 0;
+        $usoSaldo = 0;
+        $usoConvites = 0;
+
         if (! $isGuest) {
-            $balance = $customer->balance_int;
+            $carteira = app(CarteiraDoCliente::class);
+            $saldoDisponivel = $carteira->saldoDisponivel($customer);
+            $convitesDisponivel = $carteira->convitesDisponivel($customer);
 
-            $balance_after_payment = ($customer->balance - $amount);
-            if ($balance_after_payment < 0) {
-                $balance_after_payment = 0;
-            }
-        } else {
-            $balance = 0;
-            $balance_after_payment = 0;
+            $usoConvites = min($convitesDisponivel, max(0, $amount));
+            $usoSaldo = min($saldoDisponivel, max(0, $amount - $usoConvites));
         }
 
-        $valueForPayment = $amount - $balance;
-
-        if ($valueForPayment <= 0) {
-            $valueForPayment = 0;
-        }
-
-        $balance_total_used = $balance - $balance_after_payment;
+        $balance = $saldoDisponivel + $convitesDisponivel;
+        $balance_total_used = $usoSaldo + $usoConvites;
+        $balance_after_payment = $balance - $balance_total_used;
+        $valueForPayment = max(0, $amount - $balance_total_used);
 
         return [
             'amount' => $amount,
@@ -396,6 +404,10 @@ trait CalculateServicePriceForCustomer
             'balance_after_payment_formated' => number_format($balance_after_payment / 100, 2, '.', ' '),
             'balance_total_used' => $balance_total_used,
             'balance_total_used_formated' => number_format($balance_total_used / 100, 2, '.', ' '),
+            'balance_saldo' => $saldoDisponivel,
+            'balance_convites' => $convitesDisponivel,
+            'balance_saldo_used' => $usoSaldo,
+            'balance_convites_used' => $usoConvites,
         ];
     }
 }
