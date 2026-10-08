@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Admin\FeeSettingsController;
 use App\Http\Controllers\Api\Admin\NotificationCampaignController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\SentNotificationController;
+use App\Http\Controllers\Api\Admin\OperacoesAoVivoController;
 use App\Http\Controllers\Api\Admin\ServiceController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
 use App\Http\Controllers\Api\Admin\SmsCodeController;
@@ -77,6 +78,8 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/notification-campaigns', [NotificationCampaignController::class, 'index']);
     Route::put('/notification-campaigns/{campaign}/active', [NotificationCampaignController::class, 'setActive']);
 
+    // O estado do marketplace agora: pedidos, oferta e liquidez (backoffice › Operações ao vivo).
+    Route::get('/operacoes/ao-vivo', OperacoesAoVivoController::class);
     Route::get('/services', [ServiceController::class, 'index']);
     Route::get('/services/{service}', [ServiceController::class, 'show']);
 
