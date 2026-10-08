@@ -10,6 +10,7 @@ use App\Models\Service;
 use App\Models\VoucherUsage;
 use App\Services\Carteira\CarteiraDoCliente;
 use App\Services\Carteira\Convites;
+use App\Services\Operacoes\RegistoDeEventos;
 use RwInteractive\PayshopSdk\Enums\Payment\Status as PaymentOrderStatus;
 
 class ServiceObserver
@@ -138,8 +139,29 @@ class ServiceObserver
         app(Convites::class)->aoAnularServico($service);
     }
 
+    /** O primeiro passo do histórico (ver RegistoDeEventos). */
+    public function created(Service $service): void
+    {
+        RegistoDeEventos::registar($service->id, RegistoDeEventos::CRIADO, null, $this->estado($service->status));
+    }
+
     public function updated(Service $service): void
     {
+        // O histórico: de onde para onde, e quando o técnico saiu a caminho.
+        // Em `updated` o original ainda é o de antes (o sync é depois).
+        if ($service->wasChanged('status')) {
+            RegistoDeEventos::registar(
+                $service->id,
+                RegistoDeEventos::ESTADO,
+                $this->estado($service->getOriginal('status')),
+                $this->estado($service->status),
+                $service->vendor_id,
+            );
+        }
+        if ($service->wasChanged('on_the_way_at') && $service->on_the_way_at) {
+            RegistoDeEventos::registar($service->id, RegistoDeEventos::A_CAMINHO, null, null, $service->vendor_id);
+        }
+
         if ($service->isDirty('status')) {
             if ($service->status === ServiceStatus::CLOSED && ! $service->is_test) {
                 CreateInvoiceJob::dispatch($service)->delay(now()->addSeconds(30));
@@ -175,5 +197,10 @@ class ServiceObserver
                 report($e);
             }
         }
+    }
+
+    private function estado(mixed $estado): ?string
+    {
+        return $estado instanceof ServiceStatus ? $estado->value : ($estado !== null ? (string) $estado : null);
     }
 }
