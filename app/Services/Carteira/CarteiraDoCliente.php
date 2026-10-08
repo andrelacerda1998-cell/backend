@@ -57,16 +57,33 @@ class CarteiraDoCliente
      * diária o recolher, e não pode ser gasto entretanto. Limitado ao saldo
      * real da carteira, por segurança: nunca se promete gastar o que lá não está.
      */
-    public function convitesDisponivel(User $user): int
+    public function convitesDisponivel(User $user, ?int $valorDoServico = null): int
     {
         $carteira = $this->carteiraConvites($user);
         if (! $carteira) {
             return 0;
         }
 
-        $porPrazo = (int) WalletCredit::where('user_id', $user->id)->usable()->sum('remaining');
+        $porPrazo = (int) $this->creditosQueServem($user, $valorDoServico)->sum('remaining');
 
         return max(0, min($porPrazo, (int) $carteira->balanceInt));
+    }
+
+    /**
+     * Os créditos que se podem gastar. Num pagamento (`$valorDoServico`
+     * preenchido), o crédito de boas-vindas de um convite só conta num serviço
+     * de 30 € ou mais e enquanto o cliente não tiver nenhum serviço pago (regra
+     * em Convites). Sem valor — o ecrã da Carteira — contam todos.
+     */
+    private function creditosQueServem(User $user, ?int $valorDoServico)
+    {
+        $query = WalletCredit::where('user_id', $user->id)->usable();
+
+        if ($valorDoServico !== null && ! app(Convites::class)->creditoDoAmigoServe($user, $valorDoServico)) {
+            $query->where('reason', '!=', Convites::MOTIVO_AMIGO);
+        }
+
+        return $query;
     }
 
     /** O Saldo (reembolsos), em cêntimos. */
@@ -83,7 +100,7 @@ class CarteiraDoCliente
     public function repartir(User $user, int $valor): array
     {
         $valor = max(0, $valor);
-        $convites = min($this->convitesDisponivel($user), $valor);
+        $convites = min($this->convitesDisponivel($user, $valor), $valor);
         $saldo = min($this->saldoDisponivel($user), $valor - $convites);
 
         return ['convites' => $convites, 'saldo' => $saldo];
@@ -100,8 +117,7 @@ class CarteiraDoCliente
         }
 
         DB::transaction(function () use ($user, $service, $valor) {
-            $creditos = WalletCredit::where('user_id', $user->id)
-                ->usable()
+            $creditos = $this->creditosQueServem($user, (int) $service->amount)
                 ->orderBy('expires_at')
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -264,32 +280,49 @@ class CarteiraDoCliente
             ->orderBy('id')
             ->chunkById(100, function ($lote) use (&$creditos, &$valor, $agora) {
                 foreach ($lote as $credito) {
-                    DB::transaction(function () use ($credito, &$creditos, &$valor, $agora) {
-                        $credito = WalletCredit::whereKey($credito->id)->lockForUpdate()->first();
-                        if (! $credito || $credito->expired_at) {
-                            return;
-                        }
-
-                        $sobra = (int) $credito->remaining;
-                        $carteira = $sobra > 0 ? $this->carteiraConvites($credito->user) : null;
-                        // Nunca mais do que a carteira tem: se alguém mexeu nela
-                        // à mão no backoffice, recolhe-se o que houver.
-                        $aRecolher = $carteira ? min($sobra, max(0, (int) $carteira->balanceInt)) : 0;
-
-                        if ($aRecolher > 0) {
-                            $carteira->transfer(system_wallet(), $aRecolher, [
-                                'type' => 'referral_credit_expired',
-                                'wallet_credit_id' => $credito->id,
-                            ]);
-                        }
-
-                        $credito->update(['remaining' => 0, 'expired_at' => $agora]);
+                    $recolhido = $this->recolher($credito, $agora);
+                    if ($recolhido !== null) {
                         $creditos++;
-                        $valor += $aRecolher;
-                    });
+                        $valor += $recolhido;
+                    }
                 }
             });
 
         return ['creditos' => $creditos, 'valor' => $valor];
+    }
+
+    /**
+     * Fecha um crédito: o que sobra volta à carteira do sistema. Usado quando
+     * o prazo passa e quando um convite é anulado.
+     *
+     * @return int|null cêntimos recolhidos, ou null se o crédito já estava fechado
+     */
+    public function recolher(WalletCredit $credito, ?Carbon $agora = null): ?int
+    {
+        $agora ??= now();
+
+        return DB::transaction(function () use ($credito, $agora) {
+            $credito = WalletCredit::whereKey($credito->id)->lockForUpdate()->first();
+            if (! $credito || $credito->expired_at) {
+                return null;
+            }
+
+            $sobra = (int) $credito->remaining;
+            $carteira = $sobra > 0 ? $this->carteiraConvites($credito->user) : null;
+            // Nunca mais do que a carteira tem: se alguém mexeu nela à mão no
+            // backoffice, recolhe-se o que houver.
+            $aRecolher = $carteira ? min($sobra, max(0, (int) $carteira->balanceInt)) : 0;
+
+            if ($aRecolher > 0) {
+                $carteira->transfer(system_wallet(), $aRecolher, [
+                    'type' => 'referral_credit_expired',
+                    'wallet_credit_id' => $credito->id,
+                ]);
+            }
+
+            $credito->update(['remaining' => 0, 'expired_at' => $agora]);
+
+            return $aRecolher;
+        });
     }
 }

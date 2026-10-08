@@ -6,7 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\ServicesType;
+use App\Http\Controllers\Api\Customer\Wallet\ReferralController;
 use App\Models\Voucher;
+use App\Services\Carteira\ConviteRecusado;
+use App\Services\Carteira\Convites;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -25,6 +28,31 @@ class ValidateVoucherController extends Controller
         $isScheduled = $request->get('is_scheduled', false);
 
         $voucher = Voucher::where('name', $voucherName)->first();
+
+        // Não é um cupão, mas pode ser um código de convite: o amigo escreve-o no
+        // mesmo campo. Aplica-se (5 € para a Carteira) e responde-se SEM voucher,
+        // para a app não o tratar como desconto — o crédito entra no total pela
+        // Carteira quando o checkout recalcular.
+        if (! $voucher && ($convites = app(Convites::class))->encontrarCodigo($voucherName)) {
+            try {
+                $convite = $convites->aplicar(auth()->user(), $voucherName);
+            } catch (ConviteRecusado $e) {
+                return new ApiErrorResponse(
+                    ValidationException::withMessages(['voucher_name' => $e->getMessage()]),
+                    $e->getMessage(),
+                    422
+                );
+            }
+
+            return new ApiSuccessResponse([
+                'voucher' => null,
+                'referral' => [
+                    'id' => $convite->id,
+                    'credit' => Convites::VALOR,
+                    'message' => ReferralController::mensagemAplicado(),
+                ],
+            ]);
+        }
 
         if (!$voucher) {
             return new ApiErrorResponse(

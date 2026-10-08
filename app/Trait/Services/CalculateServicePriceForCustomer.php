@@ -370,7 +370,9 @@ trait CalculateServicePriceForCustomer
         if (! $isGuest) {
             $carteira = app(CarteiraDoCliente::class);
             $saldoDisponivel = $carteira->saldoDisponivel($customer);
-            $convitesDisponivel = $carteira->convitesDisponivel($customer);
+            // Com o valor do serviço: o crédito de boas-vindas de um convite só
+            // serve em serviços de 30 € ou mais (Convites::creditoDoAmigoServe).
+            $convitesDisponivel = $carteira->convitesDisponivel($customer, $amount);
 
             $usoConvites = min($convitesDisponivel, max(0, $amount));
             $usoSaldo = min($saldoDisponivel, max(0, $amount - $usoConvites));

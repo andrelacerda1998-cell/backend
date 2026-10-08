@@ -207,6 +207,10 @@ return [
         'title' => 'Serviço aceite',
         'description' => 'O profissional aceitou a tua proposta para o serviço do tipo: ',
     ],
+    'conviteRecompensa' => [
+        'title' => 'Ganhaste :valor € 🎉',
+        'description' => ':amigo fez o primeiro serviço na Piquet. Tens :valor € na tua Carteira, válidos :meses meses.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Serviço fechado',
         'description' => 'Passaram :hours horas sem nenhum problema reportado, por isso fechámos o teu serviço de :service_type. Conta-nos como correu.',
