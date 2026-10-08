@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Carteira\CarteiraDoCliente;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
@@ -97,8 +98,8 @@ class ExpirePending3dsCommand extends Command
 
             // Não confirmado após o timeout → expirar. Reembolso LOCAL apenas (sem Payshop):
             // a carteira (se foi usada no checkout) e o voucher. O card nunca foi capturado.
-            if ($locked->credit_used > 0) {
-                $locked->customer->deposit($locked->credit_used, [
+            if ($locked->credit_used > 0 || $locked->referral_credit_used > 0) {
+                app(CarteiraDoCliente::class)->devolver($locked, $locked->customer, [
                     'description' => 'internal/services.refunds.refused',
                     'type' => 'internal/services.transactions_type.refund',
                     'class' => 'App\\Models\\User',

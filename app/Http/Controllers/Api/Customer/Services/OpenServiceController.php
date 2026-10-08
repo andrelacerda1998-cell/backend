@@ -233,7 +233,10 @@ class OpenServiceController extends Controller
         $service->discount_amount = $total['discount_amount'];
         $service->voucher_id = $voucher?->id;
         $service->payment_status = PaymentStatus::PENDING;
-        $service->credit_used = $total['balance_total_used'];
+        // Cada parte da Carteira no seu campo: um cancelamento devolve cada uma
+        // à carteira de onde saiu (CarteiraDoCliente::devolver).
+        $service->credit_used = $total['balance_saldo_used'] ?? $total['balance_total_used'];
+        $service->referral_credit_used = $total['balance_convites_used'] ?? 0;
 
         // Invariante financeira: a plataforma nunca pode cobrar ao cliente menos do que paga
         // ao profissional (comissão negativa). O cálculo acima já garante isto, mas esta guarda

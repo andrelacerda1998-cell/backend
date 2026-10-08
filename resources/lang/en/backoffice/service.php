@@ -91,6 +91,7 @@ return [
         'amount_without_vat' => 'Amount Without VAT',
         'amount_for_vendor' => 'Amount for vendor',
         'credit_used' => 'Credit used',
+        'referral_credit_used' => 'Referral credit used',
         'invoice_id' => 'Invoice',
         'invoice_created' => 'Invoice created',
         'invoice_not_created' => 'Invoice not created yet',

@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\Customer\Services\RequestServiceController;
 use App\Http\Controllers\Api\Customer\Services\ServiceExtrasController;
 use App\Http\Controllers\Api\Customer\Services\ServicesHistoryController;
 use App\Http\Controllers\Api\Customer\Vouchers\ValidateVoucherController;
+use App\Http\Controllers\Api\Customer\Wallet\GetWalletController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], function () {
@@ -132,6 +133,9 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
         Route::get('/details/{schedule}', [ScheduleController::class, 'getScheduleData']);
         Route::post('/{schedule}/cancel', CancelScheduleController::class);
     });
+
+    // A Carteira: Saldo + Crédito de convites, e os movimentos.
+    Route::get('/wallet', GetWalletController::class);
 
     Route::group(['prefix' => 'vouchers'], function () {
         Route::post('/validate', ValidateVoucherController::class);

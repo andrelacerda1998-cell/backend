@@ -7,6 +7,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
+use App\Services\Carteira\CarteiraDoCliente;
 use RwInteractive\PayshopSdk\Api\Payments\WalletPayment;
 use RwInteractive\PayshopSdk\Enums\Payment\OperationType;
 use RwInteractive\PayshopSdk\Enums\Payment\Wallet;
@@ -26,9 +27,7 @@ trait ProcessesServicePayment
     {
         $validationUrl = null;
 
-        if ($total['balance'] > 0) {
-            $customer->withdraw($total['balance_total_used']);
-        }
+        $this->debitarCarteira($customer, $service, $total);
 
         if ($total['value_for_payment'] > 0) {
             $paymentOrder = null;
@@ -107,9 +106,7 @@ trait ProcessesServicePayment
     ): ?string {
         $validationUrl = null;
 
-        if ($total['balance'] > 0) {
-            $customer->withdraw($total['balance_total_used']);
-        }
+        $this->debitarCarteira($customer, $service, $total);
 
         if ($total['value_for_payment'] > 0) {
             $paymentOrder = null;
@@ -178,9 +175,7 @@ trait ProcessesServicePayment
     {
         $validationUrl = null;
 
-        if ($total['balance'] > 0) {
-            $customer->withdraw($total['balance_total_used']);
-        }
+        $this->debitarCarteira($customer, $service, $total);
 
         if ($total['value_for_payment'] > 0) {
 
@@ -205,5 +200,28 @@ trait ProcessesServicePayment
         $service->save();
 
         return 'check bank app';
+    }
+
+    /**
+     * Tira da Carteira o que o cálculo decidiu usar: o Saldo pelo caminho de
+     * sempre (`withdraw` na carteira `default`) e o crédito de convites pela
+     * CarteiraDoCliente, que regista de que crédito saiu cada cêntimo.
+     *
+     * Um `$total` sem as partes (cálculos antigos) é todo Saldo — exatamente o
+     * que acontecia antes.
+     */
+    private function debitarCarteira($customer, $service, array $total): void
+    {
+        $convites = (int) ($total['balance_convites_used'] ?? 0);
+        $saldo = (int) ($total['balance_saldo_used'] ?? (($total['balance_total_used'] ?? 0) - $convites));
+
+        if ($saldo > 0) {
+            // O meta é o que deixa a app mostrar "Usado: <serviço>" nos movimentos.
+            $customer->withdraw($saldo, ['type' => 'service_payment', 'service_id' => $service->id]);
+        }
+
+        if ($convites > 0) {
+            app(CarteiraDoCliente::class)->debitarConvites($customer, $service, $convites);
+        }
     }
 }

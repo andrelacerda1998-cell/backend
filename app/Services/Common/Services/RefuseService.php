@@ -2,6 +2,7 @@
 
 namespace App\Services\Common\Services;
 
+use App\Services\Carteira\CarteiraDoCliente;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
@@ -56,8 +57,8 @@ class RefuseService
                         Log::warning($e);
                     }
                 }
-                if ($this->service->credit_used>0){
-                    $customer->deposit($this->service->credit_used, [
+                if ($this->service->credit_used > 0 || $this->service->referral_credit_used > 0) {
+                    app(CarteiraDoCliente::class)->devolver($this->service, $customer, [
                         "description" => 'internal/services.refunds.refused',
                         "type" => 'internal/services.transactions_type.refund',
                         "class" => "App\\Models\\User",

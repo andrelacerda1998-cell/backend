@@ -57,6 +57,7 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         'customer_notes',
         'vendor_notes',
         'credit_used',
+        'referral_credit_used',
         'invoice_id',
         'pending_schedule_data',
         'voucher_id',

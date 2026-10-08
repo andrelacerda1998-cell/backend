@@ -8,6 +8,7 @@ use App\Events\Customer\ProfileCompletionNeeded;
 use App\Jobs\Services\CreateInvoiceJob;
 use App\Models\Service;
 use App\Models\VoucherUsage;
+use App\Services\Carteira\CarteiraDoCliente;
 use App\Services\Operacoes\RegistoDeEventos;
 use RwInteractive\PayshopSdk\Enums\Payment\Status as PaymentOrderStatus;
 
@@ -105,10 +106,14 @@ class ServiceObserver
         // Idempotência (defesa em profundidade contra a corrida job-vs-poll): não reembolsar o
         // credit_used se este serviço já estava REFUNDED na BD quando foi carregado — evita um
         // 2º crédito numa segunda save sobre uma instância stale.
-        if ($service->credit_used > 0
+        // As duas partes da Carteira: o Saldo volta ao Saldo e o crédito de
+        // convites volta aos convites (CarteiraDoCliente::devolver).
+        $usouCarteira = $service->credit_used > 0 || $service->referral_credit_used > 0;
+
+        if ($usouCarteira
             && $service->getRawOriginal('payment_status') !== PaymentStatus::REFUNDED->value) {
             $customer = $service->customer;
-            $customer->deposit($service->credit_used, [
+            app(CarteiraDoCliente::class)->devolver($service, $customer, [
                 'description' => 'internal/services.refunds.refused',
                 'type' => 'internal/services.transactions_type.refund',
                 'class' => 'App\\Models\\User',
@@ -119,7 +124,7 @@ class ServiceObserver
 
         if (
             $service->payment_status === PaymentStatus::PAID ||
-            ($service->payment_status !== PaymentStatus::REFUNDED && $service->credit_used > 0)
+            ($service->payment_status !== PaymentStatus::REFUNDED && $usouCarteira)
         ) {
             $service->payment_status = PaymentStatus::REFUNDED;
         }

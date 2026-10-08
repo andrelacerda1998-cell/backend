@@ -91,6 +91,7 @@ return [
         'amount_without_vat' => 'Valor S/IVA',
         'amount_for_vendor' => 'Valor para o profissional',
         'credit_used' => 'Crédito utilizado',
+        'referral_credit_used' => 'Crédito de convites utilizado',
         'invoice_id' => 'Fatura',
         'invoice_created' => 'Fatura criada',
         'invoice_not_created' => 'Fatura não criada',
