@@ -189,6 +189,10 @@ return [
         'title' => 'Service accepted',
         'description' => 'The professional accepted your proposal for the service of type: ',
     ],
+    'conviteRecompensa' => [
+        'title' => 'You earned :valor € 🎉',
+        'description' => ':amigo completed their first service with Piquet. You have :valor € in your Wallet, valid for :meses months.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Service closed',
         'description' => ':hours hours went by with no problem reported, so we closed your :service_type service. Tell us how it went.',

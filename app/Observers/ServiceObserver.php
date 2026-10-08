@@ -9,6 +9,7 @@ use App\Jobs\Services\CreateInvoiceJob;
 use App\Models\Service;
 use App\Models\VoucherUsage;
 use App\Services\Carteira\CarteiraDoCliente;
+use App\Services\Carteira\Convites;
 use RwInteractive\PayshopSdk\Enums\Payment\Status as PaymentOrderStatus;
 
 class ServiceObserver
@@ -131,6 +132,10 @@ class ServiceObserver
         // Release any single-use voucher applied to this service, so a canceled/failed/expired
         // request does not permanently consume the customer's voucher.
         VoucherUsage::where('service_id', $service->id)->delete();
+
+        // Se era o serviço que valeu um convite (fechado e agora anulado), o
+        // convite deixa de valer e quem convidou perde o que não gastou.
+        app(Convites::class)->aoAnularServico($service);
     }
 
     public function updated(Service $service): void
@@ -138,6 +143,9 @@ class ServiceObserver
         if ($service->isDirty('status')) {
             if ($service->status === ServiceStatus::CLOSED && ! $service->is_test) {
                 CreateInvoiceJob::dispatch($service)->delay(now()->addSeconds(30));
+
+                // Primeiro serviço pago de um amigo convidado: 5 € para quem convidou.
+                app(Convites::class)->aoFecharServico($service);
 
                 $service->loadMissing('customer');
                 $customer = $service->customer;

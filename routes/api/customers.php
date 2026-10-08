@@ -35,6 +35,7 @@ use App\Http\Controllers\Api\Customer\Services\ServiceExtrasController;
 use App\Http\Controllers\Api\Customer\Services\ServicesHistoryController;
 use App\Http\Controllers\Api\Customer\Vouchers\ValidateVoucherController;
 use App\Http\Controllers\Api\Customer\Wallet\GetWalletController;
+use App\Http\Controllers\Api\Customer\Wallet\ReferralController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], function () {
@@ -136,6 +137,9 @@ Route::group(['prefix' => 'customer', 'middleware' => ['auth:api', 'locale']], f
 
     // A Carteira: Saldo + Crédito de convites, e os movimentos.
     Route::get('/wallet', GetWalletController::class);
+    Route::get('/referral', [ReferralController::class, 'show']);
+    // Limitado: é por aqui que se tentaria adivinhar códigos.
+    Route::post('/referral/apply', [ReferralController::class, 'apply'])->middleware('throttle:10,1');
 
     Route::group(['prefix' => 'vouchers'], function () {
         Route::post('/validate', ValidateVoucherController::class);

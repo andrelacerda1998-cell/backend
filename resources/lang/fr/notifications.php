@@ -192,6 +192,10 @@ return [
         'title' => 'Intervention acceptée',
         'description' => 'Le pro a accepté ta proposition pour l\'intervention du type : ',
     ],
+    'conviteRecompensa' => [
+        'title' => 'Tu as gagné :valor € 🎉',
+        'description' => ':amigo a fait sa première intervention avec Piquet. Tu as :valor € dans ton Portefeuille, valables :meses mois.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Service clôturé',
         'description' => ':hours heures se sont écoulées sans problème signalé, nous avons donc clôturé votre service :service_type. Dites-nous comment cela s’est passé.',

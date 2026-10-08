@@ -184,6 +184,10 @@ return [
         'title' => 'Auftrag angenommen',
         'description' => 'Die Fachkraft hat dein Angebot angenommen: ',
     ],
+    'conviteRecompensa' => [
+        'title' => 'Du hast :valor € verdient 🎉',
+        'description' => ':amigo hat den ersten Auftrag bei Piquet abgeschlossen. Du hast :valor € in deiner Wallet, gültig :meses Monate.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Service abgeschlossen',
         'description' => ':hours Stunden sind ohne gemeldetes Problem vergangen, deshalb haben wir deinen Service :service_type abgeschlossen. Erzähl uns, wie es war.',

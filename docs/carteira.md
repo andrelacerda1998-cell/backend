@@ -34,8 +34,32 @@ Tudo passa por `App\Services\Carteira\CarteiraDoCliente`.
 - o total, as duas partes e `convites_a_expirar`;
 - os movimentos das duas carteiras numa só lista paginada, com o texto pronto no idioma do cliente (`resources/lang/*/carteira.php`).
 
+## Convites (5 € + 5 €)
+Regras em `App\Services\Carteira\Convites`. As constantes estão no topo da classe.
+
+**O amigo:**
+- Põe o código em `POST /customer/referral/apply` ou no campo do cupão do checkout. O `ValidateVoucherController` reconhece o código e responde `voucher: null` com `referral`.
+- Recebe 5 € (`convite_convidado`), válidos 60 dias.
+- Esse crédito só se gasta num serviço de 30 € ou mais e enquanto não tiver nenhum serviço fechado (`creditoDoAmigoServe`, aplicado pela `CarteiraDoCliente` quando há valor de serviço).
+
+**Recusas:**
+- o próprio código, ou o mesmo telemóvel do dono do código;
+- quem já usou um código;
+- quem já pagou um serviço, mesmo que noutra conta com o mesmo telemóvel;
+- código de quem nunca pagou um serviço;
+- dono do código com 10 recompensas nos últimos 12 meses.
+
+**Quem convidou:**
+- Quando o amigo fecha um serviço com `original_amount` ≥ 30 € (`ServiceObserver::updated` → `aoFecharServico`), recebe 5 € (`convite_convidante`), válidos 6 meses, e um push (`ConviteRecompensaNotification`, `open_type: wallet`).
+- Se já tiver o limite do ano, o convite fica `sem_recompensa`.
+
+**Anulação:**
+- Primeiro serviço do amigo cancelado depois de fechado (`aoAnularServico`): o convite é anulado e o crédito por gastar de quem convidou volta à Piquet.
+- No backoffice, **Convites → Anular** (super-admin) recolhe os créditos por gastar das duas pontas.
+
+**Endpoints:** `GET /customer/referral` devolve o código, se pode convidar, os contadores e as recompensas que restam no ano.
+
 ## Por fazer (fases seguintes)
-- Convites: códigos, regras e a recompensa, que chama `creditarConvites`.
 - Aviso uma semana antes de o crédito expirar.
 - Ecrã Carteira na app.
 - No backoffice, as duas carteiras na ficha do cliente. Hoje o `WalletRelationManager` só mostra a `default`.
