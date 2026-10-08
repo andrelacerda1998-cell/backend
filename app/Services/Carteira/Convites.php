@@ -191,6 +191,45 @@ class Convites
     }
 
     /**
+     * Verificação para quem ainda não tem conta (checkout sem sessão): o código
+     * existe e pode ser usado? Não aplica nada — o convite só se cria quando a
+     * conta existe (guest/register). Com o telemóvel, já recusa quem com esse
+     * número já pagou um serviço, para não prometer 5 € que depois não vêm.
+     */
+    public function verificarSemConta(string $codigo, ?string $telefone = null): ReferralCode
+    {
+        $codigoDoDono = $this->encontrarCodigo($codigo);
+        if (! $codigoDoDono || ! $codigoDoDono->user) {
+            throw new ConviteRecusado('nao_existe');
+        }
+
+        $quemConvida = $codigoDoDono->user;
+        if (! $this->jaPagou($quemConvida)) {
+            throw new ConviteRecusado('dono_sem_servicos');
+        }
+        if ($this->recompensasNoAno($quemConvida) >= self::LIMITE_POR_ANO) {
+            throw new ConviteRecusado('limite');
+        }
+
+        if (filled($telefone)) {
+            if ($telefone === $quemConvida->phone_number) {
+                throw new ConviteRecusado('proprio');
+            }
+            $contas = User::withTrashed()->where('phone_number', $telefone)->get();
+            foreach ($contas as $conta) {
+                if ($this->jaPagou($conta)) {
+                    throw new ConviteRecusado('nao_e_novo');
+                }
+                if (Referral::where('referred_user_id', $conta->id)->exists()) {
+                    throw new ConviteRecusado('ja_usou');
+                }
+            }
+        }
+
+        return $codigoDoDono;
+    }
+
+    /**
      * O crédito de boas-vindas do amigo só se gasta num serviço de 30 € ou mais,
      * e só enquanto ele não tiver nenhum serviço pago. Chamado pela
      * CarteiraDoCliente para decidir que créditos contam num pagamento.

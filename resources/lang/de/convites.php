@@ -11,5 +11,6 @@ return [
         'limite' => 'Dieser Code ist in diesem Jahr nicht mehr verfügbar.',
     ],
     'aplicado' => 'Empfehlungscode angewendet: Du hast :valor € in deiner Wallet für einen Auftrag ab :minimo €.',
+    'pendente' => 'Gültiger Empfehlungscode: Die :valor € kommen in deine Wallet, sobald du deine Telefonnummer bestätigst.',
     'um_amigo' => 'Ein Freund',
 ];

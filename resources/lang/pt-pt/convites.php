@@ -11,5 +11,6 @@ return [
         'limite' => 'Este código já não está disponível este ano.',
     ],
     'aplicado' => 'Código de convite aplicado: tens :valor € na tua Carteira para um serviço de :minimo € ou mais.',
+    'pendente' => 'Código de convite válido: os :valor € entram na tua Carteira quando confirmares o telemóvel.',
     'um_amigo' => 'Um amigo',
 ];

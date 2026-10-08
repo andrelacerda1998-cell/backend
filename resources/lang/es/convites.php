@@ -11,5 +11,6 @@ return [
         'limite' => 'Este código ya no está disponible este año.',
     ],
     'aplicado' => 'Código de invitación aplicado: tienes :valor € en tu Cartera para un servicio de :minimo € o más.',
+    'pendente' => 'Código de invitación válido: los :valor € entran en tu Cartera cuando confirmes el móvil.',
     'um_amigo' => 'Un amigo',
 ];
