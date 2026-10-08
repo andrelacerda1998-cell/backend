@@ -43,7 +43,7 @@ class Convites
 
     public const MOTIVO_QUEM_CONVIDA = 'convite_convidante';
 
-    /** Sem letras que se confundem a ditar ou a ler (O/0, I/1/L). */
+    /** Parte ao acaso: sem letras que se confundem a ditar ou a ler (O/0, I/1/L). */
     private const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
     public function __construct(private readonly CarteiraDoCliente $carteira) {}
@@ -59,7 +59,8 @@ class Convites
         }
 
         $prefixo = Str::of(Str::ascii((string) $user->first_name))->upper()->replaceMatches('/[^A-Z]/', '')->substr(0, 3)->value();
-        $prefixo = strtr($prefixo, ['O' => 'Q', 'I' => 'J', 'L' => 'K']);
+        // O nome fica como é ("RUI", não "RUJ"): reconhece-se ao ler. As letras
+        // ambíguas só se evitam na parte ao acaso, que é a que se copia mal.
 
         for ($tentativa = 0; $tentativa < 20; $tentativa++) {
             $codigo = $prefixo.$this->aoAcaso(6 - strlen($prefixo));

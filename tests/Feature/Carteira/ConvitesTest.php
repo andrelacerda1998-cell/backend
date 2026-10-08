@@ -108,6 +108,11 @@ class ConvitesTest extends TestCase
 
         $this->assertMatchesRegularExpression('/^ANA[A-HJ-NP-Z2-9]{3}$/', $codigo);
         $this->assertSame($codigo, $this->convites->codigoDe($ana)->code);
+
+        // O nome não se altera, mesmo com letras que se evitam na parte ao acaso.
+        $this->assertStringStartsWith('RUI', $this->convites->codigoDe($this->cliente('Rui'))->code);
+        // Nomes curtos ou sem letras completam-se ao acaso até 6.
+        $this->assertSame(6, strlen($this->convites->codigoDe($this->cliente('Zé'))->code));
     }
 
     // -------------------------------------------------------------- aplicar
