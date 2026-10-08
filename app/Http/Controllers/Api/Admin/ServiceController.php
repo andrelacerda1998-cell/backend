@@ -85,6 +85,12 @@ class ServiceController extends Controller
             $query->where('services_type_id', $request->integer('category_id'));
         }
 
+        // Só os personalizados (ou só os do catálogo). O sino do backoffice
+        // procura os personalizados a cada 45 s: sem isto lia o histórico todo.
+        if ($request->has('is_custom')) {
+            $query->where('is_custom', $request->boolean('is_custom'));
+        }
+
         /*
          * A CATEGORIA que a equipa conhece (Canalização, Eletricidade…) é a área
          * de operação do tipo de serviço. É por ela que o filtro do backoffice
@@ -174,6 +180,23 @@ class ServiceController extends Controller
              * mesmo nome — o detalhe nunca as tinha.
              */
             'candidate_counts' => $this->contagemDeCandidatos($service),
+            /*
+             * O caminho do pedido (ver RegistoDeEventos). Só existe a partir
+             * de 08/10/2026: os pedidos anteriores têm a lista vazia, e o
+             * backoffice mostra a cronologia aproximada que tinha.
+             */
+            'events' => $service->events()->with('vendor.user')->get()
+                ->map(fn ($e) => [
+                    'tipo' => $e->tipo,
+                    'de' => $e->estado_de,
+                    'para' => $e->estado_para,
+                    'vendor_id' => $e->vendor_id,
+                    'vendor_name' => $e->vendor?->user ? trim(($e->vendor->user->first_name ?? '').' '.($e->vendor->user->last_name ?? '')) ?: null : null,
+                    'dados' => $e->dados,
+                    'em' => optional($e->ocorreu_em)->toIso8601String(),
+                ])
+                ->values()
+                ->all(),
             'candidates' => $service->candidates
                 ->sortBy('rank')
                 ->map(fn ($c) => [

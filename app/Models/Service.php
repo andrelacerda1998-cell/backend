@@ -330,6 +330,12 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         }
     }
 
+    /** O histórico do pedido, do mais antigo para o mais recente (ver RegistoDeEventos). */
+    public function events(): HasMany
+    {
+        return $this->hasMany(ServiceEvent::class)->orderBy('ocorreu_em')->orderBy('id');
+    }
+
     public function candidates(): HasMany
     {
         return $this->hasMany(ServiceCandidate::class);

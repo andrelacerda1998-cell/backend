@@ -79,9 +79,25 @@ class VendorPaymentController extends Controller
         ]);
     }
 
-    public function pay(Vendor $vendor): ApiSuccessResponse|ApiErrorResponse
+    /**
+     * `amount` (euros, opcional): paga SÓ esse valor, e não o saldo inteiro.
+     *
+     * É o que o backoffice usa nos lotes de pagamento: o lote é aprovado com o
+     * saldo de um dia, a transferência sai com esse valor, e o técnico pode ter
+     * ganho mais entretanto. Zerar o saldo inteiro debitava-lhe da carteira
+     * dinheiro que nunca lhe foi transferido. Sem `amount`, paga tudo, como o
+     * Filament sempre fez.
+     *
+     * `reference` (opcional) fica no histórico da carteira, para se saber de
+     * que lote veio o débito.
+     */
+    public function pay(Request $request, Vendor $vendor): ApiSuccessResponse|ApiErrorResponse
     {
         $wallet = $vendor->user->wallet;
+        $request->validate([
+            'amount' => ['nullable', 'numeric', 'gt:0'],
+            'reference' => ['nullable', 'string', 'max:100'],
+        ]);
 
         if ($wallet->balance <= 0) {
             return new ApiErrorResponse(null, 'Este vendor não tem saldo por pagar.', 409);
@@ -103,24 +119,38 @@ class VendorPaymentController extends Controller
             return new ApiErrorResponse(null, self::RAZAO_DA_RETENCAO[$blocker], 409);
         }
 
-        $amount = $wallet->balance_float;
+        $centimos = $request->filled('amount')
+            ? (int) round(((float) $request->input('amount')) * 100)
+            : (int) $wallet->balance;
+
+        if ($centimos > (int) $wallet->balance) {
+            return new ApiErrorResponse(null, sprintf(
+                'O valor a pagar (%.2f €) é maior do que o saldo do técnico (%.2f €).',
+                $centimos / 100,
+                (float) $wallet->balance_float,
+            ), 409);
+        }
+
+        $amount = $centimos / 100;
 
         // Mesma sequência do Filament (App\Filament\Pages\VendorPayments::table()):
         // email, notificação (push + BD) e só depois o débito do saldo.
         Mail::to($vendor->user->email)->send(new PaymentSentMail($vendor, $amount));
         $vendor->user->notify(new PaymentSentNotification($amount));
-        $wallet->withdraw($wallet->balance, [
+        $wallet->withdraw($centimos, array_filter([
             'type' => 'Debit',
             'description' => 'Transfer to account',
             'admin_description' => 'Transfer to account',
             'class' => Vendor::class,
             'id' => $vendor->getKey(),
             'admin_id' => auth()->id(),
-        ]);
+            'reference' => $request->input('reference'),
+        ], fn ($v) => $v !== null));
 
         return ApiSuccessResponse::make([
             'vendor_id' => $vendor->id,
             'amount_paid' => (float) $amount,
+            'balance_left' => (float) $wallet->refresh()->balance_float,
         ]);
     }
 

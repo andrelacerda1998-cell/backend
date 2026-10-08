@@ -125,6 +125,46 @@ class AdminVendorPaymentsApiTest extends TestCase
         Notification::assertSentTo($vendor->user, PaymentSentNotification::class);
     }
 
+    /**
+     * O lote paga o valor aprovado, não o saldo do dia em que se clica: o
+     * que o técnico ganhou entretanto fica-lhe na carteira.
+     */
+    public function test_paga_so_o_valor_do_lote_e_deixa_o_resto(): void
+    {
+        Mail::fake();
+        Notification::fake();
+        $vendor = $this->makeVendorWithBalance(15000);
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay", ['amount' => 100.5, 'reference' => 'lote-7'])
+            ->assertOk()
+            ->assertJsonPath('data.amount_paid', 100.5)
+            ->assertJsonPath('data.balance_left', 49.5);
+
+        $this->assertEquals(4950, (int) $vendor->user->wallet->fresh()->balance);
+        $this->assertSame('lote-7', $vendor->user->wallet->transactions()->latest('id')->first()->meta['reference'] ?? null);
+    }
+
+    public function test_recusa_pagar_mais_do_que_o_saldo(): void
+    {
+        $vendor = $this->makeVendorWithBalance(5000);
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay", ['amount' => 50.01])
+            ->assertStatus(409);
+
+        $this->assertEquals(5000, (int) $vendor->user->wallet->fresh()->balance);
+    }
+
+    public function test_recusa_um_valor_que_nao_e_positivo(): void
+    {
+        $vendor = $this->makeVendorWithBalance(5000);
+
+        $this->withAuth()
+            ->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay", ['amount' => 0])
+            ->assertStatus(422);
+    }
+
     public function test_it_rejects_paying_a_vendor_with_no_balance(): void
     {
         $vendor = $this->makeVendorWithBalance(0);
