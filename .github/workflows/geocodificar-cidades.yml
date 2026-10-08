@@ -1,0 +1,97 @@
+name: Geocodificar as cidades
+
+# Corre `php artisan cities:geocode` em produção: preenche a latitude/longitude
+# das cidades do catálogo a partir do nome e do distrito (Google Geocoding).
+#
+# PORQUE EXISTE: desde a auditoria de marketplace (backend#141, em produção a
+# 08/10/2026) as cidades do técnico são a área de trabalho no matching. Uma
+# cidade sem coordenadas conta só pelo NOME, e a morada do serviço nem sempre
+# usa o mesmo nome. O comando precisa da chave da Google, que só existe em
+# produção, e ninguém o corria: não havia botão.
+#
+# Por omissão corre em ENSAIO (--dry-run): mostra quantas encontraria e quais
+# falham, sem gravar. Só grava com o modo "gravar". É idempotente: só toca nas
+# cidades sem coordenadas (o --force não está disponível aqui de propósito —
+# reescrever coordenadas já certas não é coisa para um botão).
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "ensaio = só mostra; gravar = escreve as coordenadas"
+        type: choice
+        options:
+          - ensaio
+          - gravar
+        default: ensaio
+
+# ENTRA no grupo do deploy, como o reindexar: escreve na base de dados, e não
+# deve correr a meio de um deploy.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  geocodificar:
+    name: Geocodificar as cidades (${{ inputs.modo }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Portão de aprovação manual: abrir SSH à produção, e aqui para escrever.
+    environment: production
+    steps:
+      - name: Correr cities:geocode no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          MODO: ${{ inputs.modo }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 15m
+          envs: MODO
+          # Comando FIXO, e não um input: aceitar um comando por parâmetro
+          # transformava este botão numa shell remota para produção. O único
+          # input é uma escolha entre dois valores conhecidos.
+          script: |
+            set -uo pipefail
+            cd ~/project-laravel
+            ART="docker compose exec -T laravel-prod php artisan"
+
+            contar() {
+              $ART tinker --execute='
+                $t = App\Models\GeneralSettings\City::count();
+                $com = App\Models\GeneralSettings\City::whereNotNull("latitude")->count();
+                echo "cidades no catálogo     = $t".PHP_EOL;
+                echo "com coordenadas         = $com".PHP_EOL;
+                echo "sem coordenadas         = ".($t - $com).PHP_EOL;
+                echo "chave da Google definida = ".(filled(config("geocoder.key")) ? "SIM" : "NÃO").PHP_EOL;
+              ' 2>&1
+            }
+
+            echo "=============================================="
+            echo " ANTES (modo: $MODO)"
+            echo "=============================================="
+            contar
+
+            echo
+            echo "=============================================="
+            echo " cities:geocode"
+            echo "=============================================="
+            if [ "$MODO" = "gravar" ]; then
+              saida=$($ART cities:geocode 2>&1); codigo=$?
+            else
+              saida=$($ART cities:geocode --dry-run 2>&1); codigo=$?
+              echo "(ENSAIO: nada foi gravado)"
+            fi
+            echo "$saida"
+
+            echo
+            echo "=============================================="
+            echo " DEPOIS"
+            echo "=============================================="
+            contar
+
+            exit "$codigo"
