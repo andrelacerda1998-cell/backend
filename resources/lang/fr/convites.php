@@ -11,5 +11,6 @@ return [
         'limite' => 'Ce code n\'est plus disponible cette année.',
     ],
     'aplicado' => 'Code de parrainage appliqué : tu as :valor € dans ton Portefeuille pour une intervention de :minimo € ou plus.',
+    'pendente' => 'Code de parrainage valide : les :valor € arrivent dans ton Portefeuille quand tu confirmes ton numéro.',
     'um_amigo' => 'Un ami',
 ];

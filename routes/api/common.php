@@ -19,6 +19,10 @@ use App\Http\Controllers\Api\Customer\Services\RequestServiceController;
 use App\Http\Controllers\Api\User\GenderController;
 
 Route::group(['prefix' => 'common', 'middleware' => 'locale'], function () {
+    // Código de convite no checkout de quem ainda não tem conta: só verifica.
+    // Aplica-se no guest/register, quando a conta existe. Limitado: é público.
+    Route::post('/referral/check', [\App\Http\Controllers\Api\Customer\Wallet\ReferralController::class, 'check'])
+        ->middleware('throttle:10,1');
     Route::group(['prefix' => 'services'], function () {
         Route::get('/types', ListServicesTypeController::class);
         Route::get('/operation-areas', [OperationAreasController::class, 'index']);

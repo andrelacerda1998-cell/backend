@@ -8,6 +8,12 @@ use Illuminate\Support\Str;
 
 Route::redirect('/', '/backoffice');
 
+// Link dos convites: leva à loja certa com o código (ver ConviteLinkController).
+Route::get('/c/{codigo}', App\Http\Controllers\Web\ConviteLinkController::class)
+    ->where('codigo', '[A-Za-z0-9]{1,20}')
+    ->middleware('throttle:60,1')
+    ->name('convite.link');
+
 Route::group(['prefix' => 'reset-password'], function () {
     Route::get('/{token}', [App\Http\Controllers\ResetPasswordController::class, '_invoke'])
         ->middleware('guest')->name('password.reset');

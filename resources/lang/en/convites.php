@@ -11,5 +11,6 @@ return [
         'limite' => 'This code is no longer available this year.',
     ],
     'aplicado' => 'Referral code applied: you have :valor € in your Wallet for a service of :minimo € or more.',
+    'pendente' => 'Valid referral code: the €:valor goes into your Wallet when you confirm your phone number.',
     'um_amigo' => 'A friend',
 ];

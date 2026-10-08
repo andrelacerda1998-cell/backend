@@ -7,7 +7,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Auth\GuestRegisterRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
+use App\Http\Controllers\Api\Customer\Wallet\ReferralController;
 use App\Models\User;
+use App\Services\Carteira\ConviteRecusado;
+use App\Services\Carteira\Convites;
 use App\Services\Common\PhoneLoginSmsService;
 use App\Support\ChaveDeMorada;
 use Exception;
@@ -54,7 +57,7 @@ class GuestRegisterController extends Controller
 
                     $token = auth('api')->login($existingUser);
 
-                    return new LoginApiResponse($token, ['message' => 'Login successful', 'is_existing_user' => true]);
+                    return new LoginApiResponse($token, ['message' => 'Login successful', 'is_existing_user' => true], $this->aplicarConvite($existingUser, $data['referral_code'] ?? null));
                 }
 
                 $user = User::create([
@@ -71,12 +74,34 @@ class GuestRegisterController extends Controller
 
                 $token = auth('api')->login($user);
 
-                return new LoginApiResponse($token, ['message' => 'Account created successfully', 'is_existing_user' => false]);
+                return new LoginApiResponse($token, ['message' => 'Account created successfully', 'is_existing_user' => false], $this->aplicarConvite($user, $data['referral_code'] ?? null));
             } finally {
                 $lock->release();
             }
         } catch (Exception $exception) {
             return new ApiErrorResponse($exception);
+        }
+    }
+
+    /**
+     * O código de convite que a pessoa escreveu no checkout antes de ter conta.
+     * Aplica-se agora que a conta existe. Se não puder (ex.: o número já pagou
+     * um serviço), o registo continua — só não há crédito, e a app mostra porquê.
+     *
+     * @return array{referral?: array{applied: bool, message: string}}
+     */
+    private function aplicarConvite(User $user, ?string $codigo): array
+    {
+        if (blank($codigo)) {
+            return [];
+        }
+
+        try {
+            app(Convites::class)->aplicar($user, $codigo);
+
+            return ['referral' => ['applied' => true, 'message' => ReferralController::mensagemAplicado()]];
+        } catch (ConviteRecusado $e) {
+            return ['referral' => ['applied' => false, 'message' => $e->getMessage()]];
         }
     }
 

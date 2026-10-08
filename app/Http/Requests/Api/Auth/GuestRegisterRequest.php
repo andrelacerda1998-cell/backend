@@ -11,6 +11,8 @@ class GuestRegisterRequest extends FormRequest
         return [
             'phone_number' => 'required|string',
             'verification_token' => 'required|string',
+            // Código de convite posto no checkout antes de haver conta.
+            'referral_code' => 'nullable|string|max:20',
             'address' => 'required|array',
             'address.latitude' => 'required|numeric',
             'address.longitude' => 'required|numeric',

@@ -2,6 +2,13 @@
 
 return [
 
+    // Lojas da app do cliente — para o link dos convites (/c/{codigo}).
+    'lojas' => [
+        'app_store' => env('APP_STORE_URL', 'https://apps.apple.com/pt/app/piquet/id6745871587'),
+        'google_play' => env('GOOGLE_PLAY_URL', 'https://play.google.com/store/apps/details?id=com.piquetapp.customer'),
+    ],
+
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
