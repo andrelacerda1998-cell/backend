@@ -362,6 +362,7 @@ class Convites
             'earned' => $ganhos,
             'earned_formated' => number_format($ganhos / 100, 2, '.', ' '),
             'rewards_left_this_year' => max(0, self::LIMITE_POR_ANO - $this->recompensasNoAno($user)),
+            'rewards_limit' => self::LIMITE_POR_ANO,
             'used_a_code' => Referral::where('referred_user_id', $user->id)->exists(),
         ];
     }
