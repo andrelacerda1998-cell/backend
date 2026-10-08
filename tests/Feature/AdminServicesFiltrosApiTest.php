@@ -141,6 +141,15 @@ class AdminServicesFiltrosApiTest extends TestCase
         $this->assertSame($canalizacao->id, $this->item($deCanalizacao)['operation_area_id']);
     }
 
+    public function test_filtra_os_personalizados(): void
+    {
+        $personalizado = $this->servico(ServiceStatus::PENDING_REVIEW, ['is_custom' => true]);
+        $catalogo = $this->servico(ServiceStatus::CLOSED, ['is_custom' => false]);
+
+        $this->assertSame([$personalizado], $this->ids('?is_custom=1'));
+        $this->assertSame([$catalogo], $this->ids('?is_custom=0'));
+    }
+
     // ---------------------------------------------------------- pesquisa
 
     public function test_procura_pelo_numero_do_servico_com_e_sem_cardinal(): void

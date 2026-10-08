@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\Services\CandidateStatus;
+use App\Observers\ServiceCandidateObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Um profissional considerado para um serviço — ver docs/matching.md.
  */
+#[ObservedBy(ServiceCandidateObserver::class)]
 class ServiceCandidate extends Model
 {
     protected $fillable = [
