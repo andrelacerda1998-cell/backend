@@ -350,7 +350,9 @@ class Convites
         $ganhos = (int) WalletCredit::where('user_id', $user->id)->where('reason', self::MOTIVO_QUEM_CONVIDA)->sum('amount');
 
         return [
-            'code' => $this->codigoDe($user)->code,
+            'code' => $codigo = $this->codigoDe($user)->code,
+            // O link da mensagem: leva à loja certa com o código (ConviteLinkController).
+            'share_url' => route('convite.link', ['codigo' => $codigo]),
             'can_invite' => $this->jaPagou($user),
             'reward_amount' => self::VALOR,
             'minimum_service_amount' => self::MINIMO_DO_SERVICO,
