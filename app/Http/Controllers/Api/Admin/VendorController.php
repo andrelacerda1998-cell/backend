@@ -223,6 +223,23 @@ class VendorController extends Controller
         ]);
     }
 
+    /**
+     * GET /v1/admin/vendors/{id} — um técnico, suspenso ou não, para a ficha
+     * com endereço próprio (/tecnicos/94). Mesmo formato da listagem.
+     */
+    public function show(int $id): ApiSuccessResponse|ApiErrorResponse
+    {
+        $vendor = $this->baseQuery()->withTrashed()
+            ->with(['user', 'operationAreas', 'servicesTypes', 'addresses', 'documents'])
+            ->find($id);
+
+        if (! $vendor) {
+            return new ApiErrorResponse(null, 'Técnico não encontrado.', 404);
+        }
+
+        return ApiSuccessResponse::make($this->present($vendor));
+    }
+
     public function suspend(int $id): ApiSuccessResponse|ApiErrorResponse
     {
         $vendor = Vendor::withTrashed()->find($id);

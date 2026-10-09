@@ -60,7 +60,9 @@ class CustomerController extends Controller
                 $q->where('first_name', 'like', "%{$search}%")
                     ->orWhere('last_name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('nif', 'like', "%{$search}%");
+                    ->orWhere('nif', 'like', "%{$search}%")
+                    // O telefone é o que o cliente dá quando liga.
+                    ->orWhere('phone_number', 'like', "%{$search}%");
             });
         }
 
@@ -75,6 +77,24 @@ class CustomerController extends Controller
                 'total' => $customers->total(),
             ],
         ]);
+    }
+
+    /**
+     * GET /v1/admin/customers/{id} — um cliente, bloqueado ou não.
+     *
+     * O backoffice só tinha a listagem com pesquisa: para abrir a ficha de um
+     * cliente procurava-o pelo nome e esperava que aparecesse. Com isto a
+     * ficha tem endereço próprio (/clientes/412).
+     */
+    public function show(int $id): ApiSuccessResponse|ApiErrorResponse
+    {
+        $user = $this->baseQuery()->withTrashed()->with('mainAddressRelation')->find($id);
+
+        if (! $user) {
+            return new ApiErrorResponse(null, 'Cliente não encontrado.', 404);
+        }
+
+        return ApiSuccessResponse::make($this->present($user));
     }
 
     /**

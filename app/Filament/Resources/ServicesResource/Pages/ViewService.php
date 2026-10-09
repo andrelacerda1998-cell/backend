@@ -8,7 +8,7 @@ use App\Models\GeneralSettings\OperationArea;
 use App\Notifications\Customer\ScheduleCanceledByVendorNotification;
 use App\Services\Common\Services\CancelService;
 use App\Services\Common\Services\CloseService;
-use App\Services\Matching\MatchingService;
+use App\Services\Matching\DespacharPedidoPersonalizado;
 use Filament\Actions;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -17,8 +17,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
-use Illuminate\Support\Facades\DB;
-use App\Notifications\Customer\CustomRequestDispatchedNotification;
 
 class ViewService extends ViewRecord
 {
@@ -73,34 +71,11 @@ class ViewService extends ViewRecord
                 ])
                 ->action(function (array $data): void {
                     try {
-                        $count = DB::transaction(function () use ($data): int {
-                            $this->record->custom_duration_minutes = (int) $data['custom_duration_minutes'];
-                            $this->record->custom_dispatched_at = now();
-                            $this->record->status = ServiceStatus::MATCHING;
-                            $this->record->save();
-                            $this->record->operationAreas()->sync(array_map('intval', $data['operation_areas']));
-
-                            // O cliente esteve à espera sem saber de nada:
-                            // entre descrever o problema e haver alguém para
-                            // escolher podem passar horas, e o push que já
-                            // existia só sai quando o primeiro profissional
-                            // aceita. Este marca o momento em que uma PESSOA
-                            // pegou no pedido dele.
-                            $this->record->customer?->notify(
-                                new CustomRequestDispatchedNotification($this->record)
-                            );
-
-                            $candidates = app(MatchingService::class)->dispatchNextWave($this->record->refresh());
-
-                            // Ninguem elegivel: falha ja e avisa o cliente, como
-                            // o start() faz num pedido de catalogo. Deixa-lo em
-                            // seleccao seria uma espera que nunca resolve.
-                            if ($candidates->isEmpty()) {
-                                app(MatchingService::class)->fail($this->record);
-                            }
-
-                            return $candidates->count();
-                        });
+                        $count = app(DespacharPedidoPersonalizado::class)(
+                            $this->record,
+                            (int) $data['custom_duration_minutes'],
+                            $data['operation_areas'],
+                        );
 
                         $this->refreshFormData(['status', 'custom_duration_minutes', 'custom_dispatched_at']);
 
