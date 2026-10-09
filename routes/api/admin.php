@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Admin\NotificationCampaignController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\SentNotificationController;
 use App\Http\Controllers\Api\Admin\OperacoesAoVivoController;
+use App\Http\Controllers\Api\Admin\ServiceActionController;
 use App\Http\Controllers\Api\Admin\ServiceController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
 use App\Http\Controllers\Api\Admin\SmsCodeController;
@@ -82,6 +83,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/operacoes/ao-vivo', OperacoesAoVivoController::class);
     Route::get('/services', [ServiceController::class, 'index']);
     Route::get('/services/{service}', [ServiceController::class, 'show']);
+    // As ações que só existiam no Filament (ver ServiceActionController).
+    Route::post('/services/{service}/despachar', [ServiceActionController::class, 'despachar']);
+    Route::post('/services/{service}/fechar', [ServiceActionController::class, 'fechar']);
+    Route::post('/services/{service}/tentar-cobrar', [ServiceActionController::class, 'tentarCobrar']);
+    Route::post('/services/{service}/desistir-e-devolver', [ServiceActionController::class, 'desistirEDevolver']);
 
     // Reembolso / libertação de cativo dos pagamentos da app (Payshop).
     // Passa pelo SDK para o estado local acompanhar; recusa se o serviço
@@ -108,6 +114,9 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // PaymentMethodsRelationManager. Só listar + apagar (sem restrição de
     // super-admin, ver nota no controller).
     Route::get('/customers/{id}/payment-methods', [CustomerController::class, 'paymentMethods']);
+    // Um cliente pelo id. Só números: /customers/metrics e as outras leituras
+    // com nome têm de continuar a chegar às suas rotas.
+    Route::get('/customers/{id}', [CustomerController::class, 'show'])->whereNumber('id');
     Route::delete('/customers/{id}/payment-methods/{methodId}', [CustomerController::class, 'deletePaymentMethod']);
 
     // Técnicos — equivalente ao Filament VendorResource. Suspender/Reativar
@@ -137,6 +146,8 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // Mapa ao vivo -- técnicos Online com localização recente (só leitura,
     // informativo; não interfere no matching/fluxo de pedidos).
     Route::get('/vendors/live-locations', [VendorController::class, 'liveLocations']);
+    // Um técnico pelo id (só números, pelas mesmas razões que /customers/{id}).
+    Route::get('/vendors/{id}', [VendorController::class, 'show'])->whereNumber('id');
     // Cria um técnico de teste (is_test=true) já elegível para ficar Online
     // de imediato -- ver nota extensa em VendorController::createTestAccount().
     Route::post('/vendors/test-account', [VendorController::class, 'createTestAccount']);
