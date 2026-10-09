@@ -1,0 +1,36 @@
+name: Verificar o .env de produção
+
+# Diz se o segredo PROD_ENV_FILE (com o PAYSHOP_SDK_NOTIFICATION_URL por cima,
+# se existir) tem o essencial -- sem nunca mostrar valores, só nomes e
+# contagens. Corre num PR que mexa nisto e à mão (Actions › Run workflow), e é
+# a mesma verificação que o deploy faz antes de mandar o .env para o servidor.
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/verificar-env-de-producao.sh"
+      - ".github/scripts/montar-env-de-producao.sh"
+      - ".github/workflows/verificar-env-de-producao.yml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Verificar o .env de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+      - name: Montar e verificar (só nomes, nunca valores)
+        env:
+          ENV_CONTENT: ${{ secrets.PROD_ENV_FILE }}
+          NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
+        run: |
+          bash .github/scripts/montar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
+          bash .github/scripts/verificar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
+          rm -f "$RUNNER_TEMP/env.verificar"

@@ -47,6 +47,27 @@ env:
   APP_IMAGE_NAME: ${{ github.repository_owner }}/piquet-laravel
 
 jobs:
+  # Antes de tudo: um .env incompleto nunca chega a pedir aprovação, quanto
+  # mais ao servidor (ver .github/scripts/verificar-env-de-producao.sh).
+  verificar-env:
+    name: Verificar o .env de produção
+    if: github.event_name == 'push' || inputs.deploy == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+      - name: Montar e verificar (só nomes, nunca valores)
+        env:
+          ENV_CONTENT: ${{ secrets.PROD_ENV_FILE }}
+          NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
+        run: |
+          bash .github/scripts/montar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
+          bash .github/scripts/verificar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
+          rm -f "$RUNNER_TEMP/env.verificar"
+
   test:
     name: Testes (PHPUnit)
     runs-on: ubuntu-latest
@@ -206,16 +227,28 @@ jobs:
 
   deploy:
     name: Deploy em produção
-    needs: build-app
+    needs: [build-app, verificar-env]
     if: github.event_name == 'push' || inputs.deploy == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          path: repo
+
+      # O ficheiro do segredo PROD_ENV_FILE e, por cima, os segredos próprios
+      # (PAYSHOP_SDK_NOTIFICATION_URL). Volta a verificar-se aqui, depois da
+      # aprovação: o segredo pode ter mudado entretanto.
       - name: Escrever .env de produção a partir do secret
         env:
           ENV_CONTENT: ${{ secrets.PROD_ENV_FILE }}
-        run: printf '%s\n' "$ENV_CONTENT" > .env.production
+          NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
+        run: |
+          bash repo/.github/scripts/montar-env-de-producao.sh .env.production
+          bash repo/.github/scripts/verificar-env-de-producao.sh .env.production
 
       - name: Copiar .env para o servidor
         uses: appleboy/scp-action@v0.1.7
