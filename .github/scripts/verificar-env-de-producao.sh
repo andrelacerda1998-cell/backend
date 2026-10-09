@@ -39,22 +39,8 @@ for v in "${ESSENCIAIS[@]}"; do
   fi
 done
 
-# O URL do aviso do Payshop, se lá estiver, tem de ser um URL a sério: um
-# "<...>" esquecido ou um espaço podiam fazer o Paylands recusar as ordens.
 url=$(grep -E '^PAYSHOP_SDK_NOTIFICATION_URL=' "$FICHEIRO" | tail -1 | cut -d= -f2- || true)
-if [ -n "$url" ]; then
-  if ! printf '%s' "$url" | grep -qE '^https://[^[:space:]<>"]+$'; then
-    echo "::error::PAYSHOP_SDK_NOTIFICATION_URL não é um URL válido (tem de começar por https:// e não ter espaços, < ou >)."
-    falhou=1
-  elif ! printf '%s' "$url" | grep -qE '[?&]key=[A-Za-z0-9_-]{16,}'; then
-    echo "::error::PAYSHOP_SDK_NOTIFICATION_URL não tem a chave do webhook (?key=...) completa."
-    falhou=1
-  else
-    echo "PAYSHOP_SDK_NOTIFICATION_URL: presente e com formato válido."
-  fi
-else
-  echo "PAYSHOP_SDK_NOTIFICATION_URL: não definida (as ordens são criadas sem aviso)."
-fi
+bash "$(dirname "$0")/verificar-url-do-aviso.sh" "$url" || falhou=1
 
 if [ "$falhou" -ne 0 ]; then
   echo "::error::.env de produção recusado: nada foi enviado para o servidor."

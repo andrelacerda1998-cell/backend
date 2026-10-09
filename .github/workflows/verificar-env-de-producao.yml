@@ -9,6 +9,8 @@ on:
     paths:
       - ".github/scripts/verificar-env-de-producao.sh"
       - ".github/scripts/montar-env-de-producao.sh"
+      - ".github/scripts/verificar-url-do-aviso.sh"
+      - ".github/scripts/decidir-modo-do-env.sh"
       - ".github/workflows/verificar-env-de-producao.yml"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
@@ -30,7 +32,9 @@ jobs:
         env:
           ENV_CONTENT: ${{ secrets.PROD_ENV_FILE }}
           NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
+        # Verde quando o deploy é seguro (substitui com o segredo completo, ou
+        # mantém o .env do servidor); vermelho só quando ia mandar algo partido.
         run: |
           bash .github/scripts/montar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
-          bash .github/scripts/verificar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
+          bash .github/scripts/decidir-modo-do-env.sh "$RUNNER_TEMP/env.verificar"
           rm -f "$RUNNER_TEMP/env.verificar"
