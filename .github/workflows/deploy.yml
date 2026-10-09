@@ -47,6 +47,27 @@ env:
   APP_IMAGE_NAME: ${{ github.repository_owner }}/piquet-laravel
 
 jobs:
+  # Antes de tudo: um .env incompleto nunca chega a pedir aprovação, quanto
+  # mais ao servidor (ver .github/scripts/verificar-env-de-producao.sh).
+  verificar-env:
+    name: Verificar o .env de produção
+    if: github.event_name == 'push' || inputs.deploy == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+      - name: Montar e decidir (só nomes, nunca valores)
+        env:
+          ENV_CONTENT: ${{ secrets.PROD_ENV_FILE }}
+          NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
+        run: |
+          bash .github/scripts/montar-env-de-producao.sh "$RUNNER_TEMP/env.verificar"
+          bash .github/scripts/decidir-modo-do-env.sh "$RUNNER_TEMP/env.verificar"
+          rm -f "$RUNNER_TEMP/env.verificar"
+
   test:
     name: Testes (PHPUnit)
     runs-on: ubuntu-latest
@@ -206,18 +227,35 @@ jobs:
 
   deploy:
     name: Deploy em produção
-    needs: build-app
+    needs: [build-app, verificar-env]
     if: github.event_name == 'push' || inputs.deploy == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          path: repo
+
+      # O ficheiro do segredo PROD_ENV_FILE e, por cima, os segredos próprios
+      # (PAYSHOP_SDK_NOTIFICATION_URL). Decide-se outra vez aqui, depois da
+      # aprovação: o segredo pode ter mudado entretanto.
+      #   substituir -> o segredo está completo: vai para o servidor, como sempre;
+      #   manter     -> está incompleto: fica o .env do servidor, e só se lhe
+      #                 atualizam as linhas com segredo próprio (passo de SSH).
       - name: Escrever .env de produção a partir do secret
+        id: env
         env:
           ENV_CONTENT: ${{ secrets.PROD_ENV_FILE }}
-        run: printf '%s\n' "$ENV_CONTENT" > .env.production
+          NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
+        run: |
+          bash repo/.github/scripts/montar-env-de-producao.sh .env.production
+          bash repo/.github/scripts/decidir-modo-do-env.sh .env.production
 
       - name: Copiar .env para o servidor
+        if: steps.env.outputs.modo == 'substituir'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -233,15 +271,32 @@ jobs:
           APP_IMAGE: ${{ env.REGISTRY }}/${{ env.APP_IMAGE_NAME }}:${{ needs.build-app.outputs.app-tag }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          MODO_ENV: ${{ steps.env.outputs.modo }}
+          NOTIFICATION_URL: ${{ secrets.PAYSHOP_SDK_NOTIFICATION_URL }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: APP_IMAGE,GHCR_TOKEN,GHCR_USER
+          envs: APP_IMAGE,GHCR_TOKEN,GHCR_USER,MODO_ENV,NOTIFICATION_URL
           script: |
             set -euo pipefail
             cd ~/project-laravel
-            mv .env.production .env
+            if [ "$MODO_ENV" = "substituir" ]; then
+              mv .env.production .env
+            else
+              # PROD_ENV_FILE incompleto: fica o .env que já cá está. Só as
+              # linhas com segredo próprio mudam, e com cópia do anterior.
+              test -s .env || { echo "ERRO: não há .env no servidor e o PROD_ENV_FILE está incompleto" >&2; exit 1; }
+              if [ -n "${NOTIFICATION_URL:-}" ]; then
+                { grep -v '^PAYSHOP_SDK_NOTIFICATION_URL=' .env || true; printf 'PAYSHOP_SDK_NOTIFICATION_URL=%s\n' "$NOTIFICATION_URL"; } > .env.novo
+                if ! cmp -s .env .env.novo; then
+                  cp -p .env ".env.antes-$(date +%Y%m%d-%H%M%S)"
+                  cat .env.novo > .env
+                  echo "PAYSHOP_SDK_NOTIFICATION_URL atualizada no .env do servidor."
+                fi
+                rm -f .env.novo
+              fi
+            fi
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             sed -i -E "s#image: .*piquet-laravel.*#image: ${APP_IMAGE}#" docker-compose.yaml
             # IMPORTANTE: pull/up só do serviço laravel-prod (a app). Nunca "docker compose pull"
