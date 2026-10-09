@@ -183,7 +183,12 @@
       <div class="success-check">✓</div>
       <h1>Palavra-passe redefinida</h1>
       <p class="subtitle">A sua palavra-passe foi alterada com sucesso. Já pode entrar na aplicação Piquet.</p>
-      <a class="btn btn-primary" href="{{ $isVendor ? 'piquet.vendor://signin' : 'piquet.customer://signin' }}">
+      {{-- Técnicos: a raiz da app, e não `signin`. A app do técnico não tem rota
+           `signin` (a entrada é o índice de (auth)), e a rota `(reset-password)/[token]`
+           apanha qualquer endereço de um só segmento: `piquet.vendor://signin` abria
+           outra vez "Nova palavra-passe", com o token "signin". Sem sessão, a raiz
+           mostra "Iniciar sessão". --}}
+      <a class="btn btn-primary" href="{{ $isVendor ? 'piquet.vendor://' : 'piquet.customer://signin' }}">
         Abrir aplicação
       </a>
     @else
