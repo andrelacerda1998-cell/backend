@@ -9,6 +9,7 @@ use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Address;
 use App\Models\Service;
 use App\Models\User;
+use App\Support\PesquisaDePessoas;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -49,21 +50,33 @@ class CustomerController extends Controller
         $search = trim((string) $request->string('search'));
         $blockedOnly = $request->boolean('blocked');
 
-        $query = $this->baseQuery();
+        $query = $this->comResumoDosPedidos($this->baseQuery());
 
         if ($blockedOnly) {
             $query->onlyTrashed();
+        } elseif ($request->boolean('incluir_bloqueados')) {
+            // Para procurar alguém sem saber se está bloqueado: quem liga a
+            // queixar-se de não conseguir entrar é muitas vezes um bloqueado.
+            // Cada um traz o `blocked_at`, que diz quais são.
+            $query->withTrashed();
         }
 
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('nif', 'like', "%{$search}%")
-                    // O telefone é o que o cliente dá quando liga.
-                    ->orWhere('phone_number', 'like', "%{$search}%");
-            });
+            // Nome completo ("Ana Costa"), telefone em qualquer formato, email
+            // e NIF -- ver PesquisaDePessoas. O telefone é o que o cliente dá
+            // quando liga.
+            PesquisaDePessoas::aplicar($query, $search);
+        }
+
+        if ($request->boolean('com_pedido_aberto')) {
+            $query->whereHas('services', fn ($s) => $this->soReais($s)->whereNotIn('status', ServiceStatus::finais()));
+        }
+
+        // Quem pediu há menos tempo primeiro; quem nunca pediu nada, no fim.
+        if ($request->string('sort')->toString() === 'ultimo_pedido') {
+            $query->orderByRaw('last_service_at IS NULL')
+                ->orderByDesc('last_service_at')
+                ->orderByDesc('users.id');
         }
 
         $customers = $query->with('mainAddressRelation')->orderByDesc('created_at')->paginate($perPage);
@@ -88,13 +101,62 @@ class CustomerController extends Controller
      */
     public function show(int $id): ApiSuccessResponse|ApiErrorResponse
     {
-        $user = $this->baseQuery()->withTrashed()->with('mainAddressRelation')->find($id);
+        $user = $this->comResumoDosPedidos($this->baseQuery()->withTrashed())->with('mainAddressRelation')->find($id);
 
         if (! $user) {
             return new ApiErrorResponse(null, 'Cliente não encontrado.', 404);
         }
 
         return ApiSuccessResponse::make($this->present($user));
+    }
+
+    /**
+     * Os números dos pedidos de cada cliente, calculados na MESMA consulta da
+     * página (subconsultas), e não um pedido à base de dados por cliente:
+     *
+     *  - `services_count`: pedidos feitos, em qualquer estado;
+     *  - `open_services_count`: os que ainda não acabaram (ServiceStatus::finais());
+     *  - `last_service_at`: quando fez o último pedido;
+     *  - `total_spent_cents`: o que pagou do bolso dele nos serviços fechados
+     *    (Closed) -- o valor do serviço menos o crédito de convites, que é
+     *    dinheiro da Piquet. O Saldo da carteira conta: é dinheiro dele,
+     *    devolvido de pedidos anteriores. Só `Closed`, porque só aí o dinheiro
+     *    foi mesmo cobrado (ver a nota em ServiceStatus::concluidos()).
+     *
+     * Os pedidos de teste não contam, como em toda a API de admin.
+     */
+    private function comResumoDosPedidos(Builder $query): Builder
+    {
+        return $query
+            ->select('users.*')
+            ->withCount([
+                'services as services_count' => fn ($s) => $this->soReais($s),
+                'services as open_services_count' => fn ($s) => $this->soReais($s)->whereNotIn('status', ServiceStatus::finais()),
+            ])
+            ->withMax(['services as last_service_at' => fn ($s) => $this->soReais($s)], 'created_at')
+            ->addSelect(['total_spent_cents' => Service::query()
+                ->selectRaw('COALESCE(SUM(services.amount - services.referral_credit_used), 0)')
+                ->whereColumn('services.customer_id', 'users.id')
+                ->where('services.is_test', false)
+                ->where('services.status', ServiceStatus::CLOSED),
+            ]);
+    }
+
+    private function soReais($servicos)
+    {
+        return $servicos->where('services.is_test', false);
+    }
+
+    /**
+     * O cliente tal como a lista o mostra, com o resumo dos pedidos. As
+     * respostas de bloquear e reativar devolvem a linha atualizada, e sem
+     * isto chegavam com os contadores a zero.
+     */
+    private function comResumo(User $user): User
+    {
+        return $this->comResumoDosPedidos(User::withTrashed()->whereKey($user->getKey()))
+            ->with('mainAddressRelation')
+            ->first() ?? $user;
     }
 
     /**
@@ -117,7 +179,7 @@ class CustomerController extends Controller
 
         $user->delete();
 
-        return ApiSuccessResponse::make($this->present($user->fresh()));
+        return ApiSuccessResponse::make($this->present($this->comResumo($user)));
     }
 
     public function restore(int $id): ApiSuccessResponse|ApiErrorResponse
@@ -134,7 +196,7 @@ class CustomerController extends Controller
 
         $user->restore();
 
-        return ApiSuccessResponse::make($this->present($user->fresh()));
+        return ApiSuccessResponse::make($this->present($this->comResumo($user)));
     }
 
     /**
@@ -377,6 +439,14 @@ class CustomerController extends Controller
                 : $user->mainAddress()?->city) ?: null,
             'blocked_at' => $user->deleted_at?->toIso8601String(),
             'created_at' => $user->created_at?->toIso8601String(),
+            // O resumo dos pedidos (ver comResumoDosPedidos). Valores em EUROS,
+            // como os da lista de pedidos.
+            'services_count' => (int) ($user->services_count ?? 0),
+            'open_services_count' => (int) ($user->open_services_count ?? 0),
+            'last_service_at' => $user->last_service_at
+                ? Carbon::parse($user->last_service_at, 'UTC')->toIso8601String()
+                : null,
+            'total_spent' => round(((int) ($user->total_spent_cents ?? 0)) / 100, 2),
         ];
     }
 }
