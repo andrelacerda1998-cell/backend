@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Auth\PhoneNumberValidationCode;
 use App\Notifications\Auth\GuestPhoneOtpNotification;
 use App\Services\Common\PhoneLoginSmsService;
+use App\Support\MockSms;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 
@@ -41,7 +42,7 @@ class GuestSendOtpController extends Controller
         // MOCK_SMS devolve o código ao cliente (auto-preenche o OTP) — só pode existir
         // fora de produção. Guarda dupla: mesmo que MOCK_SMS fique ligado por engano no
         // ambiente de produção, o código nunca é exposto.
-        if (config('app.MOCK_SMS') && ! app()->isProduction()) {
+        if (MockSms::ativo()) {
             return response()->json(['data' => ['mock_code' => $code]]);
         }
 
