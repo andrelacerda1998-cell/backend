@@ -54,6 +54,9 @@ class PortugueseCitiesSeeder extends Seeder
             'Agualva-Cacém', 'Alverca do Ribatejo', 'Amadora', 'Cascais',
             'Lisboa', 'Loures', 'Mafra', 'Odivelas', 'Oeiras',
             'Póvoa de Santa Iria', 'Queluz', 'Rio de Mouro', 'Sintra',
+            // Vila, não cidade: entra porque a Piquet atende lá com técnicos
+            // de Lisboa (12/10/2026), e o técnico só escolhe o que está aqui.
+            'Sobral de Monte Agraço',
             'Torres Vedras', 'Vila Franca de Xira',
         ],
         'Portalegre' => ['Elvas', 'Ponte de Sor', 'Portalegre'],

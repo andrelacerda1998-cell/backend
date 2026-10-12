@@ -54,6 +54,22 @@ class CidadesChegamAProducaoTest extends TestCase
         $this->assertSame($antes, City::query()->count());
     }
 
+    public function test_o_sobral_de_monte_agraco_esta_no_catalogo_com_coordenadas(): void
+    {
+        // A Piquet atende no Sobral com técnicos de Lisboa. Fora do catálogo,
+        // nenhum técnico o consegue escolher; sem coordenadas, só conta pelo
+        // nome que vem na morada.
+        $sobral = City::query()
+            ->where('name', 'Sobral de Monte Agraço')
+            ->where('district', 'Lisboa')
+            ->first();
+
+        $this->assertNotNull($sobral);
+        $this->assertFalse($sobral->suggested);
+        $this->assertTrue($sobral->contem(39.0184, -9.1517, null));
+        $this->assertFalse($sobral->contem(38.7078, -9.1366, null), 'Lisboa fica a ~35 km');
+    }
+
     public function test_cada_cidade_tem_distrito(): void
     {
         // O ecrã agrupa por distrito; uma cidade sem ele cai num grupo vazio.
