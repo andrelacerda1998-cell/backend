@@ -1004,6 +1004,60 @@ class Vendor extends Model implements Auditable
         })->shouldCache();
     }
 
+    /**
+     * `allDocumentsVerified`, em SQL: "tem todos os documentos obrigatórios
+     * aprovados e dentro da validade".
+     *
+     * Existe para as LISTAS do backoffice poderem filtrar e paginar por isto
+     * (estado "pronto"/"em aprovação", "documentos em falta") sem carregar os
+     * técnicos todos e perguntar a cada um — o atributo faz uma consulta por
+     * documento obrigatório e por técnico.
+     *
+     * É uma SEGUNDA CÓPIA da regra, e por isso tem de dizer exatamente o mesmo
+     * que `allDocumentsVerified()` + `requiredDocuments()`. Há um teste que as
+     * compara caso a caso (AdminListaDeTecnicosTest). Se mexeres numa, muda a
+     * outra:
+     *
+     *  - obrigatórios = os documentos `required` MAIS as certificações das
+     *    áreas do técnico (`operation_areas.documents`, uma lista de ids que o
+     *    Filament grava como texto ou como número — procura-se das duas
+     *    formas); documentos e áreas apagados não contam;
+     *  - entregue = linha em `vendor_documents` aprovada, sem validade ou com
+     *    validade até HOJE inclusive (a mesma data, `now()->toDateString()`).
+     *
+     * Referencia `vendors.id`: usa-se numa consulta sobre a tabela `vendors`.
+     *
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    public static function sqlDocumentosEmDia(): array
+    {
+        $sql = <<<'SQL'
+NOT EXISTS (
+    SELECT 1 FROM documents AS obrigatorio
+    WHERE obrigatorio.deleted_at IS NULL
+      AND (
+        obrigatorio.required = 1
+        OR EXISTS (
+            SELECT 1 FROM operation_area_vendors AS area_do_tecnico
+            JOIN operation_areas AS area ON area.id = area_do_tecnico.operation_area_id AND area.deleted_at IS NULL
+            WHERE area_do_tecnico.vendor_id = vendors.id
+              AND (JSON_CONTAINS(area.documents, CAST(obrigatorio.id AS JSON))
+                   OR JSON_SEARCH(area.documents, 'one', CAST(obrigatorio.id AS CHAR)) IS NOT NULL)
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_documents AS entregue
+        WHERE entregue.vendor_id = vendors.id
+          AND entregue.document_id = obrigatorio.id
+          AND entregue.status = 'approved'
+          AND (entregue.expiration_date IS NULL OR entregue.expiration_date >= ?)
+      )
+)
+SQL;
+
+        return [$sql, [now()->toDateString()]];
+    }
+
     public function missingDocuments(): Attribute
     {
         return Attribute::make(get: function () {
