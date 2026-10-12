@@ -89,6 +89,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::post('/services/{service}/tentar-cobrar', [ServiceActionController::class, 'tentarCobrar']);
     Route::post('/services/{service}/desistir-e-devolver', [ServiceActionController::class, 'desistirEDevolver']);
 
+    // De que pedido é cada pagamento (por uuid, até 200 de uma vez) -- para
+    // o backoffice abrir o pedido a partir de um pagamento do Payshop.
+    Route::get('/payment-orders', [PaymentOrderController::class, 'index']);
+    Route::get('/payment-orders/{uuid}', [PaymentOrderController::class, 'show']);
+
     // Reembolso / libertação de cativo dos pagamentos da app (Payshop).
     // Passa pelo SDK para o estado local acompanhar; recusa se o serviço
     // associado ainda estiver vivo (ver nota no controller).
