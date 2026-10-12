@@ -13,7 +13,6 @@ use App\Http\Controllers\Api\Admin\OperacoesAoVivoController;
 use App\Http\Controllers\Api\Admin\ServiceActionController;
 use App\Http\Controllers\Api\Admin\ServiceController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
-use App\Http\Controllers\Api\Admin\SmsCodeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
@@ -204,8 +203,8 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/sent-notifications', [SentNotificationController::class, 'index']);
     Route::get('/sent-notifications/types', [SentNotificationController::class, 'types']);
 
-    // Códigos SMS — equivalente ao Filament SmsCodeResource. Só leitura,
-    // usado pelo suporte para confirmar o código enviado a um número
-    // (sem a restrição de super-admin do Filament, ver nota no controller).
-    Route::get('/sms-codes', [SmsCodeController::class, 'index']);
+    // Os códigos SMS de login JÁ NÃO saem por aqui. Eram devolvidos em texto
+    // simples a quem tivesse o token do backoffice -- o suficiente para entrar
+    // na conta de qualquer cliente -- e o backoffice deixou de os usar. Quem
+    // precisar mesmo de os ver tem o Filament, só para super-admin.
 });
