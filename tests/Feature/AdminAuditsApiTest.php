@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\OperationArea;
+use App\Models\Service;
 use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\DB;
+use OwenIt\Auditing\Models\Audit;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -16,7 +19,10 @@ class AdminAuditsApiTest extends TestCase
     // 'wallets' entra porque criar Users dispara o UserObserver.
     use DatabaseTruncation;
 
-    protected array $tablesToTruncate = ['audits', 'operation_areas', 'documents', 'users', 'wallets'];
+    // 'model_has_roles' também: o TRUNCATE de 'users' recomeça os ids, e um
+    // papel de admin que ficou de outro teste passava para o User novo com o
+    // mesmo id — um cliente comum a contar como staff.
+    protected array $tablesToTruncate = ['audits', 'operation_areas', 'documents', 'users', 'wallets', 'model_has_roles'];
 
     protected function setUp(): void
     {
@@ -133,5 +139,166 @@ class AdminAuditsApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data.items')
             ->assertJsonPath('data.items.0.entity', '#999999');
+    }
+
+    // ------------------------------------------- quem do staff, pelo backoffice
+
+    /** O que o backoffice manda: o token e quem tem a sessão aberta. */
+    private function comoStaff(string $email, ?string $nome = null): static
+    {
+        return $this->withAuth()->withHeaders(array_filter([
+            'X-Staff-Email' => $email,
+            'X-Staff-Nome' => $nome,
+        ], fn ($v) => $v !== null));
+    }
+
+    public function test_a_alteracao_feita_pelo_backoffice_grava_quem_a_fez(): void
+    {
+        $this->comoStaff('  Andre@Piquet.PT ', rawurlencode('André Lacerda'))
+            ->postJson('/api/v1/admin/operation-areas', ['name' => 'Jardinagem'])
+            ->assertCreated();
+
+        $audit = Audit::query()->where('auditable_type', OperationArea::class)->sole();
+        $this->assertSame('created', $audit->event);
+        $this->assertNull($audit->user_id);
+        $this->assertSame('andre@piquet.pt', $audit->staff_email);
+        $this->assertSame('André Lacerda', $audit->staff_nome);
+
+        // E aparece no feed, que antes só mostrava contas de admin do Laravel.
+        $this->withAuth()
+            ->getJson('/api/v1/admin/audits')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.who', 'André Lacerda')
+            ->assertJsonPath('data.items.0.action', 'Criou Categoria')
+            ->assertJsonPath('data.items.0.entity', 'Jardinagem')
+            ->assertJsonPath('data.items.0.event', 'created')
+            ->assertJsonPath('data.items.0.auditable_type', 'operation_area')
+            ->assertJsonPath('data.items.0.auditable_id', $audit->auditable_id)
+            ->assertJsonPath('data.items.0.staff_email', 'andre@piquet.pt')
+            ->assertJsonPath('data.items.0.staff_nome', 'André Lacerda');
+    }
+
+    public function test_sem_nome_fica_o_email_e_um_nome_em_latin1_chega_inteiro(): void
+    {
+        $this->comoStaff('rita@piquet.pt')
+            ->postJson('/api/v1/admin/operation-areas', ['name' => 'Pintura'])
+            ->assertCreated();
+        // O fetch do Node manda um "é" sem codificar como um byte só (Latin-1).
+        $this->comoStaff('jose@piquet.pt', "Jos\xE9 Silva")
+            ->postJson('/api/v1/admin/operation-areas', ['name' => 'Limpeza'])
+            ->assertCreated();
+
+        $porEmail = Audit::query()->pluck('staff_nome', 'staff_email')->all();
+        $this->assertSame(['rita@piquet.pt' => null, 'jose@piquet.pt' => 'José Silva'], $porEmail);
+
+        $this->withAuth()->getJson('/api/v1/admin/audits')
+            ->assertJsonPath('data.items.0.who', 'José Silva')
+            ->assertJsonPath('data.items.1.who', 'rita@piquet.pt');
+    }
+
+    public function test_um_email_invalido_nao_grava_nada_e_um_nome_comprido_e_cortado(): void
+    {
+        $this->comoStaff('isto-nao-e-um-email', 'Alguém')
+            ->postJson('/api/v1/admin/operation-areas', ['name' => 'Mudanças'])
+            ->assertCreated();
+        $this->comoStaff('ana@piquet.pt', str_repeat('a', 300))
+            ->postJson('/api/v1/admin/operation-areas', ['name' => 'Estores'])
+            ->assertCreated();
+
+        $audits = Audit::query()->orderBy('id')->get();
+        $this->assertNull($audits[0]->staff_email);
+        $this->assertNull($audits[0]->staff_nome);
+        $this->assertSame(190, mb_strlen($audits[1]->staff_nome));
+    }
+
+    public function test_sem_token_valido_os_cabecalhos_nao_valem_nada(): void
+    {
+        config(['services.admin_api.token' => 'a-valid-token']);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer token-errado',
+            'X-Staff-Email' => 'intruso@exemplo.pt',
+            'X-Staff-Nome' => 'Intruso',
+        ])->postJson('/api/v1/admin/operation-areas', ['name' => 'Não passa'])->assertUnauthorized();
+
+        $this->assertSame(0, Audit::query()->count());
+
+        // Os cabeçalhos estão no pedido, mas o token não chegou a ser aceite:
+        // uma alteração feita fora da API de admin não fica com o nome dele.
+        $area = new OperationArea;
+        $area->setTranslations('name', ['en' => 'Locksmith', 'pt-pt' => 'Serralharia']);
+        $area->save();
+
+        $audit = Audit::query()->sole();
+        $this->assertNull($audit->staff_email);
+        $this->assertNull($audit->staff_nome);
+    }
+
+    // --------------------------------------------------------------- filtros
+
+    /** Uma linha de auditoria direta na tabela, como as que já lá estão. */
+    private function auditoria(array $dados): int
+    {
+        return DB::table('audits')->insertGetId([
+            'user_type' => null,
+            'user_id' => null,
+            'event' => 'updated',
+            'auditable_type' => Vendor::class,
+            'auditable_id' => 5,
+            'old_values' => json_encode(['status' => 'Offline']),
+            'new_values' => json_encode(['status' => 'Online']),
+            'created_at' => now(),
+            'updated_at' => now(),
+            ...$dados,
+        ]);
+    }
+
+    public function test_os_filtros_por_pessoa_tipo_registo_e_evento(): void
+    {
+        $andreNoFilament = $this->makeAdmin('André', 'Lacerda');
+        $andreNoFilament->forceFill(['email' => 'andre@piquet.pt'])->save();
+        $outroAdmin = $this->makeAdmin('Rodrigo', 'Pacheco');
+        DB::table('audits')->delete(); // os Users acabados de criar também foram auditados
+
+        $doBackoffice = $this->auditoria(['staff_email' => 'andre@piquet.pt', 'staff_nome' => 'André Lacerda']);
+        $doFilament = $this->auditoria(['user_type' => User::class, 'user_id' => $andreNoFilament->id, 'auditable_id' => 6]);
+        $doOutro = $this->auditoria(['user_type' => User::class, 'user_id' => $outroAdmin->id, 'event' => 'deleted']);
+        $deServico = $this->auditoria(['staff_email' => 'rita@piquet.pt', 'auditable_type' => Service::class, 'auditable_id' => 5]);
+        // De um cliente na app: nunca aparece, nem filtrado.
+        $this->auditoria(['user_type' => User::class, 'user_id' => 999]);
+
+        $ids = fn (string $q) => array_column($this->withAuth()->getJson('/api/v1/admin/audits'.$q)->assertOk()->json('data.items'), 'id');
+
+        $this->assertEqualsCanonicalizing([$doBackoffice, $doFilament, $doOutro, $deServico], $ids(''));
+        // A mesma pessoa pelos dois caminhos: o backoffice novo e o Filament.
+        $this->assertEqualsCanonicalizing([$doBackoffice, $doFilament], $ids('?staff=Andre@Piquet.pt'));
+        $this->assertEqualsCanonicalizing([$doBackoffice, $doFilament, $doOutro], $ids('?auditable_type=vendor'));
+        $this->assertSame([$deServico], $ids('?auditable_type=service&auditable_id=5'));
+        $this->assertEqualsCanonicalizing([$doBackoffice, $doOutro], $ids('?auditable_type=vendor&auditable_id=5'));
+        $this->assertSame([$doOutro], $ids('?event=deleted'));
+        $this->assertSame([], $ids('?auditable_type=payment_order'));
+
+        $this->withAuth()->getJson('/api/v1/admin/audits?auditable_type=coisa')->assertStatus(422)->assertJsonValidationErrors('auditable_type');
+        $this->withAuth()->getJson('/api/v1/admin/audits?event=apagou')->assertStatus(422)->assertJsonValidationErrors('event');
+    }
+
+    public function test_as_auditorias_antigas_continuam_no_feed_sem_staff(): void
+    {
+        $admin = $this->makeAdmin('Ana', 'Costa');
+        $this->actingAs($admin);
+
+        $area = new OperationArea;
+        $area->setTranslations('name', ['en' => 'Plumbing', 'pt-pt' => 'Canalização']);
+        $area->save();
+
+        $this->withAuth()
+            ->getJson('/api/v1/admin/audits?auditable_type=operation_area')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.who', 'Ana Costa')
+            ->assertJsonPath('data.items.0.staff_email', null)
+            ->assertJsonPath('data.items.0.staff_nome', null)
+            ->assertJsonPath('data.meta.total', 1);
     }
 }
