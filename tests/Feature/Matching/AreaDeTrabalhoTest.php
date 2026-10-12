@@ -225,6 +225,30 @@ class AreaDeTrabalhoTest extends TestCase
         $this->assertArrayNotHasKey($emLisboa->id, $convidados, 'um pedido no Porto não chama ninguém a 275 km');
     }
 
+    public function test_quem_esta_em_lisboa_e_escolheu_o_sobral_e_convidado_para_o_sobral(): void
+    {
+        // Pedido no Sobral de Monte Agraço, a ~35 km do centro de Lisboa: fora
+        // da cidade "Lisboa" e do recurso de 30 km, dentro do raio máximo.
+        Address::where('user_id', $this->customer->id)->update([
+            'city' => 'Sobral de Monte Agraço',
+            'municipality' => 'Sobral de Monte Agraço',
+            'state' => 'Lisboa',
+            'postal_code' => '2590-000',
+            'latitude' => 39.0184,
+            'longitude' => -9.1517,
+        ]);
+        $lisboa = City::query()->where('name', 'Lisboa')->where('district', 'Lisboa')->firstOrFail();
+        $sobral = City::query()->where('name', 'Sobral de Monte Agraço')->firstOrFail();
+        $soLisboa = $this->tecnicoEm([$lisboa], lat: 38.7078, lng: -9.1366);
+        $lisboaESobral = $this->tecnicoEm([$lisboa, $sobral], lat: 38.7078, lng: -9.1366);
+
+        $convidados = $this->convidados();
+
+        $this->assertArrayHasKey($lisboaESobral->id, $convidados);
+        $this->assertFalse((bool) $convidados[$lisboaESobral->id]->is_outside_area);
+        $this->assertArrayNotHasKey($soLisboa->id, $convidados, 'só "Lisboa" não chega ao Sobral');
+    }
+
     public function test_quem_nao_escolheu_cidades_nao_fica_sem_pedidos(): void
     {
         $semCidades = $this->tecnicoEm([]);
