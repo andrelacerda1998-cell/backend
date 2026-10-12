@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Admin\StoreServicesTypeRequest;
 use App\Http\Requests\Api\Admin\UpdateServicesTypeRequest;
+use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\ServicesType;
 use Illuminate\Http\Request;
@@ -18,7 +19,8 @@ use Illuminate\Http\Request;
  *   versão do backoffice.
  * - `suggested_price` -- nem sequer tem campo no formulário do Filament (só
  *   filtro na tabela), por isso não faz sentido adicioná-lo aqui.
- * - apagar/restaurar -- fora do âmbito confirmado.
+ * - restaurar um tipo apagado. Apagar existe, mas só para tipos que nunca
+ *   tiveram pedidos; os outros desativam-se (`is_active`) -- ver destroy().
  *
  * `name`/`includes`/`excludes` são traduzíveis no Filament (campos EN + PT-PT
  * lado a lado). Esta fatia usa um único campo de texto por simplicidade -- o
@@ -32,7 +34,7 @@ class ServicesTypeController extends Controller
     {
         $perPage = min((int) $request->integer('per_page', 20), 100);
 
-        $query = ServicesType::query()->with('operationArea')->withCount('vendors')->orderBy('id');
+        $query = ServicesType::query()->with('operationArea')->withCount($this->contagens())->orderBy('id');
 
         if ($areaId = $request->integer('operation_area_id')) {
             $query->where('operation_area_id', $areaId);
@@ -56,6 +58,12 @@ class ServicesTypeController extends Controller
                 'total' => $types->total(),
             ],
         ]);
+    }
+
+    /** GET /v1/admin/services-types/{servicesType} — um tipo, com as contagens. */
+    public function show(ServicesType $servicesType): ApiSuccessResponse
+    {
+        return ApiSuccessResponse::make($this->present($this->comContagens($servicesType)));
     }
 
     public function store(StoreServicesTypeRequest $request): ApiSuccessResponse
@@ -96,23 +104,57 @@ class ServicesTypeController extends Controller
         if (array_key_exists('excludes', $data)) {
             $servicesType->excludes = $this->toTranslatableArray($data['excludes'] ?? []);
         }
+        if (array_key_exists('is_active', $data)) {
+            $servicesType->is_active = (bool) $data['is_active'];
+        }
         $servicesType->save();
 
-        return ApiSuccessResponse::make($this->present($servicesType->fresh(['operationArea'])));
+        return ApiSuccessResponse::make($this->present($this->comContagens($servicesType->fresh())));
     }
 
     /**
      * DELETE /v1/admin/services-types/{servicesType} — remove do catálogo.
      *
-     * SoftDelete: a linha fica na base de dados, por isso os serviços já
-     * realizados que apontam para este tipo continuam a resolver o nome e o
-     * histórico não se parte. O que desaparece é a oferta na app e no catálogo.
+     * SÓ SE NUNCA TEVE PEDIDOS. O apagar é um SoftDelete, e a linha fica na
+     * base de dados -- mas a relação `serviceType` de um pedido ignora os
+     * tipos apagados, e cada pedido antigo deste tipo passava a aparecer sem
+     * nome no backoffice, nos recibos e nas contas por categoria. Para tirar
+     * da app um serviço que já foi pedido, desativa-se (`is_active=false`):
+     * deixa de se poder pedir e o histórico fica inteiro.
      */
-    public function destroy(ServicesType $servicesType): ApiSuccessResponse
+    public function destroy(ServicesType $servicesType): ApiSuccessResponse|ApiErrorResponse
     {
+        if ($this->pedidosReais($servicesType->services())->exists()) {
+            return new ApiErrorResponse(null, 'Este serviço já tem pedidos. Desativa-o em vez de o apagar.', 409);
+        }
+
         $servicesType->delete();
 
         return ApiSuccessResponse::make(['id' => $servicesType->id, 'deleted' => true]);
+    }
+
+    /**
+     * As contagens que a lista e a ficha mostram. `services_count` são os
+     * pedidos REAIS deste tipo (os de teste não contam, como em toda a API
+     * de admin) -- o mesmo critério que decide se o tipo se pode apagar.
+     */
+    private function contagens(): array
+    {
+        return [
+            'vendors',
+            'services' => fn ($q) => $this->pedidosReais($q),
+        ];
+    }
+
+    /** As mesmas contagens da lista, para a ficha e para as respostas de editar. */
+    private function comContagens(ServicesType $type): ServicesType
+    {
+        return $type->load('operationArea')->loadCount($this->contagens());
+    }
+
+    private function pedidosReais($pedidos)
+    {
+        return $pedidos->where('services.is_test', false);
     }
 
     /** Grava o mesmo valor nas duas línguas geridas pelo Filament (en, pt-pt). */
@@ -139,6 +181,10 @@ class ServicesTypeController extends Controller
             'includes' => $type->getTranslatedIncludes(app()->getLocale()),
             'excludes' => $type->getTranslatedExcludes(app()->getLocale()),
             'vendors_count' => $type->vendors_count ?? 0,
+            // Desativado = fora da app, mas com o histórico inteiro.
+            'is_active' => (bool) ($type->is_active ?? true),
+            // Pedidos reais deste tipo. Com algum, o tipo já não se apaga.
+            'services_count' => (int) ($type->services_count ?? 0),
             'created_at' => $type->created_at?->toIso8601String(),
         ];
     }

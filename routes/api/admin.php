@@ -162,10 +162,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // (sem apagar) e sem Zonas/AllowedZone -- decisão explícita do utilizador
     // (2026-07-29, ver notas nos controllers).
     Route::get('/services-types', [ServicesTypeController::class, 'index']);
+    Route::get('/services-types/{servicesType}', [ServicesTypeController::class, 'show']);
     Route::post('/services-types', [ServicesTypeController::class, 'store']);
+    // Aceita também `is_active`: desativar é a forma de tirar do catálogo um
+    // serviço que já tem pedidos (ver destroy).
     Route::put('/services-types/{servicesType}', [ServicesTypeController::class, 'update']);
-    // SoftDelete -- ver nota no controller: o histórico de serviços continua a
-    // resolver o nome do tipo depois de removido do catálogo.
+    // SoftDelete, e só sem pedidos -- ver nota no controller.
     Route::delete('/services-types/{servicesType}', [ServicesTypeController::class, 'destroy']);
 
     Route::get('/operation-areas', [OperationAreaController::class, 'index']);
