@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Auth\PhoneNumberValidationCode;
 use App\Services\Common\SmsValidationService;
+use App\Support\MockSms;
 
 class ValidationPhoneNumberController extends Controller
 {
@@ -22,7 +23,7 @@ class ValidationPhoneNumberController extends Controller
             abort(400);
         }
 
-        if (config('app.MOCK_SMS')){
+        if (MockSms::ativo()) {
             return ApiSuccessResponse::make();
         }
         $service = new SmsValidationService($user);

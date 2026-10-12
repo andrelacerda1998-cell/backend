@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Auth\PhoneNumberValidationCode;
+use App\Support\MockSms;
 use Illuminate\Http\Request;
 
 class ValidatePhoneNumberController extends Controller
@@ -16,8 +17,9 @@ class ValidatePhoneNumberController extends Controller
             abort(403);
         }
         $user = auth()->user();
-        if (config('app.MOCK_SMS')) {
-            if ($code === '123456') {
+        // Em produção nunca: ver App\Support\MockSms.
+        if (MockSms::ativo()) {
+            if ($code === MockSms::CODIGO) {
                 $user->update(['phone_number_verified_at' => now(), 'profile_completion_pending' => false]);
 
                 return ApiSuccessResponse::make([

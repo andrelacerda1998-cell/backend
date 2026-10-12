@@ -9,6 +9,7 @@ use App\Http\Requests\Api\Auth\PhoneLoginVerifyRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\Auth\LoginApiResponse;
 use App\Services\Common\PhoneLoginSmsService;
+use App\Support\MockSms;
 
 class PhoneLoginVerifyController extends Controller
 {
@@ -18,11 +19,14 @@ class PhoneLoginVerifyController extends Controller
             $phoneNumber = $request->get('phone_number');
             $code = $request->get('code');
 
-            if (config('app.MOCK_SMS') && $code !== '123456') {
+            // Em produção nunca: ver App\Support\MockSms.
+            $mock = MockSms::ativo();
+
+            if ($mock && $code !== MockSms::CODIGO) {
                 throw new WrongCredentials;
             }
 
-            if (! config('app.MOCK_SMS')) {
+            if (! $mock) {
                 $user = $service->verifyCode($phoneNumber, $code);
 
                 if (! $user) {
