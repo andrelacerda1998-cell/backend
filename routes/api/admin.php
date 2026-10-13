@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Admin\PaymentOrderController;
 use App\Http\Controllers\Api\Admin\VendorNoShowController;
 use App\Http\Controllers\Api\Admin\VendorNoShowListController;
 use App\Http\Controllers\Api\Admin\VendorPaymentController;
+use App\Http\Controllers\Api\Admin\FaturasPorEmitirController;
 use App\Http\Controllers\Api\Admin\SupportTicketController;
 use App\Http\Controllers\Api\Admin\VoucherController;
 use Illuminate\Support\Facades\Route;
@@ -63,6 +64,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // interno + email/notificação; a transferência bancária é manual).
     Route::get('/vendor-payments', [VendorPaymentController::class, 'index']);
     Route::put('/vendor-payments/{vendor}/pay', [VendorPaymentController::class, 'pay']);
+
+    // Faturas de serviços fechados que ficaram por emitir, e "emitir agora" para
+    // um técnico. O dinheiro desses serviços só se paga depois. Ver FaturasEmAtraso.
+    Route::get('/faturas-por-emitir', [FaturasPorEmitirController::class, 'index']);
+    Route::post('/faturas-por-emitir/{vendor}/emitir', [FaturasPorEmitirController::class, 'emitir']);
 
     // Dar um serviço como falta do técnico: cobra-lhe 50% do que ia receber e
     // cancela o serviço (o que reembolsa o cliente). Ver VendorNoShowPolicy.

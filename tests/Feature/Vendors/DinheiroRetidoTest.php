@@ -15,6 +15,7 @@ use App\Services\Common\Services\CloseService;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -43,7 +44,7 @@ class DinheiroRetidoTest extends TestCase
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
         'services', 'services_types', 'operation_areas', 'addresses', 'documents',
-        'transactions', 'transfers',
+        'transactions', 'transfers', 'media',
     ];
 
     protected function setUp(): void
@@ -56,6 +57,7 @@ class DinheiroRetidoTest extends TestCase
         Gender::firstOrCreate(['name' => 'Masculino']);
         Notification::fake();
         Queue::fake(); // o fecho dispara o job de faturação (InvoiceXpress)
+        Storage::fake(config('media-library.disk_name'));
     }
 
     private function withAuth(): static
@@ -519,7 +521,12 @@ class DinheiroRetidoTest extends TestCase
         ]);
         (new CloseService($servico))->close();
 
-        // O backoffice paga-lhe tudo.
+        // A fatura sai (desde 13/10/2026 só se paga o que está faturado)...
+        $servico->addMediaFromString('%PDF-1.4 fatura')
+            ->usingFileName('fatura.pdf')
+            ->toMediaCollection(Service::COLECAO_DA_FATURA);
+
+        // ...e o backoffice paga-lhe tudo.
         $this->withAuth()->putJson("/api/v1/admin/vendor-payments/{$vendor->id}/pay")->assertOk();
 
         // E agora tira-se-lhe a AT e da-se-lhe credito novo.

@@ -337,13 +337,20 @@ class Vendor extends Model implements Auditable
      * — só não o recebe enquanto isto não estiver resolvido. A regra é uma:
      * **não se transfere dinheiro por trabalho que não se consegue faturar**.
      *
-     * Três razões, por ordem de quem se resolve primeiro:
+     * Quatro razões, por ordem de quem se resolve primeiro:
      *
      *  - `iban_missing` — não há para onde transferir. Literal.
      *  - `fiscal_address_missing` — sem morada fiscal a conta de faturação não
      *    se cria (rebenta no InvoiceXpress), e sem ela não há fatura.
      *  - `at_user_missing` — sem o subutilizador não se comunica a fatura à AT.
-     *    Só a partir do 3.º serviço concluído (ver `atRequired()`).
+     *    A partir do 3.º serviço concluído (ver `atRequired()`), ou antes disso
+     *    quando todo o saldo espera por faturas que precisam dela.
+     *  - `invoice_pending` — os dados estão todos, mas todo o saldo espera por
+     *    faturas por emitir (desde 13/10/2026, ver `ganhosPagaveis()`).
+     *    Resolve-se do lado da Piquet.
+     *
+     * Quando só PARTE do saldo espera por uma fatura, isto é `null` (paga-se o
+     * resto) e quem diz porquê é o `payoutHoldReason()`.
      *
      * O QUE NÃO ENTRA, de propósito: `documents_pending` e `contact_unverified`.
      * Estão no `invoicingBlocker()` porque travam o técnico de TRABALHAR, mas não
@@ -399,6 +406,95 @@ class Vendor extends Model implements Auditable
         })->shouldCache();
     }
 
+    /**
+     * A marca dos pagamentos feitos desde que só se paga o que já está faturado
+     * (13/10/2026). Ver `ganhosPorFaturar()`.
+     */
+    public const PAGAMENTO_SO_DO_FATURADO = 'so_o_faturado';
+
+    /**
+     * Ganhos de serviços com a fatura por emitir que ainda não lhe foram
+     * pagos, em cêntimos.
+     *
+     * Serviço a serviço, pelo `meta` do crédito (o `settle()` grava o id do
+     * serviço), e só os que a FaturasEmAtraso consegue resolver
+     * (`Service::porFaturar`). Um crédito sem serviço reconhecível não conta:
+     * não há como saber de que fatura dependeria.
+     *
+     * "Ainda não pagos": até esta regra, cada pagamento levava o saldo todo,
+     * faturado ou não. O que foi creditado antes do último pagamento desses já
+     * saiu e não prende nada. Os pagamentos de depois da regra levam a marca
+     * PAGAMENTO_SO_DO_FATURADO e nunca levam dinheiro por faturar, por isso não
+     * mexem nesta conta.
+     */
+    public function ganhosPorFaturar(): Attribute
+    {
+        return Attribute::make(get: function () {
+            $carteira = $this->user?->wallet?->getKey();
+
+            if (! $carteira) {
+                return 0;
+            }
+
+            $ultimoPagamentoDoSaldoTodo = Transaction::where('wallet_id', $carteira)
+                ->where('type', 'withdraw')
+                ->where('confirmed', true)
+                ->where('meta->description', 'Transfer to account')
+                ->whereNull('meta->'.self::PAGAMENTO_SO_DO_FATURADO)
+                ->max('id');
+
+            $creditos = Transaction::where('wallet_id', $carteira)
+                ->where('type', 'deposit')
+                ->where('confirmed', true)
+                ->whereJsonContains('meta->class', Service::class)
+                ->when($ultimoPagamentoDoSaldoTodo, fn ($q, $id) => $q->where('id', '>', $id))
+                ->get(['amount', 'meta']);
+
+            $ids = $creditos->map(fn ($t) => (int) ($t->meta['id'] ?? 0))->filter()->unique();
+
+            if ($ids->isEmpty()) {
+                return 0;
+            }
+
+            $porFaturar = array_flip(Service::query()->whereIn('id', $ids)->porFaturar()->pluck('id')->all());
+
+            return (int) $creditos
+                ->filter(fn ($t) => isset($porFaturar[(int) ($t->meta['id'] ?? 0)]))
+                ->sum('amount');
+        })->shouldCache();
+    }
+
+    /**
+     * Do saldo, a parte que espera por uma fatura, em cêntimos.
+     *
+     * Os `ganhos_por_faturar`, nunca mais do que o saldo. Não se limita pelos
+     * `ganhos_por_pagar` de propósito: essa conta trata qualquer pagamento como
+     * pagamento de serviços, e a um técnico com crédito promocional cada
+     * pagamento levava uma fatia do dinheiro que devia esperar pela fatura.
+     */
+    public function ganhosRetidosPelaFatura(): Attribute
+    {
+        return Attribute::make(get: fn () => min(
+            $this->ganhos_por_faturar,
+            max(0, (int) ($this->user?->wallet?->balance ?? 0)),
+        ))->shouldCache();
+    }
+
+    /**
+     * O que se pode transferir hoje, em cêntimos: o saldo, menos a parte que
+     * espera por uma fatura.
+     *
+     * Decisão do André (13/10/2026): só se paga um serviço depois de a fatura
+     * dele estar emitida. Até aqui pagava-se o saldo inteiro, e nos três
+     * primeiros serviços sem AT o técnico recebia por trabalho sem fatura.
+     */
+    public function ganhosPagaveis(): Attribute
+    {
+        return Attribute::make(get: fn () => max(0, (int) ($this->user?->wallet?->balance ?? 0))
+            - $this->ganhos_retidos_pela_fatura
+        )->shouldCache();
+    }
+
     public function payoutBlocker(): ?string
     {
         /*
@@ -412,8 +508,13 @@ class Vendor extends Model implements Auditable
          * Medido em produção a 30/09: dos 25 técnicos com saldo, 8 tinham
          * exactamente 20,00 EUR e ZERO serviços concluídos. Eram os 8 que esta
          * saída antecipada liberta.
+         *
+         * Nem dinheiro à espera de uma fatura (`ganhos_retidos_pela_fatura`):
+         * pagar o crédito promocional põe os `ganhos_por_pagar` a zero mesmo com
+         * um serviço por faturar na carteira, e sem esta segunda condição esse
+         * serviço saía no pagamento seguinte.
          */
-        if ($this->ganhos_por_pagar <= 0) {
+        if ($this->ganhos_por_pagar <= 0 && $this->ganhos_retidos_pela_fatura <= 0) {
             return null;
         }
 
@@ -430,7 +531,39 @@ class Vendor extends Model implements Auditable
             return 'at_user_missing';
         }
 
+        // Só se transfere o que já está faturado (ver `ganhosPagaveis()`). Se
+        // TUDO o que está no saldo espera por uma fatura, não sai nada.
+        if ($this->ganhos_retidos_pela_fatura > 0 && $this->ganhos_pagaveis <= 0) {
+            return $this->razaoDaFaturaPorEmitir();
+        }
+
         return null;
+    }
+
+    /**
+     * Porque é que há dinheiro dele à espera, todo ou parte. `null` = nada à espera.
+     *
+     * Com o pagamento travado é o `payoutBlocker()`. Quando só uma parte espera
+     * por uma fatura e o resto se paga, o `payoutBlocker()` é `null` (o
+     * pagamento passa), e isto diz o que falta a essa parte.
+     */
+    public function payoutHoldReason(): ?string
+    {
+        if ($blocker = $this->payoutBlocker()) {
+            return $blocker;
+        }
+
+        return $this->ganhos_retidos_pela_fatura > 0 ? $this->razaoDaFaturaPorEmitir() : null;
+    }
+
+    /**
+     * O que falta à fatura que segura o dinheiro: a AT, quando é isso — é a
+     * única parte que depende do técnico; senão está do lado da Piquet (conta
+     * de faturação por criar, ou a fatura à espera da tarefa diária).
+     */
+    private function razaoDaFaturaPorEmitir(): string
+    {
+        return $this->at_ready ? 'invoice_pending' : 'at_user_missing';
     }
 
     /** A versão dos termos que este técnico aceitou, ou `null`. */
@@ -457,18 +590,20 @@ class Vendor extends Model implements Auditable
     }
 
     /**
-     * Quanto é que está retido por causa da AT, em cêntimos.
+     * Quanto é que está retido, em cêntimos.
      *
-     * É o saldo todo: a carteira do técnico só guarda a parte dele, e se o
-     * pagamento está travado está travado por inteiro. 0 quando não há nada
-     * retido -- seja porque não há bloqueio, seja porque a carteira está a zero.
+     * Com o pagamento travado é o saldo todo: a carteira do técnico só guarda a
+     * parte dele, e se o pagamento está travado está travado por inteiro. Sem
+     * travão, é a parte que espera por uma fatura (ver `payoutHoldReason()`).
+     * 0 quando não há nada retido -- seja porque não há bloqueio nem fatura por
+     * emitir, seja porque a carteira está a zero.
      */
     public function payoutOnHoldAmount(): Attribute
     {
         return Attribute::make(
             get: fn () => $this->payout_blocked
                 ? max(0, (int) ($this->user?->wallet?->balance ?? 0))
-                : 0
+                : $this->ganhos_retidos_pela_fatura
         );
     }
 

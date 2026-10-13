@@ -340,6 +340,12 @@ return [
         'title' => 'Vous êtes en ligne, mais sans localisation',
         'description' => 'Nous n\'avons pas reçu votre localisation depuis plus d\'une heure, vous ne recevez donc pas de demandes immédiates. Ouvrez l\'app pour les recevoir à nouveau.',
     ],
+    'dinheiroRetido' => [
+        'title' => 'Vous avez :valor qui vous attendent',
+        'iban_missing' => 'Pour vous virer l\'argent de vos services, il nous faut votre IBAN. Ajoutez-le dans l\'app.',
+        'fiscal_address_missing' => 'Pour émettre la facture et vous payer, il nous faut votre adresse fiscale. Ajoutez-la dans l\'app.',
+        'at_user_missing' => 'Pour émettre la facture et vous payer, il nous faut le sous-utilisateur AT. Voyez comment le créer dans l\'app.',
+    ],
     'onlineExpirou' => [
         'title' => 'Vous êtes maintenant hors ligne',
         'description' => 'Nous n\'avons pas reçu votre localisation depuis :dias jours, nous avons donc cessé de vous envoyer des demandes. Ouvrez l\'app et passez en ligne quand vous voulez les recevoir à nouveau.',
