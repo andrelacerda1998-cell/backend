@@ -355,6 +355,12 @@ return [
         'title' => 'Estás online, mas sem localização',
         'description' => 'Não recebemos a tua localização há mais de uma hora, por isso não te chegam pedidos para agora. Abre a app para voltares a recebê-los.',
     ],
+    'dinheiroRetido' => [
+        'title' => 'Tens :valor à tua espera',
+        'iban_missing' => 'Para te transferirmos o dinheiro dos teus serviços, falta o teu IBAN. Adiciona-o na app.',
+        'fiscal_address_missing' => 'Para emitirmos a fatura e te pagarmos, falta a tua morada fiscal. Adiciona-a na app.',
+        'at_user_missing' => 'Para emitirmos a fatura e te pagarmos, falta o subutilizador da AT. Vê como o criar na app.',
+    ],
     'onlineExpirou' => [
         'title' => 'Passaste a offline',
         'description' => 'Há :dias dias que não recebemos a tua localização, por isso deixámos de te enviar pedidos. Abre a app e liga-te quando quiseres voltar a recebê-los.',

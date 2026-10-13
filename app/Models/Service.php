@@ -397,6 +397,51 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
         return $query->whereIn('status', [ServiceStatus::PENDING])->where('payment_status', PaymentStatus::PAID);
     }
 
+    /**
+     * A coleção onde fica o PDF da fatura.
+     *
+     * Tê-lo é o sinal de que a fatura saiu, porque só se guarda o PDF depois de
+     * a fatura ser finalizada (CreateInvoiceJob, FaturasEmAtraso). O
+     * InvoiceXpress gera PDF também de um RASCUNHO (visto a 13/10/2026 na conta
+     * de testes): é a ordem de quem o guarda que faz deste sinal um sinal. Um
+     * `invoice_id` sozinho não chega: pode ser um rascunho que nunca passou de
+     * rascunho — é o que fica quando falta a AT ao técnico.
+     */
+    public const COLECAO_DA_FATURA = 'invoices';
+
+    /**
+     * Desde quando se emitem faturas em atraso (ver FaturasEmAtraso).
+     *
+     * A 30/09/2026 o técnico passou a poder fazer os três primeiros serviços
+     * sem a AT (`Vendor::SERVICOS_ANTES_DA_AT`), e é daí que vêm as faturas
+     * que ficam por emitir. Um serviço pedido antes disso sem fatura falhou
+     * por outra razão: não se emite sozinho, nem retém o pagamento de ninguém,
+     * porque pode já ter sido pago. Decisão do André (13/10/2026).
+     */
+    public const FATURAS_EM_ATRASO_DESDE = '2026-09-30 00:00:00';
+
+    public function temFaturaEmitida(): bool
+    {
+        return $this->getMedia(self::COLECAO_DA_FATURA)->isNotEmpty();
+    }
+
+    /**
+     * Serviços fechados que deviam ter fatura e não têm.
+     *
+     * Os mesmos que o ServiceObserver manda faturar (`Closed`, fora de teste),
+     * pedidos desde FATURAS_EM_ATRASO_DESDE: a fatura só é tentada uma vez, ao
+     * fechar, e se o técnico ainda não tinha conta de faturação ou AT ficava
+     * por emitir para sempre. Ver `App\Services\InvoiceXpress\FaturasEmAtraso`.
+     */
+    public function scopePorFaturar(EloquentBuilder $query): EloquentBuilder
+    {
+        return $query
+            ->where('status', ServiceStatus::CLOSED)
+            ->where('is_test', false)
+            ->where('created_at', '>=', self::FATURAS_EM_ATRASO_DESDE)
+            ->whereDoesntHave('media', fn ($q) => $q->where('collection_name', self::COLECAO_DA_FATURA));
+    }
+
     public function getMetaProduct(): ?array
     {
         return [

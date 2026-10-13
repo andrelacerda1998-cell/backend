@@ -10,6 +10,7 @@ use App\Models\Vendor;
 use App\Services\InvoiceXpress\Contracts\HasInvoiceActions;
 use App\Services\InvoiceXpress\Contracts\HasInvoicesItems;
 use App\Services\InvoiceXpress\Contracts\HasInvoiceXpressRequests;
+use Carbon\Carbon;
 
 class InvoiceVendorService
 {
@@ -101,7 +102,13 @@ class InvoiceVendorService
         return $response;
     }
 
-    public function createServiceInvoice(Service $service)
+    /**
+     * @param  Carbon|null  $emitidaEm  Só para faturas EM ATRASO (ver FaturasEmAtraso):
+     *                                  a fatura sai com esta data, que é a da emissão, e
+     *                                  a data do serviço vai na descrição. Sem ela, o
+     *                                  caminho de sempre: a data é a do pedido.
+     */
+    public function createServiceInvoice(Service $service, ?Carbon $emitidaEm = null)
     {
         $user = $service->customer;
 
@@ -132,13 +139,37 @@ class InvoiceVendorService
 
         $amount = $service->amount;
 
-        $payload = $this->generateInvoicePayload($service->created_at, $service->created_at, $service->id, $customer, [$this->item('Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt'), $amount)]);
+        $descricao = 'Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt');
+        $data = $service->created_at;
+
+        if ($emitidaEm) {
+            $realizado = $service->finished_at ?? $service->created_at;
+            $descricao .= ' (realizado a '.$realizado->format('d/m/Y').')';
+            $data = $emitidaEm;
+        }
+
+        $payload = $this->generateInvoicePayload($data, $data, $service->id, $customer, [$this->item($descricao, $amount)]);
         $response = $this->sendRequest('/invoice_receipts.json', 'POST', $payload);
         $service->invoice_id = $response['invoice_receipt']['id'];
         $service->save();
 
         return $response['invoice_receipt']['id'];
 
+    }
+
+    /**
+     * O estado da fatura no InvoiceXpress: `draft`, `final`, `settled`,
+     * `canceled`... `null` se a resposta não o trouxer.
+     *
+     * As faturas dos serviços são faturas-recibo (`createServiceInvoice`).
+     * Segundo a documentação do InvoiceXpress, finalizar uma fatura-recibo
+     * põe-na logo em `settled` (paga), e não em `final`.
+     */
+    public function estadoDaFatura(int $invoiceId): ?string
+    {
+        $resposta = $this->sendRequest('/invoice_receipts/'.$invoiceId.'.json', 'GET');
+
+        return $resposta['invoice_receipt']['status'] ?? $resposta['invoice']['status'] ?? null;
     }
 
     public function createAtCommunications(): bool

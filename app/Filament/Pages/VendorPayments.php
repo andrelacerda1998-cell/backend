@@ -86,6 +86,7 @@ class VendorPayments extends Page implements HasForms, HasTable
                     'iban_missing' => 'Retido: este tecnico nao tem IBAN.',
                     'fiscal_address_missing' => 'Retido: falta a morada fiscal deste tecnico.',
                     'at_user_missing' => 'Retido: falta o subutilizador da AT deste tecnico.',
+                    'invoice_pending' => 'Retido: o saldo todo espera por faturas por emitir.',
                     default => null,
                 })
                 ->action(function (Vendor $record) {
@@ -95,6 +96,7 @@ class VendorPayments extends Page implements HasForms, HasTable
                             ->body(match ($record->payoutBlocker()) {
                                 'iban_missing' => 'Este tecnico nao tem IBAN. Nao ha para onde transferir.',
                                 'fiscal_address_missing' => 'Falta a morada fiscal, sem a qual nao se emite fatura. O saldo fica na carteira dele.',
+                                'invoice_pending' => 'O saldo todo espera por faturas por emitir. Emita as faturas em atraso e pague a seguir.',
                                 default => 'O tecnico ainda nao deu o acesso de subutilizador da AT. O saldo fica na carteira dele.',
                             })
                             ->danger()
@@ -103,15 +105,21 @@ class VendorPayments extends Page implements HasForms, HasTable
                         return;
                     }
 
-                    Mail::to($record->user->email)->send(new PaymentSentMail($record, $record->user->wallet->balanceFloat));
-                    $record->user->notify(new PaymentSentNotification($record->user->wallet->balanceFloat));
-                    $record->user->wallet->withdraw($record->user->wallet->balance, [
+                    // So o que ja esta faturado (Vendor::ganhosPagaveis). O dinheiro de
+                    // um servico com a fatura por emitir fica na carteira ate ela sair.
+                    $centimos = (int) $record->ganhos_pagaveis;
+                    $euros = $centimos / 100;
+
+                    Mail::to($record->user->email)->send(new PaymentSentMail($record, $euros));
+                    $record->user->notify(new PaymentSentNotification($euros));
+                    $record->user->wallet->withdraw($centimos, [
                         'type' => 'Debit',
                         'description' => "Transfer to account",
                         'admin_description' => 'Transfer to account',
                         'class' => get_class($record),
                         'id' => $record->getKey(),
-                        'admin_id' => auth()->user()->id
+                        'admin_id' => auth()->user()->id,
+                        Vendor::PAGAMENTO_SO_DO_FATURADO => true,
                     ]);
                     Notification::make()
                         ->title('Payment sent successfully')

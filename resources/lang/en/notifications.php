@@ -335,6 +335,12 @@ return [
         'title' => 'You\'re online, but without location',
         'description' => 'We haven\'t received your location for over an hour, so you won\'t get requests for right now. Open the app to start receiving them again.',
     ],
+    'dinheiroRetido' => [
+        'title' => 'You have :valor waiting for you',
+        'iban_missing' => 'To transfer the money from your services, we need your IBAN. Add it in the app.',
+        'fiscal_address_missing' => 'To issue the invoice and pay you, we need your tax address. Add it in the app.',
+        'at_user_missing' => 'To issue the invoice and pay you, we need your AT sub-user. See how to create it in the app.',
+    ],
     'onlineExpirou' => [
         'title' => 'You\'re now offline',
         'description' => 'We haven\'t received your location for :dias days, so we\'ve stopped sending you requests. Open the app and go online whenever you want to receive them again.',

@@ -17,6 +17,7 @@ use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -42,7 +43,7 @@ class ODinheiroNaoSePerdePelaAtTest extends TestCase
     protected array $tablesToTruncate = [
         'users', 'wallets', 'vendors', 'schedule_available',
         'services', 'services_types', 'operation_areas', 'addresses',
-        'transactions', 'transfers', 'terms_acceptances',
+        'transactions', 'transfers', 'terms_acceptances', 'media',
     ];
 
     protected function setUp(): void
@@ -52,6 +53,7 @@ class ODinheiroNaoSePerdePelaAtTest extends TestCase
         Gender::firstOrCreate(['name' => 'Masculino']);
         Notification::fake();
         Queue::fake();
+        Storage::fake(config('media-library.disk_name'));
     }
 
     /**
@@ -201,12 +203,25 @@ class ODinheiroNaoSePerdePelaAtTest extends TestCase
         $this->assertSame('at_user_missing', $vendor->payoutBlocker());
     }
 
-    /** E sai assim que ele der a AT. */
+    /**
+     * E sai assim que ele der a AT -- e a fatura do serviço sair. Desde
+     * 13/10/2026 só se paga o que está faturado; entre uma coisa e a outra a
+     * espera já não é dele (`invoice_pending`): a fatura sai na tarefa diária
+     * (FaturasEmAtraso).
+     */
     public function test_dar_a_at_liberta_o_dinheiro(): void
     {
         $vendor = $this->tecnicoSemAtComDinheiro();
 
         $vendor->forceFill(['at_user' => '123456789/1', 'at_valid' => true])->save();
+
+        $this->assertSame('invoice_pending', $vendor->fresh()->payoutBlocker());
+
+        Service::where('vendor_id', $vendor->id)->get()->each(
+            fn (Service $servico) => $servico->addMediaFromString('%PDF-1.4 fatura')
+                ->usingFileName('fatura.pdf')
+                ->toMediaCollection(Service::COLECAO_DA_FATURA)
+        );
 
         $this->assertFalse($vendor->fresh()->payout_blocked);
     }

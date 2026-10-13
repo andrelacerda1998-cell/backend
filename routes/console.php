@@ -79,3 +79,11 @@ Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
 
 // Crédito de convites fora de prazo volta à Piquet (CarteiraDoCliente::expirar).
 Schedule::command('carteira:expirar')->dailyAt('03:40')->withoutOverlapping();
+
+// Faturas de serviços fechados que ficaram por emitir (técnico sem conta de
+// faturação ou sem AT quando o serviço fechou). Ver FaturasEmAtraso.
+Schedule::command('faturas:emitir-em-atraso')->dailyAt('06:20')->withoutOverlapping();
+
+// Técnicos com dinheiro retido por falta de IBAN, morada fiscal ou AT: um
+// lembrete por semana, no máximo. Ver LembrarDinheiroRetidoCommand.
+Schedule::command('vendors:lembrar-dinheiro-retido')->dailyAt('10:30')->withoutOverlapping();

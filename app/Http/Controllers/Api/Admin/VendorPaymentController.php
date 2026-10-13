@@ -32,6 +32,8 @@ class VendorPaymentController extends Controller
             .'sem a qual não se emite fatura. O saldo fica na carteira dele.',
         'at_user_missing' => 'Pagamento retido: o técnico ainda não deu o acesso de subutilizador da AT. '
             .'O saldo fica na carteira dele até isso ser preenchido.',
+        'invoice_pending' => 'Pagamento retido: todo o saldo deste técnico espera por faturas por emitir. '
+            .'Emita as faturas em atraso (Faturas por emitir) e pague a seguir.',
     ];
 
     public function index(Request $request): ApiSuccessResponse
@@ -119,9 +121,25 @@ class VendorPaymentController extends Controller
             return new ApiErrorResponse(null, self::RAZAO_DA_RETENCAO[$blocker], 409);
         }
 
+        /*
+         * Só se transfere o que já está faturado (Vendor::ganhosPagaveis): o
+         * dinheiro de um serviço cuja fatura ainda não saiu fica na carteira até
+         * ela sair. Sem `amount` paga-se tudo o que se PODE pagar, e não o
+         * saldo inteiro; com `amount` (lotes), não se pode passar daí.
+         */
+        $pagavel = (int) $vendor->ganhos_pagaveis;
+
         $centimos = $request->filled('amount')
             ? (int) round(((float) $request->input('amount')) * 100)
-            : (int) $wallet->balance;
+            : $pagavel;
+
+        if ($centimos > $pagavel && $centimos <= (int) $wallet->balance) {
+            return new ApiErrorResponse(null, sprintf(
+                'O valor a pagar (%.2f €) inclui serviços com a fatura por emitir. Pode pagar até %.2f €.',
+                $centimos / 100,
+                $pagavel / 100,
+            ), 409);
+        }
 
         if ($centimos > (int) $wallet->balance) {
             return new ApiErrorResponse(null, sprintf(
@@ -145,6 +163,9 @@ class VendorPaymentController extends Controller
             'id' => $vendor->getKey(),
             'admin_id' => auth()->id(),
             'reference' => $request->input('reference'),
+            // Pago já com a regra da fatura: não levou nada por faturar (ver
+            // Vendor::ganhosPorFaturar, que distingue os pagamentos por isto).
+            Vendor::PAGAMENTO_SO_DO_FATURADO => true,
         ], fn ($v) => $v !== null));
 
         return ApiSuccessResponse::make([
@@ -184,6 +205,11 @@ class VendorPaymentController extends Controller
             // e o CODIGO diz-lhe qual dos tres impedimentos e, nao so que ha um.
             'payout_blocked' => $vendor->payout_blocked,
             'payout_blocker' => $vendor->payoutBlocker(),
+            // Do saldo, o que se pode transferir hoje e o que espera pela fatura
+            // de serviços ainda por faturar (em euros, como `balance`). O lote
+            // deve usar `payable`, que é o máximo que o `pay` aceita.
+            'payable' => round(((int) $vendor->ganhos_pagaveis) / 100, 2),
+            'held_for_invoice' => round(((int) $vendor->ganhos_retidos_pela_fatura) / 100, 2),
         ];
     }
 }

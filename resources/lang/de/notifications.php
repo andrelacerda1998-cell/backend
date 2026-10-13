@@ -323,6 +323,12 @@ return [
         'title' => 'Du bist online, aber ohne Standort',
         'description' => 'Wir haben deinen Standort seit über einer Stunde nicht erhalten, daher bekommst du keine Sofortaufträge. Öffne die App, um sie wieder zu erhalten.',
     ],
+    'dinheiroRetido' => [
+        'title' => 'Es warten :valor auf dich',
+        'iban_missing' => 'Um dir das Geld deiner Aufträge zu überweisen, fehlt deine IBAN. Füge sie in der App hinzu.',
+        'fiscal_address_missing' => 'Um die Rechnung auszustellen und dich zu bezahlen, fehlt deine Steueradresse. Füge sie in der App hinzu.',
+        'at_user_missing' => 'Um die Rechnung auszustellen und dich zu bezahlen, fehlt der AT-Unterbenutzer. In der App siehst du, wie du ihn anlegst.',
+    ],
     'onlineExpirou' => [
         'title' => 'Du bist jetzt offline',
         'description' => 'Wir haben deinen Standort seit :dias Tagen nicht erhalten und senden dir daher keine Aufträge mehr. Öffne die App und geh online, wenn du wieder Aufträge erhalten möchtest.',

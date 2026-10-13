@@ -106,6 +106,14 @@ class StatsController extends Controller
             'payout_blocked' => $vendor->payout_blocked,
             'payout_blocker' => $vendor->payoutBlocker(),
             'payout_on_hold_amount' => $vendor->payout_on_hold_amount,
+            /*
+             * Desde 13/10/2026 só se paga um serviço com a fatura emitida, e pode
+             * ficar retida só PARTE do saldo (o resto paga-se): nesse caso o
+             * `payout_blocked` é false e o `payout_on_hold_amount` não é zero. Isto
+             * diz porquê -- o mesmo código do `payout_blocker` quando está tudo
+             * travado, mais `invoice_pending` (a fatura está do lado da Piquet).
+             */
+            'payout_hold_reason' => $vendor->payoutHoldReason(),
             'rating' => $ratingAvg !== null ? round((float) $ratingAvg, 1) : null,
             'acceptance_rate' => $acceptanceRate,
             'last_weeks' => $weeks,
