@@ -47,7 +47,7 @@ class ClienteDaFaturaTest extends TestCase
         return User::factory()->create(['first_name' => $primeiro, 'last_name' => $ultimo, ...$atributos]);
     }
 
-    private function servicoDe(User $cliente): Service
+    private function servicoDe(User $cliente, ?string $nifDoPedido = null): Service
     {
         $vendor = Vendor::factory()->create(['invoice_workspace' => 'oficina-teste', 'auth_token' => 'chave-de-teste']);
 
@@ -55,8 +55,19 @@ class ClienteDaFaturaTest extends TestCase
             'customer_id' => $cliente->id,
             'vendor_id' => $vendor->id,
             'status' => ServiceStatus::CLOSED,
-            'nif' => null,
+            'nif' => $nifDoPedido,
         ]);
+    }
+
+    /** Os dados de faturação que o cliente preenche na app. */
+    private function comDadosDeFaturacao(User $cliente, ?string $nome, ?string $nif): User
+    {
+        $cliente->billingInfo()->create([
+            'name' => $nome, 'nif' => $nif,
+            'address' => 'Rua da Empresa 10', 'postal_code' => '4000-001', 'locality' => 'Porto',
+        ]);
+
+        return $cliente;
     }
 
     /** O cliente que seguiu no último pedido ao InvoiceXpress. */
@@ -140,6 +151,66 @@ class ClienteDaFaturaTest extends TestCase
 
         $this->assertNotSame($antes['code'], $depois['code']);
         $this->assertSame('987654321', (string) $depois['fiscal_id']);
+    }
+
+    // ------------------------------------------- os dados de faturação
+
+    /** Decisão do André (13/10/2026): o nome e o NIF dos dados de faturação. */
+    public function test_vao_o_nome_e_o_nif_dos_dados_de_faturacao(): void
+    {
+        $cliente = $this->comDadosDeFaturacao($this->cliente('Ana', 'Silva', ['nif' => '123456789']), 'ACME Lda', '501234567');
+
+        $enviado = $this->faturar($this->servicoDe($cliente));
+
+        $this->assertSame('ACME Lda', $enviado['name']);
+        $this->assertSame('501234567', (string) $enviado['fiscal_id']);
+        $this->assertSame('Rua da Empresa 10', $enviado['address']);
+    }
+
+    /** A app pré-preenche o NIF do pedido com o dos dados de faturação. */
+    public function test_com_o_mesmo_nif_no_pedido_vao_os_dados_de_faturacao(): void
+    {
+        $cliente = $this->comDadosDeFaturacao($this->cliente('Ana', 'Silva'), 'ACME Lda', '501234567');
+
+        $enviado = $this->faturar($this->servicoDe($cliente, '501234567'));
+
+        $this->assertSame('ACME Lda', $enviado['name']);
+        $this->assertSame('501234567', (string) $enviado['fiscal_id']);
+    }
+
+    /**
+     * Outro NIF no checkout: é a pessoa, não a entidade dos dados de faturação.
+     * O nome da empresa com o NIF de uma pessoa seria uma fatura errada.
+     */
+    public function test_outro_nif_no_pedido_vai_com_o_nome_da_pessoa(): void
+    {
+        $cliente = $this->comDadosDeFaturacao($this->cliente('Ana', 'Silva'), 'ACME Lda', '501234567');
+
+        $enviado = $this->faturar($this->servicoDe($cliente, '234567899'));
+
+        $this->assertSame('Ana Silva', $enviado['name']);
+        $this->assertSame('234567899', (string) $enviado['fiscal_id']);
+    }
+
+    public function test_so_com_o_nome_nos_dados_de_faturacao_vai_esse_nome(): void
+    {
+        $cliente = $this->comDadosDeFaturacao($this->cliente('Ana', null, ['nif' => null]), 'Ana Maria Silva', null);
+
+        $enviado = $this->faturar($this->servicoDe($cliente));
+
+        $this->assertSame('Ana Maria Silva', $enviado['name']);
+        $this->assertSame(999999990, $enviado['fiscal_id']);
+    }
+
+    public function test_dados_de_faturacao_novos_sao_outro_cliente(): void
+    {
+        $cliente = $this->cliente('Ana', 'Silva');
+        $antes = $this->faturar($this->servicoDe($cliente));
+
+        $this->comDadosDeFaturacao($cliente, 'ACME Lda', '501234567');
+        $depois = $this->faturar($this->servicoDe($cliente->fresh()));
+
+        $this->assertNotSame($antes['code'], $depois['code']);
     }
 
     // ------------------------------------------------------- as outras faturas

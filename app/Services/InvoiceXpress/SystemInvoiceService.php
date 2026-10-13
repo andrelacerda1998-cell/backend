@@ -73,7 +73,7 @@ class SystemInvoiceService
     public function createCancellationServiceInvoice(Service $service)
     {
         $user = $service->vendor->user;
-        $vendor = $this->clienteDaFatura($user, $user->nif, null);
+        $vendor = $this->clienteDaFatura($user, null, null);
 
         $cancellationFee = $service->amount_for_vendor * 0.1;
 
