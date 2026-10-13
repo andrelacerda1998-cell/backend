@@ -131,12 +131,19 @@ class RemindIncompleteProfileCommand extends Command
             $missing++;
         }
 
-        if ($vendor->iban === null) {
-            $missing++;
-        }
+        // IBAN e AT só contam como passo em falta quando já são exigidos (a
+        // partir do quarto serviço, ver Vendor::faturacaoEmDia), como na app.
+        // Este lembrete vai a quem se registou há um a três dias, que ainda
+        // não tem serviço nenhum: contá-los era dizer "faltam 4 passos" a quem
+        // só falta um.
+        if ($vendor->at_required) {
+            if ($vendor->iban === null) {
+                $missing++;
+            }
 
-        if (! str_contains((string) $vendor->at_user, '/')) {
-            $missing++;
+            if (! str_contains((string) $vendor->at_user, '/')) {
+                $missing++;
+            }
         }
 
         if (! $vendor->all_documents_verified) {

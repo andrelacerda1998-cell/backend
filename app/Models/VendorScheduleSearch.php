@@ -166,12 +166,11 @@ class VendorScheduleSearch extends Model
         return $vendor->user?->hasVerifiedPhoneNumber() &&
             $vendor->user?->hasVerifiedEmail() &&
             $vendor->all_documents_verified &&
-            $vendor->iban != null &&
-            $vendor->invoice_workspace != null &&
-            // A AT so a partir do quarto servico (Vendor::SERVICOS_ANTES_DA_AT).
-            // Sem isto, quem esta nos tres primeiros aparecia no imediato mas
-            // nao no agendado — meio visivel, que e pior do que invisivel.
-            ($vendor->at_ready || ! $vendor->at_required) &&
+            // IBAN, conta de faturacao e AT so a partir do quarto servico
+            // (Vendor::faturacaoEmDia). Sem isto, quem esta nos tres primeiros
+            // aparecia no imediato mas nao no agendado — meio visivel, que e
+            // pior do que invisivel.
+            $vendor->faturacao_em_dia &&
             $hasScheduleAddress &&
             $hasScheduleAvailability;
     }

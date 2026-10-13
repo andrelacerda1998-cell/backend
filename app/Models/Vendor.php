@@ -114,13 +114,9 @@ class Vendor extends Model implements Auditable
                 $this->user?->hasVerifiedEmail() &&
                 $this->all_documents_verified &&
                 ! $this->openServices()->exists() &&
-                $this->iban != null &&
-                $this->invoice_workspace != null &&
-                // A AT SO A PARTIR DO QUARTO SERVICO — ver `atRequired()`.
-                //
-                // A ordem importa: `at_ready` primeiro, para quem ja a deu nao
-                // pagar a contagem de servicos. O `||` do PHP faz curto-circuito.
-                ($this->at_ready || ! $this->at_required);
+                // IBAN, CONTA DE FATURACAO E AT SO A PARTIR DO QUARTO SERVICO —
+                // ver `faturacaoEmDia()`.
+                $this->faturacao_em_dia;
         })->shouldCache();
     }
 
@@ -138,6 +134,9 @@ class Vendor extends Model implements Auditable
      * são de identidade e idoneidade, e sem eles não se manda ninguém a casa de
      * um cliente. O acesso à AT é de FATURAÇÃO — só é preciso quando há mesmo o
      * que faturar.
+     *
+     * Desde 13/10/2026 é também a fronteira do IBAN e da morada fiscal, os
+     * outros dois dados de faturação — ver `faturacaoEmDia()`.
      */
     public const SERVICOS_ANTES_DA_AT = 3;
 
@@ -300,6 +299,34 @@ class Vendor extends Model implements Auditable
                 $jaDeu->where('at_valid', true)->where('at_user', 'like', '%/%');
             })->orWhereHas('completedServices', null, '<', self::SERVICOS_ANTES_DA_AT);
         });
+    }
+
+    /**
+     * Os dados de faturação estão em dia: entregues, ou ainda não exigidos.
+     *
+     * São três: o IBAN, a conta de faturação (que a equipa só consegue criar com
+     * a morada fiscal, ver `invoicingBlocker()`) e o acesso à AT. Desde 13/10/2026
+     * têm todos a fronteira que a AT já tinha: só a partir do quarto serviço
+     * (decisão do André). Antes disso eram um portão à entrada, pedido a quem
+     * ainda não tinha ganho um euro.
+     *
+     * Até lá não se transfere nada que dependa deles: sem IBAN ou sem morada
+     * fiscal o `payoutBlocker()` retém o dinheiro, que continua a ser do
+     * técnico. E o serviço fechado de quem ainda não tem conta de faturação
+     * fica por faturar (ver `CreateInvoiceJob`).
+     *
+     * `at_em_dia` continua a existir sozinho: é o filtro que o índice de
+     * pesquisa sabe aplicar, e quem passa aqui passa sempre lá.
+     *
+     * A ordem importa: os campos primeiro, para quem já os deu todos não pagar a
+     * contagem de serviços do `at_required`. O `||` do PHP faz curto-circuito.
+     */
+    public function faturacaoEmDia(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => ($this->at_ready && $this->iban != null && $this->invoice_workspace != null)
+                || ! $this->at_required
+        )->shouldCache();
     }
 
     public function atReady(): Attribute
@@ -540,18 +567,19 @@ class Vendor extends Model implements Auditable
             $reasons->push(__('backoffice/vendor.infolist.eligibility.open_service'));
         }
 
-        if ($this->iban == null) {
-            $reasons->push(__('backoffice/vendor.infolist.eligibility.no_iban'));
-        }
-
-        if ($this->invoice_workspace == null) {
-            $reasons->push(__('backoffice/vendor.infolist.eligibility.no_workspace'));
-        }
-
-        // A AT so conta como razao depois dos tres primeiros servicos. Antes
-        // disso nao e um impedimento, e listar-lha no backoffice fazia parecer
-        // que o processo dele estava parado quando nao estava.
+        // Os dados de faturacao (IBAN, conta de faturacao e AT) so contam como
+        // razao depois dos tres primeiros servicos — ver `faturacaoEmDia()`.
+        // Antes disso nao sao um impedimento, e lista-los no backoffice fazia
+        // parecer que o processo dele estava parado quando nao estava.
         if ($this->at_required) {
+            if ($this->iban == null) {
+                $reasons->push(__('backoffice/vendor.infolist.eligibility.no_iban'));
+            }
+
+            if ($this->invoice_workspace == null) {
+                $reasons->push(__('backoffice/vendor.infolist.eligibility.no_workspace'));
+            }
+
             if (! $this->at_valid) {
                 $reasons->push(__('backoffice/vendor.infolist.eligibility.at_invalid'));
             }
@@ -795,12 +823,10 @@ class Vendor extends Model implements Auditable
         return $this->user?->hasVerifiedPhoneNumber() &&
             $this->user?->hasVerifiedEmail() &&
             $this->all_documents_verified &&
-            $this->iban != null &&
-            $this->invoice_workspace != null &&
             // Mesma regra do portao: sem ela, quem ainda esta nos tres
             // primeiros servicos podia aceitar pedidos mas nao aparecia na
             // pesquisa — elegivel e invisivel ao mesmo tempo.
-            ($this->at_ready || ! $this->at_required);
+            $this->faturacao_em_dia;
     }
 
     public function toSearchableArray(): array

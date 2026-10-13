@@ -70,12 +70,14 @@ class SearchScheduleVendorsController extends Controller
                 return null;
             }
 
+            // Os dados de faturacao (IBAN, conta de faturacao e AT) so a partir
+            // do quarto servico, como em todo o lado — ver Vendor::faturacaoEmDia.
+            // Esta pesquisa ainda exigia a AT desde o primeiro dia: tinha ficado
+            // para tras quando a regra da AT mudou a 30/09.
             if (! ($vendor->user?->hasVerifiedPhoneNumber() &&
                 $vendor->user?->hasVerifiedEmail() &&
                 $vendor->all_documents_verified &&
-                $vendor->iban != null &&
-                $vendor->invoice_workspace != null &&
-                str_contains($vendor->at_user ?? '', '/'))) {
+                $vendor->faturacao_em_dia)) {
                 return null;
             }
 

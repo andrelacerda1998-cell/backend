@@ -143,12 +143,19 @@ class VendorPerfilEdefinicoesTest extends TestCase
     {
         // Um tecnico de fabrica nao tem documentos, IBAN, workspace nem AT —
         // ou seja, exatamente o estado em que 82% dos registados param. Ficar
-        // Online significaria entrar nas ondas de convite sem poder faturar.
+        // Online significaria entrar nas ondas de convite sem estar verificado.
+        //
+        // Sao os documentos que o travam: desde 13/10/2026 o IBAN, a conta de
+        // faturacao e a AT so sao exigidos a partir do quarto servico
+        // (Vendor::faturacaoEmDia). Sem nenhum documento obrigatorio na base,
+        // os documentos davam-se por entregues e ele passava.
+        \App\Models\GeneralSettings\Document::create(['name' => 'Cartão de Cidadão', 'required' => true]);
         $vendor = $this->tecnico();
 
         $this->actingAs($vendor->user, 'api')
             ->putJson('/api/v1/vendor/status', ['status' => 'Online'])
-            ->assertStatus(422);
+            // VendorAccountNotValidated: documentos por entregar.
+            ->assertStatus(403);
     }
 
     public function test_o_tecnico_pode_sempre_ficar_offline(): void
