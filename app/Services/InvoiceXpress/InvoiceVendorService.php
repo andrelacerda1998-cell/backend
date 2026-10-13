@@ -43,8 +43,7 @@ class InvoiceVendorService
             $address = $address->toArray();
         }
 
-        $nif = $service->nif ?? $user->nif;
-        $customer = $this->prepareClientData($user->name, $user->email, $nif, $address);
+        $customer = $this->clienteDaFatura($user, $service->nif, $address);
 
         $cancellationFee = $service->amount * 0.1;
 
@@ -136,8 +135,7 @@ class InvoiceVendorService
             $address = $address->toArray();
         }
 
-        $nif = $service->nif ?? $user->nif;
-        $customer = $this->prepareClientData($user->name, $user->email, $nif, $address);
+        $customer = $this->clienteDaFatura($user, $service->nif, $address);
 
         $amount = $service->amount;
 

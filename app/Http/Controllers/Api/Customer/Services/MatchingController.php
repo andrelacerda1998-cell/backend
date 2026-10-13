@@ -341,13 +341,49 @@ class MatchingController extends Controller
                 throw new MatchingCheckoutException('Service not found', 404);
             }
 
+            // Tranca o pedido até ao fim do checkout. Sem isto, dois pedidos ao
+            // mesmo tempo (dois toques em "Pagar", ou a repetição de um que deu
+            // timeout na app mas chegou cá) liam os dois "à espera de
+            // pagamento" antes de qualquer um gravar, e cada um criava a sua
+            // ordem.
+            $service = Service::whereKey($service->getKey())->lockForUpdate()->firstOrFail();
+
+            $method = $request->get('method', 'credit_card');
+
+            // Um MB Way já enviado para o telemóvel e ainda por responder. Uma
+            // ordem MB Way não se consegue cancelar antes de o cliente responder
+            // no banco, por isso uma segunda ordem era um segundo pedido de
+            // dinheiro que ele podia aceitar, e a Carteira voltava a ser
+            // debitada. O cartão não chega aqui: com 3DS o pedido passa a
+            // Pending3DS e é recusado na verificação seguinte.
+            if ($this->mbwayEmCurso($service)) {
+                DB::rollBack();
+
+                \Log::info('[matching] checkout repetido com um MB Way por confirmar', [
+                    'service_id' => $service->id,
+                    'method' => $method,
+                ]);
+
+                if ($method === 'mbway') {
+                    // A mesma resposta da primeira vez: a app vai para o ecrã de
+                    // espera e pergunta pelo pagamento que já existe.
+                    return new ApiSuccessResponse($this->payload($service) + [
+                        'payment_validationUrl' => 'check bank app',
+                    ]);
+                }
+
+                return new ApiErrorResponse(new MatchingCheckoutException(
+                    'An MB WAY payment for this request is waiting for confirmation in the bank app',
+                    409,
+                ));
+            }
+
             if ($service->status !== ServiceStatus::AWAITING_PAYMENT) {
                 throw new MatchingCheckoutException('This service is not awaiting payment', 409);
             }
 
             $customer = $this->fetchCustomer();
             $selected = $service->candidates()->where('status', CandidateStatus::SELECTED)->firstOrFail();
-            $method = $request->get('method', 'credit_card');
 
             $voucher = $request->get('voucher_id') ? Voucher::find($request->integer('voucher_id')) : null;
 
@@ -539,6 +575,18 @@ class MatchingController extends Controller
     private function owns(Service $service): bool
     {
         return $service->customer_id === auth('api')->id();
+    }
+
+    /**
+     * Há um MB Way por confirmar: o pedido continua à espera de pagamento e já
+     * tem uma ordem. É a mesma regra com que o MatchingService não cancela nem
+     * expira um pedido com o pagamento a meio (cancelByCustomer, expireCheckout).
+     */
+    private function mbwayEmCurso(Service $service): bool
+    {
+        return $service->status === ServiceStatus::AWAITING_PAYMENT
+            && $service->payment_order_id !== null
+            && $service->payment_status !== PaymentStatus::PAID;
     }
 
     private function payload(Service $service): array

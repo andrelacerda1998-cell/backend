@@ -56,7 +56,10 @@ class StatusController extends Controller
                 if (!$vendor->all_documents_verified){
                     throw new VendorAccountNotValidated();
                 }
-                if ($vendor->invoice_workspace == null){
+                // A conta de faturacao, como o IBAN e a AT, so e exigida a
+                // partir do quarto servico (Vendor::faturacaoEmDia). O IBAN em
+                // falta depois disso e apanhado pelo can_accept_service abaixo.
+                if ($vendor->at_required && $vendor->invoice_workspace == null){
                     throw new VendorAccountWorkspaceRequired();
                 }
                 if (!$vendor->can_accept_service){

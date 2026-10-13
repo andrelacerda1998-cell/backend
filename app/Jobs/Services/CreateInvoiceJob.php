@@ -32,6 +32,20 @@ class CreateInvoiceJob implements ShouldQueue
             return;
         }
 
+        // A fatura é emitida na conta de faturação do técnico. Desde 13/10/2026
+        // ele pode fazer os três primeiros serviços sem ela (Vendor::faturacaoEmDia),
+        // e sem conta não há onde a emitir: o pedido ia para uma conta vazia no
+        // InvoiceXpress e o job rebentava. O serviço fica por faturar, com o
+        // invoice_id a null, que é como se encontra para a emitir depois.
+        if (! $this->service->vendor?->invoice_workspace) {
+            Log::warning('[faturação] serviço fechado de um técnico sem conta de faturação: fatura por emitir', [
+                'service_id' => $this->service->id,
+                'vendor_id' => $this->service->vendor_id,
+            ]);
+
+            return;
+        }
+
         // Pelo contentor, como na FaturasEmAtraso: os testes trocam-no por um duplo.
         $invoiceExpressService = app(InvoiceVendorService::class, ['vendor' => $this->service->vendor]);
         $invoiceId = $invoiceExpressService->createServiceInvoice($this->service);
