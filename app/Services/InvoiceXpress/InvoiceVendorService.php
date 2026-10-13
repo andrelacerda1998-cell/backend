@@ -43,7 +43,7 @@ class InvoiceVendorService
         }
 
         $nif = $service->nif ?? $user->nif;
-        $customer = $this->prepareClientData($user->name, $user->email, $nif, $address);
+        $customer = $this->clienteDaFatura($user, $nif, $address);
 
         $cancellationFee = $service->amount * 0.1;
 
@@ -130,7 +130,7 @@ class InvoiceVendorService
         }
 
         $nif = $service->nif ?? $user->nif;
-        $customer = $this->prepareClientData($user->name, $user->email, $nif, $address);
+        $customer = $this->clienteDaFatura($user, $nif, $address);
 
         $amount = $service->amount;
 
