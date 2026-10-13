@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Http\Controllers\Api\Admin\OperacoesAoVivoController;
 use App\Models\ServiceCandidate;
 use App\Models\User;
 use App\Models\Vendor;
@@ -88,6 +89,74 @@ class AdminListaDeServicosTest extends TestCase
             'notified_at' => now()->subMinutes(5),
             'expires_at' => now()->addMinutes(2),
         ]);
+    }
+
+    /** Um passo no histórico: o pedido entrou neste estado há tantos minutos. */
+    private function passou(int $servico, ServiceStatus $estado, int $haMinutos): void
+    {
+        DB::table('service_events')->insert([
+            'service_id' => $servico,
+            'tipo' => 'estado',
+            'estado_para' => $estado->value,
+            'ocorreu_em' => now()->subMinutes($haMinutos),
+        ]);
+    }
+
+    private function extraPorAprovar(int $servico, int $haHoras): void
+    {
+        DB::table('service_extras')->insert([
+            'service_id' => $servico, 'type' => 'time', 'minutes' => 30, 'amount' => 1500, 'status' => 'pending',
+            'created_at' => now()->subHours($haHoras), 'updated_at' => now()->subHours($haHoras),
+        ]);
+    }
+
+    /** Uma marcação para há (ou daqui a) tantos minutos, em hora de Lisboa. */
+    private function marcadoHa(int $servico, int $minutos): void
+    {
+        $quando = now('Europe/Lisbon')->subMinutes($minutos);
+        $this->marcacao($servico, $quando->toDateString(), $quando->format('H:i:s'));
+    }
+
+    /**
+     * Os pedidos presos das Operações ao vivo, um de cada, e um que ainda não
+     * o é ao lado de cada um.
+     *
+     * @return array<string, int>
+     */
+    private function pedidosPresos(): array
+    {
+        $atraso = OperacoesAoVivoController::MINUTOS_DE_ATRASO_SEM_CHEGAR;
+        $imediato = OperacoesAoVivoController::MINUTOS_DE_VIAGEM_IMEDIATO + $atraso;
+        $execucao = OperacoesAoVivoController::HORAS_EM_EXECUCAO;
+        $cliente = OperacoesAoVivoController::HORAS_A_ESPERA_DO_CLIENTE;
+        $tecnico = ['vendor_id' => Vendor::factory()->create()->id];
+
+        $p = [
+            'agendado_atrasado' => $this->servico(ServiceStatus::SCHEDULED, $tecnico),
+            'agendado_a_tempo' => $this->servico(ServiceStatus::SCHEDULED, $tecnico),
+            'agendado_ja_chegou' => $this->servico(ServiceStatus::SCHEDULED, [...$tecnico, 'arrived_at' => now()->subMinutes(40)]),
+            'imediato_atrasado' => $this->servico(ServiceStatus::ACCEPTED, [...$tecnico, 'updated_at' => now()]),
+            'imediato_ainda_a_tempo' => $this->servico(ServiceStatus::ACCEPTED, [...$tecnico, 'updated_at' => now()]),
+            'execucao_longa' => $this->servico(ServiceStatus::ARRIVED, [...$tecnico, 'arrived_at' => now()->subHours($execucao)->subMinutes(5)]),
+            'execucao_normal' => $this->servico(ServiceStatus::ARRIVED, [...$tecnico, 'arrived_at' => now()->subHours(2)]),
+            'extra_parado' => $this->servico(ServiceStatus::ARRIVED, [...$tecnico, 'arrived_at' => now()->subHours(2)]),
+            'extra_recente' => $this->servico(ServiceStatus::ARRIVED, [...$tecnico, 'arrived_at' => now()->subHours(2)]),
+            'cartao_parado' => $this->servico(ServiceStatus::PENDING_3DS, ['updated_at' => now()]),
+            'cartao_recente' => $this->servico(ServiceStatus::PENDING_3DS, ['updated_at' => now()->subHours($cliente + 5)]),
+        ];
+
+        $this->marcadoHa($p['agendado_atrasado'], $atraso + 5);
+        $this->marcadoHa($p['agendado_a_tempo'], $atraso - 15);
+        $this->marcadoHa($p['agendado_ja_chegou'], $atraso + 15);
+        // O histórico manda: o `updated_at` mexe com tudo e engana.
+        $this->passou($p['imediato_atrasado'], ServiceStatus::ACCEPTED, $imediato + 5);
+        $this->passou($p['imediato_ainda_a_tempo'], ServiceStatus::ACCEPTED, $imediato - 10);
+        $this->extraPorAprovar($p['extra_parado'], $cliente + 1);
+        $this->extraPorAprovar($p['extra_recente'], 1);
+        $this->passou($p['cartao_parado'], ServiceStatus::PENDING_3DS, ($cliente + 1) * 60);
+        $this->passou($p['cartao_recente'], ServiceStatus::PENDING_3DS, 30);
+
+        return $p;
     }
 
     /** Os ids devolvidos, PELA ORDEM da resposta, só dos criados aqui. */
@@ -341,6 +410,46 @@ class AdminListaDeServicosTest extends TestCase
             ->assertJsonPath('data.atencao', null);
     }
 
+    public function test_os_pedidos_presos_tambem_pedem_atencao(): void
+    {
+        $p = $this->pedidosPresos();
+        $itens = $this->itens();
+
+        $this->assertSame(['nivel' => 'critico', 'motivo' => 'tecnico_nao_chegou'], $itens[$p['agendado_atrasado']]['atencao']);
+        $this->assertSame(['nivel' => 'critico', 'motivo' => 'tecnico_nao_chegou'], $itens[$p['imediato_atrasado']]['atencao']);
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'em_execucao_ha_muito'], $itens[$p['execucao_longa']]['atencao']);
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'cliente_sem_resposta'], $itens[$p['extra_parado']]['atencao']);
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'cliente_sem_resposta'], $itens[$p['cartao_parado']]['atencao']);
+
+        foreach (['agendado_a_tempo', 'agendado_ja_chegou', 'imediato_ainda_a_tempo', 'execucao_normal', 'extra_recente', 'cartao_recente'] as $ainda) {
+            $this->assertNull($itens[$p[$ainda]]['atencao'], $ainda);
+        }
+
+        // Os críticos à frente dos de atenção.
+        $primeiros = array_slice($this->ids('?atencao=1'), 0, 5);
+        $this->assertEqualsCanonicalizing([$p['agendado_atrasado'], $p['imediato_atrasado']], array_slice($primeiros, 0, 2));
+        $this->assertEqualsCanonicalizing([$p['execucao_longa'], $p['extra_parado'], $p['cartao_parado']], array_slice($primeiros, 2, 3));
+    }
+
+    /** A pagar ou a escolher há mais de um dia: o cliente não responde (nas Operações ao vivo, o prazo esgotou). */
+    public function test_a_pagar_ou_a_escolher_ha_mais_de_um_dia_pede_atencao(): void
+    {
+        $horas = OperacoesAoVivoController::HORAS_A_ESPERA_DO_CLIENTE;
+        $aPagar = $this->servico(ServiceStatus::AWAITING_PAYMENT, ['updated_at' => now()->subHours($horas + 2)]);
+        $aPagarHaPouco = $this->servico(ServiceStatus::AWAITING_PAYMENT, ['updated_at' => now()->subMinutes(5)]);
+        $aEscolher = $this->servico(ServiceStatus::MATCHING, ['candidates_ready_at' => now()->subHours($horas + 2)]);
+        $this->candidato($aEscolher, CandidateStatus::ACCEPTED);
+        $aEscolherHaPouco = $this->servico(ServiceStatus::MATCHING, ['candidates_ready_at' => now()->subMinutes(3)]);
+        $this->candidato($aEscolherHaPouco, CandidateStatus::ACCEPTED);
+
+        $itens = $this->itens();
+
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'cliente_sem_resposta'], $itens[$aPagar]['atencao']);
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'cliente_sem_resposta'], $itens[$aEscolher]['atencao']);
+        $this->assertNull($itens[$aPagarHaPouco]['atencao']);
+        $this->assertNull($itens[$aEscolherHaPouco]['atencao']);
+    }
+
     /** As mesmas regras, os mesmos nomes: a lista não pode contradizer as Operações ao vivo. */
     public function test_os_alertas_sao_os_mesmos_das_operacoes_ao_vivo(): void
     {
@@ -350,6 +459,7 @@ class AdminListaDeServicosTest extends TestCase
             $this->servico(ServiceStatus::FINISHED, ['updated_at' => now()->subHours(30)]),
             $this->servico(ServiceStatus::FINISHED, ['updated_at' => now()->subHours(2)]),
             $this->servico(ServiceStatus::MATCHING, ['created_at' => now()->subMinutes(5)]),
+            ...array_values($this->pedidosPresos()),
         ];
 
         $aoVivo = $this->api()->getJson('/api/v1/admin/operacoes/ao-vivo')->assertOk();

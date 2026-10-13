@@ -2,6 +2,7 @@
 
 namespace App\Services\Operacoes;
 
+use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\ServiceStatus;
 
 /**
@@ -58,6 +59,14 @@ final class DesfechoDoPedido
     ];
 
     /**
+     * Quem disse que sim, mesmo que depois tenha sido escolhido ou perdido.
+     *
+     * Aqui e não em cada ecrã: as Operações ao vivo e o Mercado contam o
+     * "algum sim" e o tempo até ao primeiro sim, e têm de dar o mesmo número.
+     */
+    public const DISSERAM_SIM = [CandidateStatus::ACCEPTED, CandidateStatus::SELECTED, CandidateStatus::LOST];
+
+    /**
      * @param  int  $convidados  quantos técnicos receberam convite
      * @param  bool  $algumSim  alguém aceitou (accepted, selected ou lost)
      */
@@ -88,5 +97,16 @@ final class DesfechoDoPedido
         }
 
         return self::OUTRO;
+    }
+
+    /**
+     * Foi servido? A mesma resposta do `de()`, para quem só precisa desta.
+     *
+     * Não depende dos convites: servido é ter tido técnico e o trabalho ter
+     * seguido. É a regra da `taxa_servidos` e de todas as contas de servidos.
+     */
+    public static function servido(ServiceStatus $estado, bool $temTecnico): bool
+    {
+        return self::de($estado, $temTecnico, 0, false) === self::SERVIDO;
     }
 }

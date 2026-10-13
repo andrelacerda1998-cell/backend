@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\CoverageController;
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\DocumentController;
 use App\Http\Controllers\Api\Admin\FeeSettingsController;
+use App\Http\Controllers\Api\Admin\MercadoController;
 use App\Http\Controllers\Api\Admin\NotificationCampaignController;
 use App\Http\Controllers\Api\Admin\OperationAreaController;
 use App\Http\Controllers\Api\Admin\SentNotificationController;
@@ -80,6 +81,8 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
 
     // O estado do marketplace agora: pedidos, oferta e liquidez (backoffice › Operações ao vivo).
     Route::get('/operacoes/ao-vivo', OperacoesAoVivoController::class);
+    // Procura e oferta ao longo do tempo, por cidade e categoria (backoffice › Mercado).
+    Route::get('/mercado', MercadoController::class);
     Route::get('/services', [ServiceController::class, 'index']);
     Route::get('/services/{service}', [ServiceController::class, 'show']);
     // As ações que só existiam no Filament (ver ServiceActionController).
