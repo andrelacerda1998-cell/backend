@@ -29,7 +29,7 @@ use Throwable;
  *
  * A DATA: uma fatura nova sai com a data do dia em que é emitida, e a data em
  * que o serviço foi feito vai na descrição. Um rascunho é só finalizado — fica
- * com a data com que foi criado. Por validar com o contabilista.
+ * com a data com que foi criado. Validado pelo contabilista a 13/10/2026.
  *
  * NUNCA DUAS FATURAS PARA O MESMO SERVIÇO: um rascunho é finalizado, nunca
  * substituído; só se cria uma fatura nova para quem não tem `invoice_id`; e
