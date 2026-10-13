@@ -436,6 +436,84 @@ class MatchingFlowTest extends TestCase
             ->assertStatus(409);
     }
 
+    /**
+     * Com MB Way o pedido continua à espera de pagamento até o cliente
+     * responder no banco, por isso o travão de cima não o apanhava: repetir o
+     * pagamento (por exemplo depois de um timeout na app) criava outra ordem e
+     * debitava a Carteira outra vez. Uma ordem MB Way não se cancela antes de o
+     * cliente responder, e ele podia aceitar as duas.
+     */
+    public function test_repeating_an_mbway_checkout_returns_the_payment_already_sent(): void
+    {
+        [$service, $order] = $this->withAnMbwayWaiting();
+
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/checkout", [
+                'method' => 'mbway',
+                'mbway_phone' => '912345678',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.service.id', $service->id)
+            ->assertJsonPath('data.payment_validationUrl', 'check bank app');
+
+        $service->refresh();
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->status, 'nada foi cobrado de novo');
+        $this->assertSame($order->id, $service->payment_order_id, 'continua a ser a mesma ordem');
+        $this->assertSame(1, \RwInteractive\PayshopSdk\Models\PaymentOrder::count(), 'não nasceu outra ordem');
+    }
+
+    public function test_another_payment_method_is_refused_while_an_mbway_is_waiting(): void
+    {
+        [$service, $order] = $this->withAnMbwayWaiting();
+
+        $this->actingAs($this->customer, 'api')
+            ->withHeader('Accept-Language', 'pt-PT')
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/checkout", ['method' => 'credit_card'])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Já enviámos um pedido de pagamento MB WAY para este serviço. Confirma-o na app do teu banco.');
+
+        $service->refresh();
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->status);
+        $this->assertSame($order->id, $service->payment_order_id);
+        $this->assertSame(PaymentStatus::PENDING, $service->payment_status);
+    }
+
+    /**
+     * O estado em que o primeiro checkout com MB Way deixa o pedido: à espera de
+     * pagamento, com a ordem criada e a resposta do cliente por chegar.
+     *
+     * @return array{0: Service, 1: \RwInteractive\PayshopSdk\Models\PaymentOrder}
+     */
+    private function withAnMbwayWaiting(): array
+    {
+        $id = $this->start()->assertOk()->json('data.service.id');
+        $service = Service::find($id);
+        $candidate = $service->candidates()->orderBy('rank')->first();
+        app(MatchingService::class)->accept($candidate);
+        app(MatchingService::class)->select($candidate->refresh());
+
+        $order = \RwInteractive\PayshopSdk\Models\PaymentOrder::create([
+            'user_id' => $this->customer->id,
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'amount' => 100,
+            'paid' => false,
+            'status' => \RwInteractive\PayshopSdk\Enums\Payment\Status::CREATED,
+            'type' => \RwInteractive\PayshopSdk\Enums\Payment\OperationType::DEFERRED,
+            'refunded' => 0,
+            'service' => 'fake',
+            'service_uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'token' => 'fake-token',
+        ]);
+        $service->refresh()->forceFill([
+            'payment_order_id' => $order->id,
+            'payment_status' => PaymentStatus::PENDING,
+        ])->save();
+
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $service->refresh()->status);
+
+        return [$service, $order];
+    }
+
     public function test_no_eligible_vendors_fails_fast(): void
     {
         Vendor::query()->update(['status' => StatusVendor::OFFLINE]);
