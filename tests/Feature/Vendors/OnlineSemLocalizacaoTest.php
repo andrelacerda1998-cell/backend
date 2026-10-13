@@ -195,7 +195,11 @@ class OnlineSemLocalizacaoTest extends TestCase
     {
         $user = User::factory()->create([
             'email_verified_at' => now(),
-            'phone_number_verified_at' => now(),
+            // Sem o telemóvel confirmado não se aceita trabalho (can_accept_service).
+            // Até 13/10/2026 bastava faltar o IBAN ou a conta de faturação; desde
+            // então, antes do quarto serviço, os dados de faturação já não travam
+            // (Vendor::faturacaoEmDia).
+            'phone_number_verified_at' => $completo ? now() : null,
         ]);
 
         $vendor = Vendor::factory()->create(array_merge([
@@ -208,7 +212,7 @@ class OnlineSemLocalizacaoTest extends TestCase
             'at_valid' => true,
             'at_validated_at' => now(),
         ] : [
-            // Sem a AT validada não se aceita trabalho (can_accept_service).
+            // Sem dados de faturação, como um técnico acabado de registar.
             'at_user' => null,
             'at_valid' => false,
         ]));

@@ -421,7 +421,10 @@ class AdminVendorsApiTest extends TestCase
     public function test_metrics_computes_real_indicators(): void
     {
         $eligible = $this->makeEligibleVendor();
-        $this->makeVendor(); // sem invoice_workspace/at_user -- não elegível
+        // Telemóvel por confirmar -- não elegível. Faltar a conta de faturação
+        // e a AT já não chega desde 13/10/2026: antes do quarto serviço não são
+        // exigidas (Vendor::faturacaoEmDia).
+        $this->makeVendor(['phone_number_verified_at' => null]);
 
         $this->withAuth()
             ->getJson('/api/v1/admin/vendors/metrics')

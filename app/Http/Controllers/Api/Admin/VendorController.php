@@ -767,10 +767,12 @@ class VendorController extends Controller
          * para ir mais depressa cria uma segunda cópia que ninguém se lembra
          * de mudar. O que sobra aqui são as condições que não dependem de
          * contagens nem de datas.
+         *
+         * A 13/10/2026 o IBAN e a conta de faturação passaram a seguir a AT
+         * (só a partir do quarto serviço, ver `Vendor::faturacaoEmDia`), e
+         * saíram daqui pela mesma razão.
          */
         $candidates = $this->baseQuery()
-            ->whereNotNull('iban')
-            ->where('invoice_workspace', '!=', '')
             ->whereDoesntHave('services', fn ($q) => $q
                 ->whereIn('status', [ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED])
                 ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING])

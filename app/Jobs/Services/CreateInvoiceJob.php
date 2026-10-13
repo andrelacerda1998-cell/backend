@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class CreateInvoiceJob implements ShouldQueue
 {
@@ -28,6 +29,20 @@ class CreateInvoiceJob implements ShouldQueue
 
         // Idempotência: se já existe fatura, não emitir uma 2ª na AT (reclaim/retry do job).
         if ($this->service->invoice_id) {
+            return;
+        }
+
+        // A fatura é emitida na conta de faturação do técnico. Desde 13/10/2026
+        // ele pode fazer os três primeiros serviços sem ela (Vendor::faturacaoEmDia),
+        // e sem conta não há onde a emitir: o pedido ia para uma conta vazia no
+        // InvoiceXpress e o job rebentava. O serviço fica por faturar, com o
+        // invoice_id a null, que é como se encontra para a emitir depois.
+        if (! $this->service->vendor?->invoice_workspace) {
+            Log::warning('[faturação] serviço fechado de um técnico sem conta de faturação: fatura por emitir', [
+                'service_id' => $this->service->id,
+                'vendor_id' => $this->service->vendor_id,
+            ]);
+
             return;
         }
 

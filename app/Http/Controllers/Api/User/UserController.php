@@ -96,15 +96,21 @@ class UserController extends Controller
                     ->first()?->name,
                 'at_user' => str_contains($vendor->at_user, '/') ? $vendor->at_user : null,
                 /*
-                 * Os tres primeiros servicos nao exigem o acesso a AT.
+                 * Os tres primeiros servicos nao exigem o acesso a AT — nem,
+                 * desde 13/10/2026, o IBAN e a morada fiscal. Os tres dados de
+                 * faturacao tem a mesma fronteira (Vendor::faturacaoEmDia), por
+                 * isso o mesmo campo serve para os tres.
                  *
                  * A app precisa dos dois para dizer a verdade ao tecnico em vez
                  * de o mandar ao Portal das Financas no primeiro dia:
                  *
-                 *  - `at_required` false  -> o passo e adiavel, e diz-se quantos
-                 *    servicos ainda pode fazer;
-                 *  - `at_required` true   -> passa a travar, e o `account_blocker`
-                 *    devolve `at_user_missing`.
+                 *  - `at_required` false  -> os passos sao adiaveis, e diz-se
+                 *    quantos servicos ainda pode fazer;
+                 *  - `at_required` true   -> passam a travar.
+                 *
+                 * O `account_blocker` continua a nomear o que falta para FATURAR
+                 * (iban_missing, fiscal_address_missing...), mesmo antes dos tres:
+                 * nessa fase nao trava o trabalho, so o pagamento.
                  *
                  * Ver `Vendor::SERVICOS_ANTES_DA_AT` para o porque dos tres.
                  */
