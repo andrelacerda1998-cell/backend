@@ -14,7 +14,6 @@ use App\Http\Controllers\Api\Admin\OperacoesAoVivoController;
 use App\Http\Controllers\Api\Admin\ServiceActionController;
 use App\Http\Controllers\Api\Admin\ServiceController;
 use App\Http\Controllers\Api\Admin\ServicesTypeController;
-use App\Http\Controllers\Api\Admin\SmsCodeController;
 use App\Http\Controllers\Api\Admin\SystemProfitController;
 use App\Http\Controllers\Api\Admin\VendorController;
 use App\Http\Controllers\Api\Admin\VendorDocumentController;
@@ -92,6 +91,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::post('/services/{service}/tentar-cobrar', [ServiceActionController::class, 'tentarCobrar']);
     Route::post('/services/{service}/desistir-e-devolver', [ServiceActionController::class, 'desistirEDevolver']);
 
+    // De que pedido é cada pagamento (por uuid, até 200 de uma vez) -- para
+    // o backoffice abrir o pedido a partir de um pagamento do Payshop.
+    Route::get('/payment-orders', [PaymentOrderController::class, 'index']);
+    Route::get('/payment-orders/{uuid}', [PaymentOrderController::class, 'show']);
+
     // Reembolso / libertação de cativo dos pagamentos da app (Payshop).
     // Passa pelo SDK para o estado local acompanhar; recusa se o serviço
     // associado ainda estiver vivo (ver nota no controller).
@@ -160,10 +164,12 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // (sem apagar) e sem Zonas/AllowedZone -- decisão explícita do utilizador
     // (2026-07-29, ver notas nos controllers).
     Route::get('/services-types', [ServicesTypeController::class, 'index']);
+    Route::get('/services-types/{servicesType}', [ServicesTypeController::class, 'show']);
     Route::post('/services-types', [ServicesTypeController::class, 'store']);
+    // Aceita também `is_active`: desativar é a forma de tirar do catálogo um
+    // serviço que já tem pedidos (ver destroy).
     Route::put('/services-types/{servicesType}', [ServicesTypeController::class, 'update']);
-    // SoftDelete -- ver nota no controller: o histórico de serviços continua a
-    // resolver o nome do tipo depois de removido do catálogo.
+    // SoftDelete, e só sem pedidos -- ver nota no controller.
     Route::delete('/services-types/{servicesType}', [ServicesTypeController::class, 'destroy']);
 
     Route::get('/operation-areas', [OperationAreaController::class, 'index']);
@@ -200,8 +206,8 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::get('/sent-notifications', [SentNotificationController::class, 'index']);
     Route::get('/sent-notifications/types', [SentNotificationController::class, 'types']);
 
-    // Códigos SMS — equivalente ao Filament SmsCodeResource. Só leitura,
-    // usado pelo suporte para confirmar o código enviado a um número
-    // (sem a restrição de super-admin do Filament, ver nota no controller).
-    Route::get('/sms-codes', [SmsCodeController::class, 'index']);
+    // Os códigos SMS de login JÁ NÃO saem por aqui. Eram devolvidos em texto
+    // simples a quem tivesse o token do backoffice -- o suficiente para entrar
+    // na conta de qualquer cliente -- e o backoffice deixou de os usar. Quem
+    // precisar mesmo de os ver tem o Filament, só para super-admin.
 });

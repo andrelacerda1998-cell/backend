@@ -17,11 +17,16 @@ use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Vendor\VendorDocuments;
+use App\Services\Operacoes\DesfechoDoPedido;
+use App\Support\PesquisaDePessoas;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Técnicos/Vendors — migrado do Filament (App\Filament\Resources\VendorResource).
@@ -47,6 +52,25 @@ use Illuminate\Support\Str;
  */
 class VendorController extends Controller
 {
+    /**
+     * O estado de um técnico, numa palavra — para separar a lista do
+     * backoffice em quem está a trabalhar, quem podia estar e quem ainda não
+     * pode. Regra exata (pela ordem):
+     *
+     *  - `suspenso`: suspenso pelo backoffice (soft delete), esteja o
+     *    interruptor Online como estiver;
+     *  - `online`: o interruptor da app está em Online;
+     *  - `pronto`: Offline, com todos os documentos obrigatórios aprovados e
+     *    dentro da validade — foi aprovado, só não está ligado;
+     *  - `em_aprovacao`: Offline e com documentos obrigatórios em falta, por
+     *    rever, recusados ou caducados.
+     *
+     * "Pronto" fala da APROVAÇÃO, que é o que a equipa decide. Não promete que
+     * ele já pode receber pedidos: IBAN, workspace de faturação e AT continuam
+     * em `can_accept_service` e `account_blocker`, como até aqui.
+     */
+    private const ESTADOS = ['online', 'pronto', 'em_aprovacao', 'suspenso'];
+
     /**
      * GET /v1/admin/vendors/documents-summary — porque é que a documentação
      * está incompleta, repartido.
@@ -186,24 +210,95 @@ class VendorController extends Controller
 
     public function index(Request $request): ApiSuccessResponse
     {
+        $request->validate([
+            'estado' => ['nullable', Rule::in(self::ESTADOS)],
+            'categoria' => ['nullable', 'integer'],
+        ], [
+            'estado.in' => 'O estado tem de ser um de: '.implode(', ', self::ESTADOS).'.',
+        ]);
+
         $perPage = min((int) $request->integer('per_page', 20), 100);
         $search = trim((string) $request->string('search'));
         $suspendedOnly = $request->boolean('suspended');
+        $estado = $request->string('estado')->toString();
 
-        $query = $this->baseQuery();
+        $query = $this->comResumo($this->baseQuery());
 
-        if ($suspendedOnly) {
+        if ($suspendedOnly || $estado === 'suspenso') {
             $query->onlyTrashed();
+        } elseif ($request->boolean('incluir_suspensos')) {
+            $query->withTrashed();
+        }
+
+        if (in_array($estado, ['online', 'pronto', 'em_aprovacao'], true)) {
+            // Um suspenso é sempre "suspenso", mesmo com `incluir_suspensos`.
+            $query->whereNull('vendors.deleted_at');
+
+            if ($estado === 'online') {
+                $query->where('vendors.status', StatusVendor::ONLINE);
+            } else {
+                $query->where(fn ($q) => $q
+                    ->whereNull('vendors.status')
+                    ->orWhere('vendors.status', '!=', StatusVendor::ONLINE));
+
+                [$documentosEmDia, $bindings] = Vendor::sqlDocumentosEmDia();
+                $estado === 'pronto'
+                    ? $query->whereRaw("({$documentosEmDia})", $bindings)
+                    : $query->whereRaw("NOT ({$documentosEmDia})", $bindings);
+            }
         }
 
         if ($search !== '') {
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('nif', 'like', "%{$search}%")
-                    ->orWhere('phone_number', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
+            // Nome completo, telefone em qualquer formato, email e NIF -- a
+            // mesma regra da lista de clientes (ver PesquisaDePessoas).
+            $query->whereHas('user', fn ($q) => PesquisaDePessoas::aplicar($q, $search));
+        }
+
+        /*
+         * Onde trabalha. Há duas fontes, e contam as duas:
+         *
+         *  - as cidades que ele escolheu na app (`vendor_available_cities`) --
+         *    é por elas que o matching decide a quem chega um pedido;
+         *  - as zonas do questionário antigo (`vendor_allowed_zones`), que é o
+         *    que os gráficos de "técnicos por localização" já contam.
+         *
+         * Comparação pelo nome exato (a colação da base ignora maiúsculas e
+         * acentos). A morada FISCAL não conta: é onde ele passa faturas, não
+         * onde trabalha.
+         */
+        if ($cidade = trim($request->string('cidade')->toString())) {
+            $query->where(fn ($q) => $q
+                ->whereHas('availableCities', fn ($c) => $c->where('cities.name', $cidade))
+                ->orWhereHas('allowedZones', fn ($z) => $z->where('allowed_zone.city', $cidade)));
+        }
+
+        /*
+         * A categoria (área de operação) em que trabalha. Pelos tipos de serviço
+         * que faz -- é por eles que o matching o escolhe -- e também pela
+         * ligação direta à área, que existe em poucos mas existe.
+         */
+        if ($request->filled('categoria')) {
+            $area = $request->integer('categoria');
+            $query->where(fn ($q) => $q
+                ->whereHas('servicesTypes', fn ($t) => $t->where('services_types.operation_area_id', $area))
+                ->orWhereHas('operationAreas', fn ($a) => $a->where('operation_areas.id', $area)));
+        }
+
+        // Documentos obrigatórios em falta, por rever, recusados ou caducados.
+        if ($request->boolean('documentos_em_falta')) {
+            [$documentosEmDia, $bindings] = Vendor::sqlDocumentosEmDia();
+            $query->whereRaw("NOT ({$documentosEmDia})", $bindings);
+        }
+
+        /*
+         * Os Online primeiro e, dentro de cada grupo, quem esteve ativo há
+         * menos tempo: a última localização que a app mandou (só a manda
+         * aberta) ou o último serviço que ficou com ele, o que for mais recente.
+         */
+        if ($request->string('sort')->toString() === 'online') {
+            $query->orderByRaw('(vendors.status = ?) DESC', [StatusVendor::ONLINE->value])
+                ->orderByRaw("GREATEST(COALESCE(last_location_at, '1000-01-01 00:00:00'), COALESCE(last_service_at, '1000-01-01 00:00:00')) DESC")
+                ->orderByDesc('vendors.id');
         }
 
         // Eager-load do que o present() lê: sem isto, cada linha da página
@@ -229,7 +324,7 @@ class VendorController extends Controller
      */
     public function show(int $id): ApiSuccessResponse|ApiErrorResponse
     {
-        $vendor = $this->baseQuery()->withTrashed()
+        $vendor = $this->comResumo($this->baseQuery()->withTrashed())
             ->with(['user', 'operationAreas', 'servicesTypes', 'addresses', 'documents'])
             ->find($id);
 
@@ -238,6 +333,71 @@ class VendorController extends Controller
         }
 
         return ApiSuccessResponse::make($this->present($vendor));
+    }
+
+    /**
+     * Estados de um serviço que contam como "um serviço dele": ficou com o
+     * trabalho e o trabalho seguiu (ou já acabou). Os pedidos em que foi
+     * escolhido mas o pagamento falhou, ou que o cliente cancelou antes,
+     * guardam o `vendor_id` mas não foram trabalho nenhum.
+     *
+     * @return array<int, ServiceStatus>
+     */
+    private static function servicosDele(): array
+    {
+        // Arquivado conta: com técnico, é um servido que se arrumou
+        // (a mesma leitura do DesfechoDoPedido).
+        return [...DesfechoDoPedido::COM_TECNICO, ServiceStatus::ARCHIVED];
+    }
+
+    /**
+     * O resumo de cada técnico, calculado na MESMA consulta da página
+     * (subconsultas), e não um pedido à base de dados por técnico:
+     *
+     *  - `documentos_em_dia`: a regra de Vendor::sqlDocumentosEmDia(), que é a
+     *    que decide entre "pronto" e "em aprovação";
+     *  - `services_30d_count` / `last_service_at`: os serviços que foram mesmo
+     *    dele (ver servicosDele()) nos últimos 30 dias, e o mais recente;
+     *  - `rating_avg` / `rating_count`: as notas que os clientes deram aos
+     *    serviços dele que fecharam (as mesmas que a nota pública lê, sem o
+     *    mínimo de três para a mostrar -- aqui é para a equipa);
+     *  - `last_location_at`: a última localização que a app mandou.
+     *
+     * Os pedidos de teste não contam, como em toda a API de admin.
+     */
+    private function comResumo(Builder $query): Builder
+    {
+        [$documentosEmDia, $bindings] = Vendor::sqlDocumentosEmDia();
+
+        $dele = fn ($s) => $s->where('services.is_test', false)->whereIn('services.status', self::servicosDele());
+        $avaliados = fn ($s) => $s->where('services.is_test', false)
+            ->where('services.status', ServiceStatus::CLOSED)
+            ->whereNotNull('services.rating_by_customer');
+
+        return $query
+            ->select('vendors.*')
+            ->selectRaw("CASE WHEN {$documentosEmDia} THEN 1 ELSE 0 END AS documentos_em_dia", $bindings)
+            ->withCount([
+                'services as services_30d_count' => fn ($s) => $dele($s)->where('services.created_at', '>=', now()->subDays(30)),
+                'services as rating_count' => $avaliados,
+            ])
+            ->withMax(['services as last_service_at' => $dele], 'created_at')
+            ->withAvg(['services as rating_avg' => $avaliados], 'rating_by_customer')
+            ->withMax('currentLocation as last_location_at', 'updated_at');
+    }
+
+    /**
+     * O técnico tal como a lista o mostra, com o resumo. As respostas de
+     * suspender, reativar e criar o workspace devolvem a linha atualizada, e
+     * sem isto chegavam com os contadores a zero e o estado por calcular.
+     */
+    private function apresentar(Vendor $vendor): array
+    {
+        $comResumo = $this->comResumo(Vendor::withTrashed()->whereKey($vendor->getKey()))
+            ->with(['user', 'operationAreas', 'servicesTypes', 'addresses', 'documents'])
+            ->first();
+
+        return $this->present($comResumo ?? $vendor);
     }
 
     public function suspend(int $id): ApiSuccessResponse|ApiErrorResponse
@@ -254,7 +414,7 @@ class VendorController extends Controller
 
         $vendor->delete();
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
+        return ApiSuccessResponse::make($this->apresentar($vendor));
     }
 
     public function restore(int $id): ApiSuccessResponse|ApiErrorResponse
@@ -271,7 +431,7 @@ class VendorController extends Controller
 
         $vendor->restore();
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas', 'addresses'])));
+        return ApiSuccessResponse::make($this->apresentar($vendor));
     }
 
     /**
@@ -778,7 +938,7 @@ class VendorController extends Controller
             return new ApiErrorResponse(null, 'Não foi possível criar o workspace: '.$e->getMessage(), 502);
         }
 
-        return ApiSuccessResponse::make($this->present($vendor->fresh(['user', 'operationAreas'])));
+        return ApiSuccessResponse::make($this->apresentar($vendor));
     }
 
     private function present(Vendor $vendor): array
@@ -869,6 +1029,46 @@ class VendorController extends Controller
             'status' => $vendor->status?->value,
             'suspended_at' => $vendor->deleted_at?->toIso8601String(),
             'created_at' => $vendor->created_at?->toIso8601String(),
+            // O resumo (ver comResumo e a regra do estado em ESTADOS).
+            'estado' => $this->estadoDe($vendor),
+            'services_30d_count' => (int) ($vendor->services_30d_count ?? 0),
+            'last_service_at' => $this->iso($vendor->last_service_at ?? null),
+            // Quando esteve ativo pela última vez: a última localização ou o
+            // último serviço, o mais recente. É o que ordena `sort=online`.
+            'last_active_at' => $this->iso(collect([$vendor->last_location_at ?? null, $vendor->last_service_at ?? null])
+                ->filter()
+                ->map(fn ($v) => Carbon::parse($v, 'UTC'))
+                ->max()),
+            'rating_avg' => isset($vendor->rating_avg) ? round((float) $vendor->rating_avg, 2) : null,
+            'rating_count' => (int) ($vendor->rating_count ?? 0),
         ];
+    }
+
+    private function estadoDe(Vendor $vendor): string
+    {
+        if ($vendor->trashed()) {
+            return 'suspenso';
+        }
+
+        if ($vendor->status === StatusVendor::ONLINE) {
+            return 'online';
+        }
+
+        // Pela MESMA regra em SQL com que a lista filtra (ver comResumo): o
+        // estado que se mostra é sempre o estado por que se filtrou.
+        $emDia = $vendor->getAttribute('documentos_em_dia');
+        $emDia = $emDia === null ? $vendor->all_documents_verified : (bool) $emDia;
+
+        return $emDia ? 'pronto' : 'em_aprovacao';
+    }
+
+    /** Uma data da base (UTC) em ISO 8601, ou null. */
+    private function iso(mixed $valor): ?string
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+
+        return ($valor instanceof \DateTimeInterface ? Carbon::instance($valor) : Carbon::parse($valor, 'UTC'))->toIso8601String();
     }
 }

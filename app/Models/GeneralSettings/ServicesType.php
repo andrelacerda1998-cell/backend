@@ -3,11 +3,13 @@
 namespace App\Models\GeneralSettings;
 
 use App\Casts\TranslatableArrayCast;
+use App\Models\Service;
 use App\Models\Vendor;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 use Spatie\MediaLibrary\HasMedia;
@@ -61,6 +63,12 @@ class ServicesType extends Model implements Auditable, HasMedia
     public function vendors()
     {
         return $this->belongsToMany(Vendor::class)->using(VendorServiceTypes::class)->whereNull('vendors.deleted_at')->wherePivot('services_type_vendor.deleted_at', null);
+    }
+
+    /** Os pedidos feitos deste tipo — é o que impede apagá-lo do catálogo. */
+    public function services(): HasMany
+    {
+        return $this->hasMany(Service::class, 'services_type_id');
     }
 
     public function suggestedPrice(): Attribute

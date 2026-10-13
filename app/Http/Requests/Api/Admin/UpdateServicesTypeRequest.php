@@ -23,6 +23,9 @@ class UpdateServicesTypeRequest extends FormRequest
             'includes.*' => ['string', 'max:255'],
             'excludes' => ['nullable', 'array'],
             'excludes.*' => ['string', 'max:255'],
+            // Desativar tira-o da app sem apagar nada: é o caminho para um
+            // serviço que já tem pedidos (ver ServicesTypeController::destroy).
+            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -8,6 +8,7 @@ use App\Exceptions\Api\User\WrongCredentials;
 use App\Models\Auth\PhoneNumberValidationCode;
 use App\Models\User;
 use App\Notifications\Auth\PhoneNumberValidationNotification;
+use App\Support\MockSms;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -41,7 +42,7 @@ class PhoneLoginSmsService
             'type' => SmsType::Login,
         ]);
 
-        if (config('app.MOCK_SMS') && ! app()->isProduction()) {
+        if (MockSms::ativo()) {
             return ['success' => true, 'mock_code' => $code];
         }
 
