@@ -131,6 +131,25 @@ class AdminPagamentosPorUuidTest extends TestCase
             ->assertJsonPath('data.nao_encontrados', []);
     }
 
+    /** O backoffice lê os uuids do Payshop em MAIÚSCULAS; a base pode tê-los noutra forma. */
+    public function test_encontra_o_pagamento_com_maiusculas_ou_minusculas(): void
+    {
+        $ana = User::factory()->create();
+        $ordem = $this->ordem($ana);
+        $pedido = $this->pedidoPagoCom($ordem, $ana);
+        $maiusculas = strtoupper($ordem->uuid);
+        $this->assertNotSame($maiusculas, $ordem->uuid);
+
+        $this->api()->getJson('/api/v1/admin/payment-orders?uuids='.$maiusculas.','.$ordem->uuid)
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.items.0.service_id', $pedido->id)
+            ->assertJsonPath('data.nao_encontrados', []);
+
+        $this->api()->getJson("/api/v1/admin/payment-orders/{$maiusculas}")->assertOk()
+            ->assertJsonPath('data.service_id', $pedido->id);
+    }
+
     public function test_sem_uuids_ou_com_mais_de_duzentos_e_recusado(): void
     {
         $this->api()->getJson('/api/v1/admin/payment-orders')->assertStatus(422);

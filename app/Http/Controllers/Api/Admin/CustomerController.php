@@ -119,7 +119,8 @@ class CustomerController extends Controller
      *  - `last_service_at`: quando fez o último pedido;
      *  - `total_spent_cents`: o que pagou do bolso dele nos serviços fechados
      *    (Closed) -- o valor do serviço menos o crédito de convites, que é
-     *    dinheiro da Piquet. O Saldo da carteira conta: é dinheiro dele,
+     *    dinheiro da Piquet, mais os extras aprovados e cobrados. O Saldo da
+     *    carteira conta: é dinheiro dele,
      *    devolvido de pedidos anteriores. Só `Closed`, porque só aí o dinheiro
      *    foi mesmo cobrado (ver a nota em ServiceStatus::concluidos()).
      *
@@ -135,7 +136,17 @@ class CustomerController extends Controller
             ])
             ->withMax(['services as last_service_at' => fn ($s) => $this->soReais($s)], 'created_at')
             ->addSelect(['total_spent_cents' => Service::query()
-                ->selectRaw('COALESCE(SUM(services.amount - services.referral_credit_used), 0)')
+                // Mais os extras (tempo, peças) que lhe foram cobrados: são
+                // uma cobrança à parte, com a sua própria ordem no Payshop, e
+                // não entram em `services.amount`.
+                ->selectRaw(
+                    'COALESCE(SUM(services.amount - services.referral_credit_used + ('
+                    .'SELECT COALESCE(SUM(extra.amount), 0) FROM service_extras AS extra'
+                    .' WHERE extra.service_id = services.id AND extra.deleted_at IS NULL'
+                    .' AND extra.status = ? AND extra.payment_status = ?'
+                    .')), 0)',
+                    ['approved', 'paid'],
+                )
                 ->whereColumn('services.customer_id', 'users.id')
                 ->where('services.is_test', false)
                 ->where('services.status', ServiceStatus::CLOSED),

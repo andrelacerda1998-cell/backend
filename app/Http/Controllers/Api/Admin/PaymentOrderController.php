@@ -76,16 +76,23 @@ class PaymentOrderController extends Controller
         }
 
         // keyBy fica com o último: se um uuid se repetisse, ganhava a ordem mais recente.
-        $ordens = PaymentOrder::query()->whereIn('uuid', $uuids->all())->orderBy('id')->get()->keyBy('uuid');
+        // Chave em minúsculas dos dois lados: o backoffice lê os uuids do
+        // Payshop (pop_transactions, em MAIÚSCULAS), a base compara sem ligar
+        // a maiúsculas, e sem isto a ordem vinha da base mas não se encontrava
+        // aqui -- e ia parar a `nao_encontrados`.
+        $ordens = PaymentOrder::query()->whereIn('uuid', $uuids->all())->orderBy('id')->get()
+            ->keyBy(fn (PaymentOrder $ordem) => strtolower($ordem->uuid));
         $ligacoes = $this->ligacoes($ordens);
+        $encontrada = fn (string $uuid) => $ordens->has(strtolower($uuid));
 
         return ApiSuccessResponse::make([
             'items' => $uuids
-                ->filter(fn (string $uuid) => $ordens->has($uuid))
-                ->map(fn (string $uuid) => $this->present($ordens->get($uuid), $ligacoes))
+                ->filter($encontrada)
+                ->unique(fn (string $uuid) => strtolower($uuid))
+                ->map(fn (string $uuid) => $this->present($ordens->get(strtolower($uuid)), $ligacoes))
                 ->values()
                 ->all(),
-            'nao_encontrados' => $uuids->reject(fn (string $uuid) => $ordens->has($uuid))->values()->all(),
+            'nao_encontrados' => $uuids->reject($encontrada)->values()->all(),
         ]);
     }
 

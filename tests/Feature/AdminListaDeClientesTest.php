@@ -70,6 +70,21 @@ class AdminListaDeClientesTest extends TestCase
         ]);
     }
 
+    private function extra(int $pedido, int $centimos, string $estado, ?string $pagamento, bool $apagado = false): void
+    {
+        DB::table('service_extras')->insert([
+            'service_id' => $pedido,
+            'type' => 'time',
+            'minutes' => 30,
+            'amount' => $centimos,
+            'status' => $estado,
+            'payment_status' => $pagamento,
+            'created_at' => now(),
+            'updated_at' => now(),
+            'deleted_at' => $apagado ? now() : null,
+        ]);
+    }
+
     /** Os ids devolvidos, PELA ORDEM da resposta, só dos criados aqui. */
     private function ids(string $query = ''): array
     {
@@ -203,12 +218,20 @@ class AdminListaDeClientesTest extends TestCase
         $ultimo = now()->subHours(3);
 
         $cliente = $this->cliente();
-        $this->pedido($cliente, ServiceStatus::CLOSED, 4000, em: now()->subDays(5));
+        $comExtras = $this->pedido($cliente, ServiceStatus::CLOSED, 4000, em: now()->subDays(5));
         // 30 € com 5 € de crédito de convites: o cliente pagou 25 €.
         $this->pedido($cliente, ServiceStatus::CLOSED, 3000, creditoDeConvites: 500, em: now()->subDays(4));
         // Ainda por cobrar: é aberto e não conta no gasto.
         $this->pedido($cliente, ServiceStatus::CLOSED_PENDING_PAYMENT, 9999, em: now()->subDays(3));
-        $this->pedido($cliente, ServiceStatus::CANCELED, 7777, em: now()->subDays(2));
+        $cancelado = $this->pedido($cliente, ServiceStatus::CANCELED, 7777, em: now()->subDays(2));
+
+        // Os extras são cobrados à parte: conta o aprovado e pago (12 €), não
+        // o recusado, o por cobrar, o apagado nem o de um pedido cancelado.
+        $this->extra($comExtras, 1200, 'approved', 'paid');
+        $this->extra($comExtras, 3333, 'rejected', null);
+        $this->extra($comExtras, 4444, 'approved', 'pending_confirmation');
+        $this->extra($comExtras, 5555, 'approved', 'paid', apagado: true);
+        $this->extra($cancelado, 6666, 'approved', 'paid');
         $this->pedido($cliente, ServiceStatus::MATCHING, null, em: $ultimo);
         // De teste: não conta para nada.
         $this->pedido($cliente, ServiceStatus::CLOSED, 100000, teste: true, em: now());
@@ -220,7 +243,7 @@ class AdminListaDeClientesTest extends TestCase
         $this->assertSame(5, $itens[$cliente->id]['services_count']);
         $this->assertSame(2, $itens[$cliente->id]['open_services_count']);
         $this->assertSame($ultimo->toIso8601String(), $itens[$cliente->id]['last_service_at']);
-        $this->assertEquals(65.0, $itens[$cliente->id]['total_spent']);
+        $this->assertEquals(77.0, $itens[$cliente->id]['total_spent']);
 
         $this->assertSame(0, $itens[$semPedidos->id]['services_count']);
         $this->assertSame(0, $itens[$semPedidos->id]['open_services_count']);
@@ -232,7 +255,7 @@ class AdminListaDeClientesTest extends TestCase
         $this->assertSame(5, $ficha->json('data.services_count'));
         $this->assertSame(2, $ficha->json('data.open_services_count'));
         $this->assertSame($ultimo->toIso8601String(), $ficha->json('data.last_service_at'));
-        $this->assertEquals(65.0, $ficha->json('data.total_spent'));
+        $this->assertEquals(77.0, $ficha->json('data.total_spent'));
     }
 
     public function test_bloquear_e_reativar_devolvem_o_resumo(): void

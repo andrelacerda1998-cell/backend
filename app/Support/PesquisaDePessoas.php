@@ -75,6 +75,26 @@ final class PesquisaDePessoas
     }
 
     /**
+     * A coluna sem a pontuação com que um telefone se escreve -- os mesmos
+     * caracteres que `digitosDoTelefone()` aceita no termo.
+     *
+     * REPLACE encadeados e não REGEXP_REPLACE: esse só existe a partir do
+     * MySQL 8, e a versão da base de produção não está escrita em lado
+     * nenhum deste repositório. Se faltasse, qualquer pesquisa com três
+     * dígitos dava erro 500 nas três listas.
+     */
+    private static function sqlSoDigitos(string $coluna): string
+    {
+        $sql = $coluna;
+
+        foreach ([' ', '+', '-', '.', '/', '(', ')'] as $caracter) {
+            $sql = "REPLACE({$sql}, '{$caracter}', '')";
+        }
+
+        return $sql;
+    }
+
+    /**
      * Junta à consulta (sobre a tabela `users`) as condições da pesquisa, todas
      * em OU e dentro de um só grupo — um OR solto desfazia os outros filtros.
      *
@@ -112,7 +132,7 @@ final class PesquisaDePessoas
                 $q->orWhere('users.phone_number', 'like', $like);
 
                 if ($digitos !== null) {
-                    $q->orWhereRaw("REGEXP_REPLACE(users.phone_number, '[^0-9]', '') LIKE ?", ["%{$digitos}%"]);
+                    $q->orWhereRaw(self::sqlSoDigitos('users.phone_number').' LIKE ?', ["%{$digitos}%"]);
                 }
             }
         });
