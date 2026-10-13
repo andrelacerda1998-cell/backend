@@ -7,6 +7,8 @@ use App\Enums\Services\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Service;
+use App\Services\Operacoes\DesfechoDoPedido;
+use App\Services\Operacoes\RegistoDeEventos;
 use App\Support\PesquisaDePessoas;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,14 +44,16 @@ class ServiceController extends Controller
     /**
      * Os prazos dos alertas — os MESMOS do OperacoesAoVivoController: um
      * pedido à procura sem ninguém convidado ao fim de dois minutos, e um
-     * serviço terminado que o cliente não confirmou num dia.
+     * serviço terminado que o cliente não confirmou num dia. Os dos pedidos
+     * presos (atraso do técnico, execução longa, cliente sem resposta) lêem-se
+     * das constantes de lá, para não haver dois números a afinar.
      */
     private const SEGUNDOS_SEM_CONVITES = 120;
 
     private const HORAS_SEM_CONFIRMACAO = 24;
 
-    /** O único motivo que é "atenção" e não "crítico" (ver OperacoesAoVivo). */
-    private const MOTIVO_SO_ATENCAO = 'cliente_nao_confirmou';
+    /** Os motivos que são "atenção" e não "crítico" (ver OperacoesAoVivo). */
+    private const MOTIVOS_SO_ATENCAO = ['cliente_nao_confirmou', 'cliente_sem_resposta', 'em_execucao_ha_muito'];
 
     public function index(Request $request): ApiSuccessResponse
     {
@@ -208,8 +212,8 @@ class ServiceController extends Controller
 
         if ($request->boolean('atencao')) {
             $query->orderByRaw(
-                'CASE WHEN atencao_motivo IS NULL THEN 2 WHEN atencao_motivo = ? THEN 1 ELSE 0 END',
-                [self::MOTIVO_SO_ATENCAO],
+                'CASE WHEN atencao_motivo IS NULL THEN 2 WHEN atencao_motivo IN (?, ?, ?) THEN 1 ELSE 0 END',
+                self::MOTIVOS_SO_ATENCAO,
             );
         }
 
@@ -572,7 +576,8 @@ class ServiceController extends Controller
      * Porque é que um pedido precisa de uma pessoa — em SQL, para a lista o
      * poder ORDENAR por isso e paginar sem carregar os pedidos todos.
      *
-     * São as regras do OperacoesAoVivoController, com os mesmos nomes:
+     * São as regras do OperacoesAoVivoController, com os mesmos nomes e pela
+     * mesma ordem (o primeiro que se aplica ganha):
      *
      *  - `personalizado_por_rever` (crítico): pedido personalizado à espera de
      *    o backoffice definir tempo e categorias;
@@ -582,13 +587,27 @@ class ServiceController extends Controller
      *    ninguém foi convidado;
      *  - `ninguem_a_responder` (crítico): convidou-se, ninguém aceitou e já
      *    não há ninguém a quem a resposta ainda possa chegar;
+     *  - `cliente_sem_resposta` (atenção): do lado do cliente há mais de um
+     *    dia — a escolher entre quem aceitou, a pagar, no 3-D Secure, ou com
+     *    um extra (tempo, peças) por aprovar num serviço em curso;
+     *  - `tecnico_nao_chegou` (crítico): aceite ou agendado, passou meia hora
+     *    da hora marcada (num imediato, da hora em que ficou aceite mais a
+     *    viagem) e o técnico não carregou em "Cheguei";
      *  - `cliente_nao_confirmou` (atenção): o técnico terminou e o cliente não
-     *    confirmou num dia.
+     *    confirmou num dia;
+     *  - `em_execucao_ha_muito` (atenção): começou há mais de 8 horas.
      *
      * Ficam de fora os alertas dos PRAZOS (`prazo_esgotado`, `prazo_a_acabar`)
      * e o `cliente_a_escolher`: dependem dos relógios do MatchingService, que
      * só se calculam pedido a pedido, e resolvem-se sozinhos em minutos pelo
-     * `matching:advance` — não são trabalho para a equipa.
+     * `matching:advance` — não são trabalho para a equipa. Por isso um pedido
+     * a pagar ou a escolher há mais de um dia aparece aqui como
+     * `cliente_sem_resposta`, e nas Operações ao vivo como `prazo_esgotado`,
+     * que lá vem primeiro: as duas dizem que está parado, cada uma pela sua
+     * pergunta.
+     *
+     * "Desde quando está neste estado" vem do histórico (`service_events`) e,
+     * sem ele, do `updated_at` — a mesma regra das Operações ao vivo.
      *
      * @return array{0: string, 1: array<int, mixed>}
      */
@@ -596,6 +615,22 @@ class ServiceController extends Controller
     {
         $candidatos = 'SELECT 1 FROM service_candidates AS candidato WHERE candidato.service_id = services.id';
         $responderam = implode(', ', array_fill(0, count(self::ACEITARAM) + 1, '?'));
+        $disseramSim = implode(', ', array_fill(0, count(DesfechoDoPedido::DISSERAM_SIM), '?'));
+        $estadoDesde = 'COALESCE((SELECT MAX(evento.ocorreu_em) FROM service_events AS evento'
+            .' WHERE evento.service_id = services.id AND evento.tipo IN (?, ?) AND evento.estado_para = services.status),'
+            .' services.updated_at)';
+        $temMarcacao = 'EXISTS (SELECT 1 FROM schedule AS agenda WHERE agenda.service_id = services.id AND agenda.deleted_at IS NULL)';
+        // Dia e hora de relógio de Lisboa, como o cliente a escolheu.
+        $marcacao = '(SELECT MIN(TIMESTAMP(agenda.scheduled_day, agenda.scheduled_time_start)) FROM schedule AS agenda'
+            .' WHERE agenda.service_id = services.id AND agenda.deleted_at IS NULL)';
+        $emCurso = [
+            ServiceStatus::ACCEPTED, ServiceStatus::SCHEDULED, ServiceStatus::ARRIVED,
+            ServiceStatus::FINISHED, ServiceStatus::CLOSED_PENDING_PAYMENT,
+        ];
+
+        $valores = fn (array $estados) => array_map(fn ($e) => $e->value, $estados);
+        $eventos = [RegistoDeEventos::CRIADO, RegistoDeEventos::ESTADO];
+        $umDia = now()->subHours(OperacoesAoVivoController::HORAS_A_ESPERA_DO_CLIENTE);
 
         $sql = 'CASE'
             ." WHEN services.status = ? THEN 'personalizado_por_rever'"
@@ -604,7 +639,19 @@ class ServiceController extends Controller
             ."  AND COALESCE(services.custom_dispatched_at, services.created_at) <= ? THEN 'ninguem_convidado'"
             ." WHEN services.status = ? AND EXISTS ({$candidatos})"
             ."  AND NOT EXISTS ({$candidatos} AND candidato.status IN ({$responderam})) THEN 'ninguem_a_responder'"
+            // A escolher: desde o primeiro "sim", não desde a entrada em seleção.
+            ." WHEN services.status = ? AND EXISTS ({$candidatos} AND candidato.status IN ({$disseramSim}))"
+            ."  AND COALESCE(services.candidates_ready_at, {$estadoDesde}) <= ? THEN 'cliente_sem_resposta'"
+            ." WHEN services.status IN (?, ?) AND {$estadoDesde} <= ? THEN 'cliente_sem_resposta'"
+            .' WHEN services.status IN (?, ?) AND services.arrived_at IS NULL AND ('
+            ."  ({$temMarcacao} AND {$marcacao} <= ?)"
+            ."  OR (NOT {$temMarcacao} AND {$estadoDesde} <= ?)"
+            .") THEN 'tecnico_nao_chegou'"
             ." WHEN services.status = ? AND services.updated_at < ? THEN 'cliente_nao_confirmou'"
+            .' WHEN services.status IN (?, ?, ?, ?, ?) AND EXISTS (SELECT 1 FROM service_extras AS extra'
+            .'  WHERE extra.service_id = services.id AND extra.deleted_at IS NULL'
+            ."  AND extra.status = ? AND extra.created_at <= ?) THEN 'cliente_sem_resposta'"
+            ." WHEN services.status = ? AND COALESCE(services.arrived_at, {$estadoDesde}) <= ? THEN 'em_execucao_ha_muito'"
             .' END';
 
         return [$sql, [
@@ -616,8 +663,33 @@ class ServiceController extends Controller
             // Quem ainda pode responder, ou já disse que sim.
             CandidateStatus::NOTIFIED->value,
             ...array_map(fn (CandidateStatus $c) => $c->value, self::ACEITARAM),
+            // cliente_sem_resposta, a escolher
+            ServiceStatus::MATCHING->value,
+            ...$valores(DesfechoDoPedido::DISSERAM_SIM),
+            ...$eventos,
+            $umDia,
+            // cliente_sem_resposta, a pagar
+            ServiceStatus::AWAITING_PAYMENT->value,
+            ServiceStatus::PENDING_3DS->value,
+            ...$eventos,
+            $umDia,
+            // tecnico_nao_chegou
+            ServiceStatus::SCHEDULED->value,
+            ServiceStatus::ACCEPTED->value,
+            now('Europe/Lisbon')->subMinutes(OperacoesAoVivoController::MINUTOS_DE_ATRASO_SEM_CHEGAR)->format('Y-m-d H:i:s'),
+            ...$eventos,
+            now()->subMinutes(OperacoesAoVivoController::MINUTOS_DE_VIAGEM_IMEDIATO + OperacoesAoVivoController::MINUTOS_DE_ATRASO_SEM_CHEGAR),
+            // cliente_nao_confirmou
             ServiceStatus::FINISHED->value,
             now()->subHours(self::HORAS_SEM_CONFIRMACAO),
+            // cliente_sem_resposta, extra por aprovar
+            ...$valores($emCurso),
+            'pending',
+            $umDia,
+            // em_execucao_ha_muito
+            ServiceStatus::ARRIVED->value,
+            ...$eventos,
+            now()->subHours(OperacoesAoVivoController::HORAS_EM_EXECUCAO),
         ]];
     }
 
@@ -631,7 +703,7 @@ class ServiceController extends Controller
         }
 
         return [
-            'nivel' => $motivo === self::MOTIVO_SO_ATENCAO ? 'atencao' : 'critico',
+            'nivel' => in_array($motivo, self::MOTIVOS_SO_ATENCAO, true) ? 'atencao' : 'critico',
             'motivo' => $motivo,
         ];
     }
