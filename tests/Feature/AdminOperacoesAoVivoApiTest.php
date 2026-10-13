@@ -6,9 +6,12 @@ use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
+use App\Http\Controllers\Api\Admin\OperacoesAoVivoController;
+use App\Models\GeneralSettings\City;
 use App\Models\GeneralSettings\OperationArea;
 use App\Models\GeneralSettings\ServicesType;
 use App\Models\ServiceCandidate;
+use App\Models\ServiceEvent;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Vendor\Location;
@@ -240,5 +243,199 @@ class AdminOperacoesAoVivoApiTest extends TestCase
     {
         config(['services.admin_api.token' => 'a-valid-token']);
         $this->getJson('/api/v1/admin/operacoes/ao-vivo')->assertUnauthorized();
+    }
+
+    // ----------------------------------------------------------------- agora
+
+    /** Marca o serviço para um dia e hora de Lisboa (a 12/03 Lisboa está em UTC). */
+    private function agenda(int $servico, string $dia, string $hora): void
+    {
+        DB::table('schedule')->insert([
+            'vendor_id' => Vendor::factory()->create()->id,
+            'customer_id' => User::factory()->create()->id,
+            'service_id' => $servico,
+            'scheduled_day' => $dia,
+            'scheduled_time_start' => $hora,
+            'scheduled_time_end' => Carbon::parse($hora)->addHour()->format('H:i:s'),
+            'is_pending' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    /** Um passo do histórico: o serviço entrou em `$estado` há `$haMinutos`. */
+    private function passou(int $servico, ServiceStatus $estado, int $haMinutos): void
+    {
+        ServiceEvent::create([
+            'service_id' => $servico,
+            'tipo' => 'estado',
+            'estado_para' => $estado->value,
+            'ocorreu_em' => now()->subMinutes($haMinutos),
+        ]);
+    }
+
+    public function test_agora_conta_os_agendados_de_hoje_que_ainda_nao_comecaram(): void
+    {
+        $porComecar = $this->servico(ServiceStatus::SCHEDULED, haMinutos: 3000);
+        $this->agenda($porComecar, '2031-03-12', '15:00:00');
+        // Já a caminho, mas ainda não chegou: não começou.
+        $aCaminho = $this->servico(ServiceStatus::ACCEPTED, haMinutos: 3000, extra: ['on_the_way_at' => now()->subMinutes(5)]);
+        $this->agenda($aCaminho, '2031-03-12', '10:30:00');
+        $jaComecou = $this->servico(ServiceStatus::ARRIVED, haMinutos: 3000);
+        $this->agenda($jaComecou, '2031-03-12', '09:00:00');
+        $amanha = $this->servico(ServiceStatus::SCHEDULED, haMinutos: 3000);
+        $this->agenda($amanha, '2031-03-13', '09:00:00');
+        $teste = $this->servico(ServiceStatus::SCHEDULED, haMinutos: 3000, extra: ['is_test' => true]);
+        $this->agenda($teste, '2031-03-12', '16:00:00');
+
+        $this->assertSame(['agendados_hoje' => 2], $this->ler()['agora']);
+        $this->assertSame(1, $this->ler('?incluir_testes=1')['agora']['agendados_hoje']);
+    }
+
+    // ------------------------------------------------------ oferta por cidade
+
+    public function test_a_oferta_por_cidade_usa_as_cidades_que_cada_tecnico_escolheu(): void
+    {
+        $lisboa = City::firstOrCreate(['name' => 'Lisboa', 'district' => 'Lisboa']);
+        $amadora = City::firstOrCreate(['name' => 'Amadora', 'district' => 'Lisboa']);
+
+        $pronto = $this->tecnico(StatusVendor::ONLINE, localizacaoHaMinutos: 10);
+        $pronto->availableCities()->attach([$lisboa->id, $amadora->id]);
+        $semPosicao = $this->tecnico(StatusVendor::ONLINE, localizacaoHaMinutos: 3 * 24 * 60);
+        $semPosicao->availableCities()->attach($lisboa->id);
+        $this->tecnico(StatusVendor::ONLINE, localizacaoHaMinutos: 5); // sem cidades
+        $this->tecnico(StatusVendor::OFFLINE, localizacaoHaMinutos: 5)->availableCities()->attach($lisboa->id);
+
+        $this->assertSame([
+            ['cidade' => 'Lisboa', 'online' => 2, 'podem_aceitar' => 2, 'prontos' => 1],
+            ['cidade' => 'Amadora', 'online' => 1, 'podem_aceitar' => 1, 'prontos' => 1],
+            ['cidade' => null, 'online' => 1, 'podem_aceitar' => 1, 'prontos' => 1],
+        ], $this->ler()['oferta']['por_cidade']);
+    }
+
+    // ---------------------------------------------------------- liquidez/mês
+
+    public function test_a_liquidez_do_mes_conta_os_criados_e_os_servidos_desde_o_dia_1(): void
+    {
+        $vendor = Vendor::factory()->create();
+        // 12/03 às 11:00: o mês começou há 11 dias e 11 horas.
+        $this->servico(ServiceStatus::CLOSED, haMinutos: 7 * 24 * 60, extra: ['vendor_id' => $vendor->id]);
+        $this->servico(ServiceStatus::ARCHIVED, haMinutos: 5 * 24 * 60, extra: ['vendor_id' => $vendor->id]);
+        $this->servico(ServiceStatus::MATCHING_FAILED, haMinutos: 2 * 24 * 60);
+        $this->servico(ServiceStatus::MATCHING, haMinutos: 1); // aberto: ainda não servido
+        $this->servico(ServiceStatus::CLOSED, haMinutos: 12 * 24 * 60, extra: ['vendor_id' => $vendor->id]); // fevereiro
+        $this->servico(ServiceStatus::CLOSED, haMinutos: 60, extra: ['vendor_id' => $vendor->id, 'is_test' => true]);
+
+        $mes = $this->ler()['liquidez']['mes'];
+
+        $this->assertSame('2031-03-01T00:00:00+00:00', $mes['desde']);
+        $this->assertSame(4, $mes['criados']);
+        $this->assertSame(2, $mes['servidos']);
+        $this->assertSame(0.5, $mes['taxa']);
+    }
+
+    public function test_sem_pedidos_no_mes_a_taxa_e_nula(): void
+    {
+        $mes = $this->ler()['liquidez']['mes'];
+
+        $this->assertSame(0, $mes['criados']);
+        $this->assertNull($mes['taxa']);
+    }
+
+    // ---------------------------------------------------------- estado desde
+
+    public function test_cada_pedido_diz_desde_quando_esta_no_estado_e_de_onde_vem_a_hora(): void
+    {
+        $comHistorico = $this->servico(ServiceStatus::AWAITING_PAYMENT, haMinutos: 40);
+        $this->passou($comHistorico, ServiceStatus::MATCHING, haMinutos: 40);
+        $this->passou($comHistorico, ServiceStatus::AWAITING_PAYMENT, haMinutos: 3);
+        // Sem histórico (pedido anterior a 08/10): fica o updated_at.
+        $semHistorico = $this->servico(ServiceStatus::MATCHING, haMinutos: 20, extra: ['updated_at' => now()->subMinutes(15)]);
+        // O último passo foi para outro estado: a mudança seguinte não passou
+        // pelo modelo, e o histórico não sabe dela.
+        $desatualizado = $this->servico(ServiceStatus::FINISHED, haMinutos: 90, extra: ['updated_at' => now()->subMinutes(10)]);
+        $this->passou($desatualizado, ServiceStatus::ARRIVED, haMinutos: 60);
+
+        $dados = $this->ler();
+        $a = $this->item($dados['a_procura'], $comHistorico);
+        $b = $this->item($dados['a_procura'], $semHistorico);
+        $c = $this->item($dados['em_curso'], $desatualizado);
+
+        $this->assertSame(now()->subMinutes(3)->toIso8601String(), $a['estado_desde']);
+        $this->assertSame('historico', $a['estado_desde_fonte']);
+        $this->assertSame(now()->subMinutes(15)->toIso8601String(), $b['estado_desde']);
+        $this->assertSame('updated_at', $b['estado_desde_fonte']);
+        $this->assertSame(now()->subMinutes(10)->toIso8601String(), $c['estado_desde']);
+        $this->assertSame('updated_at', $c['estado_desde_fonte']);
+    }
+
+    // ------------------------------------------------- alertas de pedido preso
+
+    public function test_agendado_meia_hora_depois_da_hora_sem_o_tecnico_e_critico(): void
+    {
+        $atrasado = $this->servico(ServiceStatus::SCHEDULED, haMinutos: 3000);
+        $this->agenda($atrasado, '2031-03-12', '10:25:00'); // 35 min
+        $aCaminhoEAtrasado = $this->servico(ServiceStatus::ACCEPTED, haMinutos: 3000, extra: ['on_the_way_at' => now()->subMinutes(50)]);
+        $this->agenda($aCaminhoEAtrasado, '2031-03-12', '10:00:00');
+        $dentroDaTolerancia = $this->servico(ServiceStatus::SCHEDULED, haMinutos: 3000);
+        $this->agenda($dentroDaTolerancia, '2031-03-12', '10:45:00'); // 15 min
+
+        $emCurso = $this->ler()['em_curso'];
+
+        $this->assertSame(['nivel' => 'critico', 'motivo' => 'tecnico_nao_chegou'], $this->item($emCurso, $atrasado)['alerta']);
+        $this->assertSame('tecnico_nao_chegou', $this->item($emCurso, $aCaminhoEAtrasado)['alerta']['motivo']);
+        $this->assertNull($this->item($emCurso, $dentroDaTolerancia)['alerta']);
+    }
+
+    public function test_imediato_conta_a_viagem_antes_do_atraso(): void
+    {
+        $limite = OperacoesAoVivoController::MINUTOS_DE_VIAGEM_IMEDIATO + OperacoesAoVivoController::MINUTOS_DE_ATRASO_SEM_CHEGAR;
+
+        $atrasado = $this->servico(ServiceStatus::ACCEPTED, haMinutos: $limite + 20);
+        $this->passou($atrasado, ServiceStatus::ACCEPTED, haMinutos: $limite + 5);
+        $aChegar = $this->servico(ServiceStatus::ACCEPTED, haMinutos: $limite + 20);
+        $this->passou($aChegar, ServiceStatus::ACCEPTED, haMinutos: $limite - 5);
+
+        $emCurso = $this->ler()['em_curso'];
+
+        $this->assertSame('tecnico_nao_chegou', $this->item($emCurso, $atrasado)['alerta']['motivo']);
+        $this->assertNull($this->item($emCurso, $aChegar)['alerta']);
+    }
+
+    public function test_em_execucao_ha_mais_de_oito_horas_pede_atencao(): void
+    {
+        $horas = OperacoesAoVivoController::HORAS_EM_EXECUCAO;
+        $esquecido = $this->servico(ServiceStatus::ARRIVED, haMinutos: 900, extra: ['arrived_at' => now()->subHours($horas)->subMinute()]);
+        $normal = $this->servico(ServiceStatus::ARRIVED, haMinutos: 900, extra: ['arrived_at' => now()->subHours(2)]);
+
+        $emCurso = $this->ler()['em_curso'];
+
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'em_execucao_ha_muito'], $this->item($emCurso, $esquecido)['alerta']);
+        $this->assertNull($this->item($emCurso, $normal)['alerta']);
+    }
+
+    public function test_um_dia_a_espera_do_cliente_pede_atencao(): void
+    {
+        // Um extra por aprovar há mais de um dia ganha ao "em execução há
+        // muito": é o que explica o pedido estar parado.
+        $extraParado = $this->servico(ServiceStatus::ARRIVED, haMinutos: 30 * 60, extra: ['arrived_at' => now()->subHours(26)]);
+        DB::table('service_extras')->insert([
+            'service_id' => $extraParado, 'type' => 'time', 'minutes' => 30, 'amount' => 1500, 'status' => 'pending',
+            'created_at' => now()->subHours(25), 'updated_at' => now()->subHours(25),
+        ]);
+        $extraRecente = $this->servico(ServiceStatus::ARRIVED, haMinutos: 120, extra: ['arrived_at' => now()->subHour()]);
+        DB::table('service_extras')->insert([
+            'service_id' => $extraRecente, 'type' => 'time', 'minutes' => 30, 'amount' => 1500, 'status' => 'pending',
+            'created_at' => now()->subMinutes(30), 'updated_at' => now()->subMinutes(30),
+        ]);
+        // 3-D Secure por confirmar há mais de um dia: nenhum prazo o apanha.
+        $cartao = $this->servico(ServiceStatus::PENDING_3DS, haMinutos: 27 * 60);
+        $this->passou($cartao, ServiceStatus::PENDING_3DS, haMinutos: 25 * 60);
+
+        $dados = $this->ler();
+
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'cliente_sem_resposta'], $this->item($dados['em_curso'], $extraParado)['alerta']);
+        $this->assertNull($this->item($dados['em_curso'], $extraRecente)['alerta']);
+        $this->assertSame(['nivel' => 'atencao', 'motivo' => 'cliente_sem_resposta'], $this->item($dados['a_procura'], $cartao)['alerta']);
     }
 }

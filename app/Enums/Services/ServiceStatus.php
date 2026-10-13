@@ -82,4 +82,50 @@ enum ServiceStatus: string
     {
         return [self::CLOSED, self::CLOSED_PENDING_PAYMENT, self::ARCHIVED];
     }
+
+    /**
+     * «Deste estado o pedido já não sai.» Acabou bem, acabou mal, ou nunca
+     * chegou a começar — não há mais nada que a equipa ou o sistema façam.
+     *
+     * Era a lista que o `PaymentOrderController` tinha escrita à mão para
+     * decidir se um pagamento ainda tem um pedido vivo por trás. Passa a viver
+     * aqui porque o backoffice precisa da mesma resposta noutros sítios
+     * ("pedidos abertos" de um cliente, o filtro `abertos` da lista de
+     * pedidos), e duas cópias da mesma lista divergem à primeira mudança.
+     *
+     * `CLOSED_PENDING_PAYMENT` NÃO é final, de propósito: o trabalho está
+     * feito mas o dinheiro não entrou, e alguém tem de tentar cobrar ou
+     * desistir e devolver. Para a equipa é trabalho por fazer.
+     *
+     * @return array<int, self>
+     */
+    public static function finais(): array
+    {
+        return [
+            self::CLOSED,
+            self::ARCHIVED,
+            self::CANCELED,
+            self::REFUSED,
+            self::MATCHING_FAILED,
+            self::REFUSED_MBWAY,
+            self::EXPIRED_MBWAY,
+            self::CANCELED_MBWAY,
+            self::EXPIRED_3DS,
+        ];
+    }
+
+    /**
+     * Tudo o que ainda não é final: à procura de técnico, à espera do
+     * cliente ou do pagamento, marcado, a decorrer, por confirmar ou por
+     * cobrar. É o complemento exato de `finais()`.
+     *
+     * @return array<int, self>
+     */
+    public static function abertos(): array
+    {
+        return array_values(array_filter(
+            self::cases(),
+            fn (self $estado) => ! in_array($estado, self::finais(), true),
+        ));
+    }
 }

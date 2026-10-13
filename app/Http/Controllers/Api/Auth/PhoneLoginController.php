@@ -7,6 +7,7 @@ use App\Http\Requests\Api\Auth\PhoneLoginRequest;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Services\Common\PhoneLoginSmsService;
+use App\Support\MockSms;
 
 class PhoneLoginController extends Controller
 {
@@ -17,7 +18,7 @@ class PhoneLoginController extends Controller
 
             $result = $service->sendCode($phoneNumber);
 
-            if (config('app.MOCK_SMS') && ! app()->isProduction()) {
+            if (MockSms::ativo()) {
                 return new ApiSuccessResponse([
                     'message' => 'Code sent',
                     'mock_code' => $result['mock_code'],

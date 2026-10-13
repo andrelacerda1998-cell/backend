@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\Service;
 use App\Services\Common\Services\VendorNoShowPolicy;
+use Carbon\CarbonInterface;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 /**
  * A fila de faltas para o backoffice.
  *
- * Duas listas, porque são duas perguntas diferentes:
+ * Três listas, porque são três perguntas diferentes:
+ *  - AVISOS: a hora está mesmo a chegar (ou passou há pouco) e o técnico ainda
+ *    não disse que vai a caminho. Ainda não é falta — é o momento de lhe
+ *    ligar, enquanto um telefonema ainda salva o serviço.
  *  - SUSPEITAS: serviços cuja hora passou e o técnico nunca chegou a "Cheguei".
  *    É o que o `services:detect-no-show` escala para ops — aqui fica a lista
  *    com o botão, em vez de um email que se perde.
@@ -25,13 +30,72 @@ class VendorNoShowListController extends Controller
     /** Mais do que isto é lixo antigo, não uma fila de trabalho. */
     private const SUSPECT_MAX_AGE_DAYS = 7;
 
-    public function __invoke(): ApiSuccessResponse
+    /**
+     * O aviso acende este tempo antes da hora marcada e apaga-se este tempo
+     * depois dela. Antes da hora ainda há tempo de um telefonema pôr o
+     * técnico a caminho; depois dela entram também o `services:detect-no-show`
+     * (T+10 ao técnico, T+20 a ops) e a lista das suspeitas, que continua.
+     */
+    public const MINUTOS_DO_AVISO = 15;
+
+    public function __invoke(Request $request): ApiSuccessResponse
     {
         return new ApiSuccessResponse([
             'suspected' => $this->suspected(),
             'declared' => $this->declared(),
+            'avisos' => $this->avisos($request->boolean('incluir_testes')),
             'penalty_ratio' => VendorNoShowPolicy::PENALTY_RATIO,
         ]);
+    }
+
+    /**
+     * POSSÍVEL FALTA: a hora marcada é daqui a menos de MINUTOS_DO_AVISO (ou
+     * passou há menos do que isso), o serviço está aceite ou agendado, e o
+     * técnico não marcou "Estou a caminho" (`on_the_way_at` vazio — a mesma
+     * marca que a CancellationPolicy e o "cliente ausente" usam).
+     *
+     * O que passou há menos de um quarto de hora aparece também nas suspeitas:
+     * é de propósito, são as duas perguntas ao mesmo tempo.
+     *
+     * As contas de teste ficam de fora, salvo `?incluir_testes=1` — a mesma
+     * regra das Operações ao vivo. As outras duas listas ficam como estavam.
+     */
+    private function avisos(bool $testes): array
+    {
+        $agora = now();
+        $hoje = now('Europe/Lisbon');
+
+        return Service::query()
+            ->where('is_test', $testes)
+            ->whereIn('status', VendorNoShowPolicy::OPEN_STATUSES)
+            ->whereNull('vendor_no_show_at')
+            ->whereNotNull('vendor_id')
+            ->whereNull('on_the_way_at')
+            ->whereHas('schedule', fn ($q) => $q
+                ->where('is_pending', false)
+                // A janela pode atravessar a meia-noite (de Lisboa).
+                ->whereBetween('scheduled_day', [
+                    $hoje->copy()->subDay()->toDateString(),
+                    $hoje->copy()->addDay()->toDateString(),
+                ]))
+            ->with(['schedule', 'serviceType', 'customer', 'vendor.user'])
+            ->get()
+            ->map(fn (Service $service) => [
+                'servico' => $service,
+                'inicio' => Service::instanteDe($service->schedule->scheduled_day, $service->schedule->scheduled_time_start),
+            ])
+            ->filter(fn (array $a) => $a['inicio'] instanceof CarbonInterface && $a['inicio']->between(
+                $agora->copy()->subMinutes(self::MINUTOS_DO_AVISO),
+                $agora->copy()->addMinutes(self::MINUTOS_DO_AVISO),
+            ))
+            ->sortBy(fn (array $a) => $a['inicio']->getTimestamp())
+            ->values()
+            ->map(fn (array $a) => [
+                ...$this->present($a['servico']),
+                // Negativo quando a hora já passou.
+                'minutes_to_start' => (int) round($agora->diffInMinutes($a['inicio'], false)),
+            ])
+            ->all();
     }
 
     private function suspected(): array
