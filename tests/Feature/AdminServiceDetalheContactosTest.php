@@ -15,7 +15,11 @@ use Tests\TestCase;
 /**
  * O detalhe de um pedido no backoffice traz o que é preciso para o resolver
  * sem sair dele: o telefone do técnico e o pagamento ligado ao pedido (para
- * o reembolso). A listagem não traz nenhum dos dois.
+ * o reembolso).
+ *
+ * A listagem passou a trazer os telefones das duas pessoas em bruto
+ * (`customer_phone`, `vendor_phone`) -- o backoffice esconde-os consoante a
+ * permissão de quem vê. O pagamento continua a ser só do detalhe.
  */
 class AdminServiceDetalheContactosTest extends TestCase
 {
@@ -67,14 +71,18 @@ class AdminServiceDetalheContactosTest extends TestCase
         $this->assertSame($servico->paymentOrder->uuid, $r->json('data.payment_order_uuid'));
     }
 
-    public function test_a_listagem_nao_espalha_o_telefone_do_tecnico(): void
+    public function test_a_listagem_traz_os_telefones_em_bruto_mas_nao_o_pagamento(): void
     {
-        $this->pedido();
+        $servico = $this->pedido();
 
         $r = $this->withHeaders(['Authorization' => 'Bearer a-valid-token'])
             ->getJson('/api/v1/admin/services')->assertOk();
 
-        $this->assertArrayNotHasKey('technician_phone', $r->json('data.items.0'));
-        $this->assertArrayNotHasKey('payment_order_uuid', $r->json('data.items.0'));
+        $item = collect($r->json('data.items'))->firstWhere('id', (string) $servico->id);
+
+        $this->assertSame('+351912000111', $item['customer_phone']);
+        $this->assertSame('+351936000222', $item['vendor_phone']);
+        $this->assertSame($servico->vendor_id, $item['vendor_id']);
+        $this->assertArrayNotHasKey('payment_order_uuid', $item);
     }
 }
