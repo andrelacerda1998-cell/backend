@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class CreateInvoiceJob implements ShouldQueue
 {
@@ -31,7 +32,8 @@ class CreateInvoiceJob implements ShouldQueue
             return;
         }
 
-        $invoiceExpressService = new InvoiceVendorService($this->service->vendor);
+        // Pelo contentor, como na FaturasEmAtraso: os testes trocam-no por um duplo.
+        $invoiceExpressService = app(InvoiceVendorService::class, ['vendor' => $this->service->vendor]);
         $invoiceId = $invoiceExpressService->createServiceInvoice($this->service);
 
         $response = $invoiceExpressService->finalizeInvoice($invoiceId);
@@ -46,6 +48,24 @@ class CreateInvoiceJob implements ShouldQueue
                     return;
                 }
             }
+
+            // Com a série criada, finaliza-se outra vez. Até aqui ia-se direto ao
+            // PDF, e o PDF que vinha era o do RASCUNHO.
+            $response = $invoiceExpressService->finalizeInvoice($invoiceId);
+        }
+
+        // O InvoiceXpress também gera o PDF de um rascunho (visto a 13/10/2026 na
+        // conta de testes). Guardá-lo dava o serviço por faturado
+        // (Service::temFaturaEmitida) com a fatura por finalizar. Sem finalizar,
+        // fica o rascunho com o `invoice_id`, e a FaturasEmAtraso finaliza-o depois.
+        if (! empty($response['errors'])) {
+            Log::warning('[faturação] o InvoiceXpress recusou finalizar: a fatura fica em rascunho', [
+                'service_id' => $this->service->id,
+                'invoice_id' => $invoiceId,
+                'erro' => $response['errors'][0]['error'] ?? $response['errors'],
+            ]);
+
+            return;
         }
 
         $invoiceExpressService->downloadPdf($invoiceId, $this->service);

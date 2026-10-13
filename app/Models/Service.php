@@ -400,9 +400,10 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
     /**
      * A coleção onde fica o PDF da fatura.
      *
-     * O PDF pede-se a seguir a finalizar a fatura (CreateInvoiceJob,
-     * FaturasEmAtraso), e o InvoiceXpress recusa-o a um documento num estado
-     * que não o permite (422). Tê-lo é o sinal de que a fatura saiu. Um
+     * Tê-lo é o sinal de que a fatura saiu, porque só se guarda o PDF depois de
+     * a fatura ser finalizada (CreateInvoiceJob, FaturasEmAtraso). O
+     * InvoiceXpress gera PDF também de um RASCUNHO (visto a 13/10/2026 na conta
+     * de testes): é a ordem de quem o guarda que faz deste sinal um sinal. Um
      * `invoice_id` sozinho não chega: pode ser um rascunho que nunca passou de
      * rascunho — é o que fica quando falta a AT ao técnico.
      */
