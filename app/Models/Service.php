@@ -579,6 +579,10 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
             // precisa de ver o que comprou.
             'quantity' => (int) ($service->quantity ?? 1),
+            // Duração real, já com as unidades. Sem ela, o ecrã do serviço em
+            // curso contava com `service_type.time`, o tempo de UMA unidade:
+            // um trabalho de três horas "acabava" à primeira hora.
+            'duration_minutes' => $service->durationMinutes(),
             'customer_notes' => $service->customer_notes,
             // O que o cliente fotografou ao pedir. É a diferença entre o técnico
             // sair às cegas e sair a saber que peça levar.
@@ -755,6 +759,10 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             // que são 2 torneiras e não 1 antes de carregar a carrinha, e o cliente
             // precisa de ver o que comprou.
             'quantity' => (int) ($service->quantity ?? 1),
+            // Duração real, já com as unidades. Sem ela, o ecrã do serviço em
+            // curso contava com `service_type.time`, o tempo de UMA unidade:
+            // um trabalho de três horas "acabava" à primeira hora.
+            'duration_minutes' => $service->durationMinutes(),
             'customer_notes' => $service->customer_notes,
             // O que o cliente fotografou ao pedir. É a diferença entre o técnico
             // sair às cegas e sair a saber que peça levar.
