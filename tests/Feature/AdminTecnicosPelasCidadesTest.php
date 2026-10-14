@@ -83,6 +83,19 @@ class AdminTecnicosPelasCidadesTest extends TestCase
         ]);
     }
 
+    /** Uma categoria com um tipo de serviço, que é por onde o matching escolhe. */
+    private function tipoNaCategoria(string $categoria): ServicesType
+    {
+        $area = OperationArea::create(['name' => $categoria]);
+        $tipo = new ServicesType;
+        $tipo->operation_area_id = $area->id;
+        $tipo->time = 60;
+        $tipo->setTranslations('name', ['en' => "Tipo de {$categoria}", 'pt-pt' => "Tipo de {$categoria}"]);
+        $tipo->save();
+
+        return $tipo;
+    }
+
     private function zonas(): array
     {
         $resposta = $this->withAuth()->getJson('/api/v1/admin/allowed-zones?per_page=200')->assertOk();
@@ -235,19 +248,14 @@ class AdminTecnicosPelasCidadesTest extends TestCase
      */
     public function test_por_categoria_conta_registados_e_quem_pode_trabalhar(): void
     {
-        $area = OperationArea::create(['name' => 'Categoria Teste Cidades']);
-        $tipo = new ServicesType;
-        $tipo->operation_area_id = $area->id;
-        $tipo->time = 60;
-        $tipo->setTranslations('name', ['en' => 'Tipo Teste Cidades', 'pt-pt' => 'Tipo Teste Cidades']);
-        $tipo->save();
+        $tipo = $this->tipoNaCategoria('Categoria Teste Cidades');
 
         $this->tecnico('Mario Moura')->servicesTypes()->attach($tipo->id);
         $this->tecnico('Nuno Neves', pronto: false)->servicesTypes()->attach($tipo->id);
-        $this->tecnico('Olga Oliveira')->operationAreas()->attach($area->id);
+        $this->tecnico('Olga Oliveira')->operationAreas()->attach($tipo->operation_area_id);
         $ambos = $this->tecnico('Paulo Pires');
         $ambos->servicesTypes()->attach($tipo->id);
-        $ambos->operationAreas()->attach($area->id);
+        $ambos->operationAreas()->attach($tipo->operation_area_id);
         $this->tecnico('Teste Categoria', teste: true)->servicesTypes()->attach($tipo->id);
 
         $apagada = OperationArea::create(['name' => 'Categoria Teste Apagada']);
@@ -260,5 +268,40 @@ class AdminTecnicosPelasCidadesTest extends TestCase
         $this->assertSame(4, $porNome['Categoria Teste Cidades']['value']);
         $this->assertSame(2, $porNome['Categoria Teste Cidades']['podem_trabalhar']);
         $this->assertArrayNotHasKey('Categoria Teste Apagada', $porNome->all());
+    }
+
+    /**
+     * Os prontos dividem-se pela AT: validada (a flag E a data, a regra da
+     * lista do backoffice) ou só em falta, para quem ainda não fez três
+     * serviços. Quem tem a AT validada mas não pode trabalhar não conta.
+     */
+    public function test_por_categoria_diz_quantos_prontos_tem_a_at_validada(): void
+    {
+        $tipo = $this->tipoNaCategoria('Categoria Teste AT');
+
+        $validada = $this->tecnico('Ana Abreu');
+        $validada->forceFill(['at_valid' => true, 'at_validated_at' => now()])->save();
+
+        // A flag vem ligada de origem no registo: sem a data, ninguém a validou.
+        $deOrigem = $this->tecnico('Bruno Barros');
+        $deOrigem->forceFill(['at_valid' => true, 'at_validated_at' => null])->save();
+
+        // Retirada (ou recusada pelo InvoiceXpress): a data fica, a flag desliga-se.
+        $retirada = $this->tecnico('Carla Cunha');
+        $retirada->forceFill(['at_valid' => false, 'at_validated_at' => now()->subWeek()])->save();
+
+        $travada = $this->tecnico('Duarte Dias', pronto: false);
+        $travada->forceFill(['at_valid' => true, 'at_validated_at' => now()])->save();
+
+        foreach ([$validada, $deOrigem, $retirada, $travada] as $tecnico) {
+            $tecnico->servicesTypes()->attach($tipo->id);
+        }
+
+        $linha = collect($this->withAuth()->getJson('/api/v1/admin/vendors/by-category')->assertOk()->json('data'))
+            ->firstWhere('name', 'Categoria Teste AT');
+
+        $this->assertSame(4, $linha['value']);
+        $this->assertSame(3, $linha['podem_trabalhar']);
+        $this->assertSame(1, $linha['podem_trabalhar_com_at']);
     }
 }

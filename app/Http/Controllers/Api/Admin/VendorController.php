@@ -761,6 +761,13 @@ class VendorController extends Controller
      * `can_accept_service` (PodemTrabalhar). Falta-lhes só estar Online; os que
      * estão veem-se em Pedidos › Ao vivo.
      *
+     * `podem_trabalhar_com_at` são os desses que têm a AT validada; os outros
+     * só têm a AT em falta e trabalham até ao terceiro serviço
+     * (SERVICOS_ANTES_DA_AT). Os prontos são a soma dos dois, e é assim que o
+     * backoffice os mostra. "Validada" é a regra da lista de técnicos do
+     * backoffice: a flag E a data. A flag sozinha vem ligada de origem no
+     * registo, e a data sozinha é só a última vez que funcionou.
+     *
      * NOTA: "operation_areas" são CATEGORIAS/OFÍCIOS, não zonas geográficas.
      * A geografia está nas cidades que cada técnico escolhe
      * (CoberturaPelasCidades).
@@ -770,9 +777,10 @@ class VendorController extends Controller
         $podem = PodemTrabalhar::ids()->flip();
         $registados = [];
         $prontos = [];
+        $comAt = [];
 
         $this->baseQuery()->with(['operationAreas', 'servicesTypes'])->get()
-            ->each(function (Vendor $vendor) use ($podem, &$registados, &$prontos) {
+            ->each(function (Vendor $vendor) use ($podem, &$registados, &$prontos, &$comAt) {
                 $doMatching = $vendor->servicesTypes->pluck('operation_area_id')->filter()
                     ->map(fn ($id) => (int) $id)->unique();
                 $diretas = $vendor->operationAreas->pluck('id')->map(fn ($id) => (int) $id);
@@ -782,8 +790,14 @@ class VendorController extends Controller
                 }
 
                 if ($podem->has($vendor->id)) {
+                    $atValidada = $vendor->at_valid && $vendor->at_validated_at !== null;
+
                     foreach ($doMatching as $area) {
                         $prontos[$area] = ($prontos[$area] ?? 0) + 1;
+
+                        if ($atValidada) {
+                            $comAt[$area] = ($comAt[$area] ?? 0) + 1;
+                        }
                     }
                 }
             });
@@ -795,6 +809,7 @@ class VendorController extends Controller
             'name' => $area->name,
             'value' => $registados[$area->id],
             'podem_trabalhar' => $prontos[$area->id] ?? 0,
+            'podem_trabalhar_com_at' => $comAt[$area->id] ?? 0,
         ])->values()->all());
     }
 
