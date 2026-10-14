@@ -11,6 +11,7 @@ use App\Services\InvoiceXpress\Contracts\HasInvoiceActions;
 use App\Services\InvoiceXpress\Contracts\HasInvoicesItems;
 use App\Services\InvoiceXpress\Contracts\HasInvoiceXpressRequests;
 use Carbon\Carbon;
+use Illuminate\Support\Str;
 
 class InvoiceVendorService
 {
@@ -139,7 +140,17 @@ class InvoiceVendorService
 
         $amount = $service->amount;
 
-        $descricao = 'Serviço: '.$service->serviceType->getTranslation('name', 'pt-pt');
+        // `serviceType` PODE SER NULL: um pedido personalizado não tem tipo de
+        // serviço. Sem o `?->` era `getTranslation()` sobre null, um Error
+        // fatal: a fatura nunca saía e, desde que só se paga o que está
+        // faturado, o dinheiro do técnico ficava retido para sempre (a tarefa
+        // das faturas em atraso falhava todos os dias no mesmo sítio). O que o
+        // cliente descreveu é o nome que faz sentido na fatura.
+        $nome = $service->serviceType?->getTranslation('name', 'pt-pt')
+            ?: ($service->custom_description
+                ? Str::limit($service->custom_description, 100)
+                : 'Pedido personalizado');
+        $descricao = 'Serviço: '.$nome;
         $data = $service->created_at;
 
         if ($emitidaEm) {

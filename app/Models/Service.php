@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use OwenIt\Auditing\Contracts\Auditable;
 use RwInteractive\PayshopSdk\Models\PaymentMethod;
 use RwInteractive\PayshopSdk\Models\PaymentOrder;
@@ -442,12 +443,26 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             ->whereDoesntHave('media', fn ($q) => $q->where('collection_name', self::COLECAO_DA_FATURA));
     }
 
+    /**
+     * Metadados do movimento na carteira: é isto que o técnico lê nos Ganhos.
+     *
+     * `serviceType` PODE SER NULL: um pedido personalizado não tem tipo de
+     * serviço (`services_type_id` é null de propósito). Sem o `?->`, ler o nome
+     * dava "Attempt to read property on null", que o Laravel transforma em
+     * exceção: o cancelamento com taxa de um personalizado rebentava a meio.
+     * O que o cliente descreveu é o nome que faz sentido ali.
+     */
     public function getMetaProduct(): ?array
     {
+        $nome = $this->serviceType?->name
+            ?: ($this->custom_description
+                ? Str::limit($this->custom_description, 60)
+                : __('internal/services.transactions_type.service'));
+
         return [
             'type' => 'internal/services.transactions_type.service',
             'description' => __('internal/services.accepted.description', [
-                'service_name' => $this->serviceType->name,
+                'service_name' => $nome,
                 'date' => $this->created_at->format('Ymd-his'),
             ]),
             'admin_description' => __('internal/services.accepted.admin_description'),
