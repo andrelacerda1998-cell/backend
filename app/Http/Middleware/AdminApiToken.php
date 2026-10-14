@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Auditoria\StaffDoBackoffice;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -17,6 +18,11 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
  * é o backend do Next.js e não outra origem qualquer. Se no futuro o backoffice
  * Next.js passar a autenticar-se a sério contra o Laravel, isto pode ser
  * substituído por Sanctum sem mexer nos controllers.
+ *
+ * Com o token certo, guarda também QUEM do staff fez o pedido (cabeçalhos
+ * X-Staff-Email e X-Staff-Nome, ver StaffDoBackoffice) — é isso que a
+ * auditoria grava em `audits.staff_email`/`staff_nome`. Só depois do token:
+ * sem ele, os cabeçalhos não valem nada.
  */
 class AdminApiToken
 {
@@ -34,6 +40,8 @@ class AdminApiToken
         if (! is_string($given) || ! hash_equals($expected, $given)) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
         }
+
+        StaffDoBackoffice::registar($request);
 
         return $next($request);
     }
