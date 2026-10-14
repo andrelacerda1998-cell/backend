@@ -42,6 +42,13 @@ final class ValidacaoDaAt
             return 'O subutilizador da AT tem de ter a forma NIF/número (por exemplo, 123456789/1). Pede-o de novo ao técnico.';
         }
 
+        // Os dados fiscais levam a morada (a fiscal, ou a primeira que houver).
+        // Sem nenhuma, o InvoiceXpress nem era chamado e a resposta vinha como
+        // falha do lado dele, em inglês ("Address is not set").
+        if ($vendor->addresses()->doesntExist()) {
+            return 'O técnico não tem morada: o InvoiceXpress precisa dela para os dados fiscais. Pede-lha ou acrescenta-a no Filament.';
+        }
+
         return null;
     }
 
