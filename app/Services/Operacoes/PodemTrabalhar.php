@@ -51,8 +51,22 @@ final class PodemTrabalhar
          * A 13/10/2026 o IBAN e a conta de faturação passaram a seguir a AT
          * (só a partir do quarto serviço, ver `Vendor::faturacaoEmDia`), e
          * saíram daqui pela mesma razão.
+         *
+         * Os contactos verificados e os documentos em dia ficam: o atributo
+         * exige-os sempre, a qualquer técnico, desde o primeiro dia. Os
+         * documentos usam a regra em SQL que as listas já usam
+         * (`Vendor::sqlDocumentosEmDia`), não uma cópia nova -- e um teste
+         * (AdminListaDeTecnicosTest) mantém-na igual ao atributo, caso a caso.
+         * Sem isto avaliava-se o atributo nos 460 técnicos, com uma consulta
+         * por documento obrigatório e por técnico: ~1600 consultas e ~1 s por
+         * pedido (medido a 14/10/2026 com dados do tamanho da produção), e a
+         * Cobertura faz três destes pedidos ao mesmo tempo.
          */
+        [$documentosEmDia, $bindings] = Vendor::sqlDocumentosEmDia();
+
         return $tecnicos
+            ->whereHas('user', fn ($q) => $q->whereNotNull('phone_number_verified_at')->whereNotNull('email_verified_at'))
+            ->whereRaw("({$documentosEmDia})", $bindings)
             ->whereDoesntHave('services', fn ($q) => $q
                 ->whereIn('status', [ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED])
                 ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING])
