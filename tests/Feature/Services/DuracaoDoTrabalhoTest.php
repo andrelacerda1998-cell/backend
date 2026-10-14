@@ -155,6 +155,33 @@ class DuracaoDoTrabalhoTest extends TestCase
     }
 
     /**
+     * O serviço em curso, nos dois lados (GET /vendor/services e
+     * GET /customer/services). O ecrã de estado e a notificação "termina às"
+     * do técnico liam o tempo de uma unidade.
+     */
+    public function test_o_servico_em_curso_leva_a_duracao_ja_feita_aos_dois_lados(): void
+    {
+        $service = $this->servico(['quantity' => 3, 'status' => ServiceStatus::ACCEPTED], tempoDoTipo: 60);
+
+        $doTecnico = $this->actingAs($service->vendor->user, 'api')
+            ->getJson('/api/v1/vendor/services')
+            ->assertSuccessful()
+            ->json('data.service');
+
+        $this->assertSame($service->id, $doTecnico['id']);
+        $this->assertSame(180, $doTecnico['duration_minutes'], 'três unidades de uma hora são três horas');
+        $this->assertSame(60, $doTecnico['service_type']['time'], 'o tempo do tipo continua a ir');
+
+        $doCliente = $this->actingAs($service->customer, 'api')
+            ->getJson('/api/v1/customer/services')
+            ->assertSuccessful()
+            ->json('data.service');
+
+        $this->assertSame($service->id, $doCliente['id']);
+        $this->assertSame(180, $doCliente['duration_minutes']);
+    }
+
+    /**
      * A mesma armadilha do lado do técnico, agora no ecrã do cliente: um
      * pedido personalizado não tem tipo de serviço, e o acesso direto a
      * `serviceType->operationArea` rebentava a resposta com 500.
