@@ -7,6 +7,9 @@ use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\AllowedZone;
 use App\Models\GeneralSettings\SurveyCity;
 use App\Models\Vendor;
+use App\Services\Operacoes\CoberturaPelasCidades;
+use App\Services\Operacoes\PodemTrabalhar;
+use Illuminate\Support\Collection;
 
 /**
  * Cobertura geográfica por técnico — não tem equivalente direto no Filament
@@ -32,6 +35,13 @@ use App\Models\Vendor;
  * Sem paginação/pesquisa propositadamente: é um mapa de cobertura para
  * consulta visual, não uma listagem de gestão -- o número de zonas/cidades
  * é pequeno (dezenas, não milhares).
+ *
+ * O questionário (POST /vendor/survey/vote) MORREU: a app grava agora as
+ * cidades por /vendor/cities (`vendor_available_cities`), e é por elas que o
+ * matching decide a quem chega um pedido. `technicians` e `candidate`
+ * continuam a vir do questionário, para o backoffice que ainda os lê. O que
+ * vale hoje vai em `nas_cidades` de cada zona (CoberturaPelasCidades, a regra
+ * do matching) e em `sem_cidades`, quem não escolheu cidade nenhuma.
  */
 class CoverageController extends Controller
 {
@@ -47,10 +57,52 @@ class CoverageController extends Controller
             ->orderBy('city')
             ->get();
 
-        return ApiSuccessResponse::make([
-            'open' => $openZones->map($this->presentZone(...))->all(),
-            'candidate' => $candidateCities->map($this->presentCity(...))->all(),
+        $nasCidades = new CoberturaPelasCidades;
+        $podem = PodemTrabalhar::ids()->flip();
+
+        $porZona = $openZones->mapWithKeys(fn (AllowedZone $zone) => [
+            $zone->id => $nasCidades->naCidade($zone->city, $zone->district),
         ]);
+        $semCidades = $nasCidades->semCidades();
+
+        // Cada técnico uma vez, mesmo que cubra várias zonas.
+        $tecnicos = Vendor::query()
+            ->whereIn('id', $porZona->pluck('tecnicos')->flatten()->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        return ApiSuccessResponse::make([
+            'open' => $openZones->map(fn (AllowedZone $zone) => $this->presentZone($zone) + [
+                'nas_cidades' => $this->presentNasCidades($porZona[$zone->id], $tecnicos, $podem),
+            ])->all(),
+            'candidate' => $candidateCities->map($this->presentCity(...))->all(),
+            'sem_cidades' => [
+                'tecnicos' => count($semCidades),
+                'podem_trabalhar' => count(array_filter($semCidades, fn (int $id) => $podem->has($id))),
+            ],
+        ]);
+    }
+
+    /**
+     * Quem recebe pedidos na zona, pelas cidades que escolheu na app: os que
+     * já podem trabalhar primeiro, depois pelo nome.
+     *
+     * @param  array{tecnicos: list<int>, contagem: string}  $quem
+     */
+    private function presentNasCidades(array $quem, Collection $tecnicos, Collection $podem): array
+    {
+        $lista = collect($quem['tecnicos'])
+            ->map(fn (int $id) => $tecnicos->get($id))
+            ->filter()
+            ->map(fn (Vendor $vendor) => $this->presentVendor($vendor) + ['podem_trabalhar' => $podem->has($vendor->id)])
+            ->sortBy([['podem_trabalhar', 'desc'], fn (array $a, array $b) => strnatcasecmp((string) $a['name'], (string) $b['name'])])
+            ->values();
+
+        return [
+            'tecnicos' => $lista->all(),
+            'podem_trabalhar' => $lista->where('podem_trabalhar', true)->count(),
+            'contagem' => $quem['contagem'],
+        ];
     }
 
     private function presentZone(AllowedZone $zone): array

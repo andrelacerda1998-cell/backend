@@ -2,22 +2,26 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
-use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
 use App\Enums\Services\AddressType;
+use App\Exceptions\Api\Vendor\Invoicing\VendorInvalidAtCredentials;
 use App\Filament\Infolists\Sections\CompanySection;
 use App\Services\InvoiceXpress\SystemInvoiceService;
+use App\Services\InvoiceXpress\ValidacaoDaAt;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\AllowedZone;
 use App\Models\GeneralSettings\Document;
+use App\Models\GeneralSettings\OperationArea;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Vendor\VendorDocuments;
+use App\Services\Operacoes\CoberturaPelasCidades;
 use App\Services\Operacoes\DesfechoDoPedido;
+use App\Services\Operacoes\PodemTrabalhar;
 use App\Support\PesquisaDePessoas;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -632,7 +636,7 @@ class VendorController extends Controller
         $newThisMonth = $this->baseQuery()->where('created_at', '>=', now()->startOfMonth())->count();
         $online = $this->baseQuery()->where('status', StatusVendor::ONLINE)->count();
 
-        $eligibleIds = $this->eligibleVendorIds();
+        $eligibleIds = PodemTrabalhar::ids();
         $eligible = $eligibleIds->count();
 
         /*
@@ -744,68 +748,54 @@ class VendorController extends Controller
     }
 
     /**
-     * IDs dos vendors elegíveis (Vendor::canAcceptService) dentro do âmbito
-     * normal (sem is_test). Mesma abordagem híbrida do VendorStats do
-     * Filament: pré-filtrar em SQL as condições baratas para reduzir o
-     * conjunto, só depois avaliar o accessor (que exige PHP) nos candidatos.
-     */
-    private function eligibleVendorIds()
-    {
-        /*
-         * O PRÉ-FILTRO EM SQL SÓ PODE CONTER O QUE `canAcceptService` EXIGE
-         * SEMPRE. Serve para não carregar 460 vendors da base de dados e
-         * avaliar o atributo em cada um -- é performance, não é a regra.
-         *
-         * Tinha aqui `at_valid = true` e `at_user like '%/%'`. Era verdade até
-         * 30/09/2026, quando a AT passou a ser exigida só a partir do quarto
-         * serviço (`at_ready || ! at_required`). O filtro ficou para trás, e
-         * passou a ESCONDER técnicos que já podem trabalhar: o backoffice
-         * mostrava 41 elegíveis onde havia 69, e uma taxa de elegibilidade de
-         * 8,9% em vez de 15%.
-         *
-         * A lição não é "faltou atualizar": é que duplicar uma regra em SQL
-         * para ir mais depressa cria uma segunda cópia que ninguém se lembra
-         * de mudar. O que sobra aqui são as condições que não dependem de
-         * contagens nem de datas.
-         *
-         * A 13/10/2026 o IBAN e a conta de faturação passaram a seguir a AT
-         * (só a partir do quarto serviço, ver `Vendor::faturacaoEmDia`), e
-         * saíram daqui pela mesma razão.
-         */
-        $candidates = $this->baseQuery()
-            ->whereDoesntHave('services', fn ($q) => $q
-                ->whereIn('status', [ServiceStatus::ACCEPTED, ServiceStatus::FINISHED, ServiceStatus::ARRIVED])
-                ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING])
-                ->whereDoesntHave('schedule'))
-            ->get();
-
-        return $candidates->filter->can_accept_service->pluck('id');
-    }
-
-    /**
-     * Técnicos por categoria -- conta cada vendor nas áreas de operação
-     * (App\Models\GeneralSettings\OperationArea, ex.: "Canalização",
-     * "Eletricista") para que está registado. É a qualificação/oferta
-     * registada, não trabalho realmente feito -- decisão do utilizador.
+     * Técnicos por categoria (área de operação, ex.: "Canalização").
      *
-     * NOTA: "operation_areas" é o nome de coluna já usado em present() para
-     * este mesmo relacionamento, mas representa CATEGORIAS/OFÍCIOS, não
-     * zonas geográficas -- a geografia real está em AllowedZone (ver
-     * byLocation() abaixo). O rótulo "Zonas" usado na Lista estava errado
-     * e foi corrigido para "Categorias" no mesmo commit desta funcionalidade.
+     * `value` são os REGISTADOS na categoria, em qualquer estado: pelos tipos
+     * de serviço que fazem (é por eles que o matching os escolhe) ou pela
+     * ligação direta à área, que existe em poucos -- a mesma regra do filtro
+     * `categoria` da lista. Contava só a ligação direta: quem faz
+     * desentupimentos não contava em Canalização.
+     *
+     * `podem_trabalhar` são os que o matching pode convidar hoje para um pedido
+     * da categoria: fazem um tipo de serviço dela e cumprem o
+     * `can_accept_service` (PodemTrabalhar). Falta-lhes só estar Online; os que
+     * estão veem-se em Pedidos › Ao vivo.
+     *
+     * NOTA: "operation_areas" são CATEGORIAS/OFÍCIOS, não zonas geográficas.
+     * A geografia está nas cidades que cada técnico escolhe
+     * (CoberturaPelasCidades).
      */
     public function byCategory(): ApiSuccessResponse
     {
-        $counts = [];
-        $this->baseQuery()->with('operationAreas')->get()->each(function (Vendor $vendor) use (&$counts) {
-            foreach ($vendor->operationAreas as $area) {
-                $counts[$area->name] = ($counts[$area->name] ?? 0) + 1;
-            }
-        });
+        $podem = PodemTrabalhar::ids()->flip();
+        $registados = [];
+        $prontos = [];
 
-        return ApiSuccessResponse::make(
-            collect($counts)->map(fn ($value, $name) => ['name' => $name, 'value' => $value])->values()->all()
-        );
+        $this->baseQuery()->with(['operationAreas', 'servicesTypes'])->get()
+            ->each(function (Vendor $vendor) use ($podem, &$registados, &$prontos) {
+                $doMatching = $vendor->servicesTypes->pluck('operation_area_id')->filter()
+                    ->map(fn ($id) => (int) $id)->unique();
+                $diretas = $vendor->operationAreas->pluck('id')->map(fn ($id) => (int) $id);
+
+                foreach ($doMatching->merge($diretas)->unique() as $area) {
+                    $registados[$area] = ($registados[$area] ?? 0) + 1;
+                }
+
+                if ($podem->has($vendor->id)) {
+                    foreach ($doMatching as $area) {
+                        $prontos[$area] = ($prontos[$area] ?? 0) + 1;
+                    }
+                }
+            });
+
+        // As áreas apagadas ficam de fora (o SoftDeletes do modelo tira-as).
+        $areas = OperationArea::query()->whereIn('id', array_keys($registados))->ordered()->get();
+
+        return ApiSuccessResponse::make($areas->map(fn (OperationArea $area) => [
+            'name' => $area->name,
+            'value' => $registados[$area->id],
+            'podem_trabalhar' => $prontos[$area->id] ?? 0,
+        ])->values()->all());
     }
 
     /**
@@ -868,11 +858,17 @@ class VendorController extends Controller
     }
 
     /**
-     * Procura vs oferta por zona -- oferta = vendors cujas zonas de cobertura
-     * declaradas (AllowedZone) incluem essa cidade; procura = pedidos de
-     * serviço reais nessa cidade (Service.address->city, coluna JSON).
-     * Limitado às 20 cidades com mais procura para o heatmap não ficar
-     * ilegível (há dezenas de AllowedZone na BD).
+     * Procura vs oferta por cidade, limitado às 20 cidades com mais procura
+     * para o heatmap não ficar ilegível.
+     *
+     * - procura: pedidos de serviço reais nessa cidade (Service.address->city).
+     * - oferta: quem marcou a cidade no questionário antigo da app
+     *   (`vendor_allowed_zones`). A app já não o mostra; fica para o backoffice
+     *   que ainda o lê.
+     * - oferta_cidades: quem recebe um pedido no centro da cidade, pelas
+     *   cidades que escolheu na app -- a regra do matching
+     *   (CoberturaPelasCidades). `contagem` diz se foi pelo raio ou só pelo nome.
+     * - podem_trabalhar: desses, os que cumprem o `can_accept_service`.
      */
     public function coverage(): ApiSuccessResponse
     {
@@ -911,7 +907,18 @@ class VendorController extends Controller
             ];
         })->sortByDesc('procura')->take(20)->values();
 
-        return ApiSuccessResponse::make($rows->all());
+        $nasCidades = new CoberturaPelasCidades;
+        $podem = PodemTrabalhar::ids()->flip();
+
+        return ApiSuccessResponse::make($rows->map(function (array $row) use ($nasCidades, $podem) {
+            $quem = $nasCidades->naCidade((string) $row['name']);
+
+            return $row + [
+                'oferta_cidades' => count($quem['tecnicos']),
+                'podem_trabalhar' => count(array_filter($quem['tecnicos'], fn (int $id) => $podem->has($id))),
+                'contagem' => $quem['contagem'],
+            ];
+        })->all());
     }
 
     /**
@@ -938,6 +945,53 @@ class VendorController extends Controller
             report($e);
 
             return new ApiErrorResponse(null, 'Não foi possível criar o workspace: '.$e->getMessage(), 502);
+        }
+
+        return ApiSuccessResponse::make($this->apresentar($vendor));
+    }
+
+    /**
+     * PUT /v1/admin/vendors/{vendor}/at-validation  {valid: bool}
+     *
+     * `valid: true` é o "Validar AT" do Filament: testa as credenciais no
+     * InvoiceXpress e grava o resultado (ValidacaoDaAt, as mesmas condições e
+     * os mesmos passos). Não é um carimbo: se o InvoiceXpress recusar, a AT
+     * fica por validar e a resposta diz porquê.
+     *
+     * `valid: false` retira a validação. A data da última validação fica: o
+     * Filament mostra-a como "Última vez OK", e é verdade. Depois do terceiro
+     * serviço, um técnico sem a AT validada deixa de receber pedidos.
+     *
+     * O backoffice tinha os botões a chamar esta rota antes de ela existir, e
+     * davam sempre erro.
+     */
+    public function atValidation(Request $request, Vendor $vendor): ApiSuccessResponse|ApiErrorResponse
+    {
+        $request->validate(['valid' => ['required', 'boolean']]);
+
+        if (! $request->boolean('valid')) {
+            $vendor->at_valid = false;
+            $vendor->save();
+
+            return ApiSuccessResponse::make($this->apresentar($vendor));
+        }
+
+        if ($razao = ValidacaoDaAt::bloqueio($vendor)) {
+            return new ApiErrorResponse(null, $razao, 409);
+        }
+
+        try {
+            ValidacaoDaAt::validar($vendor);
+        } catch (VendorInvalidAtCredentials) {
+            return new ApiErrorResponse(
+                null,
+                'O InvoiceXpress recusou as credenciais da AT. Confirma com o técnico o subutilizador e a palavra-passe.',
+                422,
+            );
+        } catch (\Exception $e) {
+            report($e);
+
+            return new ApiErrorResponse(null, 'Não foi possível validar a AT: '.$e->getMessage(), 502);
         }
 
         return ApiSuccessResponse::make($this->apresentar($vendor));

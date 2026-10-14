@@ -2,11 +2,10 @@
 
 namespace App\Filament\Widgets\Vendors;
 
-use App\Enums\Services\PaymentStatus;
-use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
 use App\Filament\Widgets\Services\Concerns\ComparesPeriods;
 use App\Models\Vendor;
+use App\Services\Operacoes\PodemTrabalhar;
 use Filament\Support\Enums\IconPosition;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -109,36 +108,13 @@ class VendorStats extends BaseWidget
     /**
      * Contagem de vendors que podem aceitar serviço.
      *
-     * Abordagem híbrida: pré-filtrar em SQL as condições baratas para reduzir o
-     * conjunto, e só depois avaliar o accessor can_accept_service nos
-     * candidatos — exato e barato.
-     *
-     * O PRÉ-FILTRO SÓ PODE CONTER O QUE `canAcceptService` EXIGE SEMPRE. Tinha
-     * aqui `at_valid = true` e `at_user like '%/%'`, que era verdade até
-     * 30/09/2026 -- a partir daí a AT passou a ser exigida só ao quarto serviço
-     * (`at_ready || ! at_required`). O comentário original dizia que o
-     * pré-filtro era "sem falsos negativos", e deixou de ser: escondia os
-     * técnicos que já podem trabalhar sem terem dado a AT.
-     *
-     * O mesmo filtro foi corrigido no VendorController (#124); esta cópia
-     * ficou para trás, e durante um dia o Filament mostrou 41 elegíveis
-     * enquanto o backoffice novo mostrava 69, sobre a mesma base de dados.
+     * A regra é a do backoffice, em PodemTrabalhar. Esta cópia tinha o seu
+     * próprio pré-filtro em SQL e ficou para trás duas vezes: a AT a 30/09
+     * (41 elegíveis aqui, 69 no backoffice) e o IBAN e a conta de faturação a
+     * 13/10, que continuava a exigir a quem ainda não os tem de dar.
      */
     protected function eligibleVendorCount(): int
     {
-        $candidates = $this->baseVendorQuery()
-            ->whereNotNull('iban')
-            ->where('invoice_workspace', '!=', '')
-            ->whereDoesntHave('services', fn ($q) => $q
-                ->whereIn('status', [
-                    ServiceStatus::ACCEPTED,
-                    ServiceStatus::FINISHED,
-                    ServiceStatus::ARRIVED,
-                ])
-                ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING])
-                ->whereDoesntHave('schedule'))
-            ->get();
-
-        return $candidates->filter->can_accept_service->count();
+        return PodemTrabalhar::ids($this->baseVendorQuery())->count();
     }
 }
