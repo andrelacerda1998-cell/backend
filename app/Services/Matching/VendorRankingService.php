@@ -259,6 +259,15 @@ class VendorRankingService
         // com o escudo "Técnico Verificado" ao lado do nome no ecrã do cliente.
         $vendors = $vendors->filter(fn (Vendor $v) => $v->can_accept_service);
 
+        // Num imediato, quem está ocupado AGORA também fica de fora. O
+        // `can_accept_service` já tira quem tem um imediato aberto; isto tira
+        // também quem foi escolhido para outro imediato que está a ser pago, e
+        // quem está a caminho ou no local de um agendado. Convidá-los era dar ao
+        // cliente um nome que não pode vir.
+        if ($immediate) {
+            $vendors = $vendors->reject(fn (Vendor $v) => $v->ocupadoAgora());
+        }
+
         if ($scheduledFor) {
             // O que se verifica aqui e se o profissional pode MESMO estar la:
             // ferias marcadas e sobreposicao com outro servico (ver

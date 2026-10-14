@@ -38,6 +38,7 @@ return [
         'service' => [
             'service_is_not_pending' => 'Service is not pending.',
             'service_is_not_accepted' => 'Service has not been accepted.',
+            'vendor_is_busy' => 'You already have a job in progress. Finish it before accepting another immediate request.',
         ],
         'vendor_cannot_accept_service' => 'Vendor can´t accept service.',
         'has_service_open' => 'Vendor has open service.',

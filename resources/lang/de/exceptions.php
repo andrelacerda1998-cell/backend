@@ -38,6 +38,7 @@ return [
         'service' => [
             'service_is_not_pending' => 'Der Auftrag ist nicht ausstehend.',
             'service_is_not_accepted' => 'Der Auftrag wurde nicht angenommen.',
+            'vendor_is_busy' => 'Du hast bereits einen laufenden Auftrag. Schließe ihn ab, bevor du eine weitere Sofortanfrage annimmst.',
         ],
         'vendor_cannot_accept_service' => 'Die Fachkraft kann den Auftrag nicht annehmen.',
         'has_service_open' => 'Die Fachkraft hat einen offenen Auftrag.',

@@ -12,6 +12,7 @@ use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Models\Service;
 use App\Models\ServiceCandidate;
+use App\Models\Vendor;
 use App\Notifications\Customer\MatchingCandidatesReadyNotification;
 use App\Notifications\Customer\MatchingFailedNotification;
 use App\Notifications\Vendor\MatchingInvitationNotification;
@@ -295,6 +296,22 @@ class MatchingService
                 $minutes = $service->durationMinutes() ?? 60;
 
                 if (! $fresh->vendor->hasFreeSlot($startAt, $startAt->copy()->addMinutes($minutes), $service->id)) {
+                    $fresh->update(['status' => CandidateStatus::LOST]);
+                    $this->notifyVendor($fresh, MatchingCandidateLostEvent::class);
+
+                    return false;
+                }
+            }
+
+            // Num IMEDIATO a mesma pergunta é "está livre agora?". Não era
+            // feita: dois clientes podiam escolher o mesmo profissional com
+            // segundos de diferença, pagar os dois e ficar os dois com ele.
+            // Linha do profissional trancada para duas escolhas ao mesmo tempo
+            // não lerem as duas "livre" (serviço primeiro, depois ele).
+            if (! $startAt && $fresh->vendor_id) {
+                $vendor = Vendor::whereKey($fresh->vendor_id)->lockForUpdate()->first();
+
+                if ($vendor?->ocupadoAgora($service->id)) {
                     $fresh->update(['status' => CandidateStatus::LOST]);
                     $this->notifyVendor($fresh, MatchingCandidateLostEvent::class);
 
