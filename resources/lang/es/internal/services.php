@@ -16,6 +16,7 @@ return [
         'description' => 'El cliente canceló el servicio antes de que fuera aceptado.',
         'charged' => 'El cliente canceló cuando el profesional ya iba de camino o estaba en el lugar — se cobra el 100 %.',
         'vendor_no_show' => 'El profesional no se presentó — servicio cancelado y cliente reembolsado.',
+        'backoffice' => 'Cancelado por el equipo de Piquet — el cliente no paga nada y el profesional no es penalizado.',
     ],
     'mbway' => [
         'canceled' => 'El cliente canceló antes de que se confirmara el pago MBWay.',

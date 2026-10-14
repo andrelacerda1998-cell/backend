@@ -290,6 +290,19 @@ return [
         'title' => 'Intervention annulée',
         'description' => ':vendor_name a annulé ton intervention :service_type',
     ],
+    // A equipa da Piquet cancelou, pelo backoffice (CancelarPeloBackoffice).
+    'canceladoPelaPiquet' => [
+        'cliente' => [
+            'title' => 'Demande annulée',
+            'description' => 'Piquet a annulé ta demande :service_type. Si tu as déjà payé, tu seras remboursé.',
+            'description_sem_tipo' => 'Piquet a annulé ta demande. Si tu as déjà payé, tu seras remboursé.',
+        ],
+        'tecnico' => [
+            'title' => 'Intervention annulée',
+            'description' => 'Piquet a annulé l\'intervention :service_type. Tu n\'as plus besoin de te déplacer.',
+            'description_sem_tipo' => 'Piquet a annulé cette intervention. Tu n\'as plus besoin de te déplacer.',
+        ],
+    ],
         // O título é uma frase COMPLETA, com o nome do documento depois dos
         // dois pontos. Antes era só "validado" e o código colava-lhe o nome à
         // frente — "{nome} validado" — o que só concorda com nomes masculinos:

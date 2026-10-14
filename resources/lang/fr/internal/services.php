@@ -16,6 +16,7 @@ return [
         'description' => "Le client a annulé l'intervention avant qu'elle soit acceptée.",
         'charged' => 'Le client a annulé alors que le pro était en route ou sur place — facturé à 100 %.',
         'vendor_no_show' => "Le pro ne s'est pas présenté — intervention annulée et client remboursé.",
+        'backoffice' => 'Annulé par l\'équipe Piquet — le client ne paie rien et le pro n\'est pas pénalisé.',
     ],
     'mbway' => [
         'canceled' => 'Le client a annulé avant la confirmation du paiement MBWay.',

@@ -10,12 +10,14 @@ use App\Models\GeneralSettings\OperationArea;
 use App\Models\Service;
 use App\Services\Common\Services\CloseService;
 use App\Services\Matching\DespacharPedidoPersonalizado;
+use App\Services\Operacoes\CancelarPeloBackoffice;
 use Illuminate\Http\Request;
 
 /**
  * As ações sobre um pedido que só existiam no Filament, agora também para o
  * backoffice: despachar um personalizado, fechar um serviço terminado, tentar
- * cobrar de novo e desistir e devolver.
+ * cobrar de novo e desistir e devolver. E cancelar, que no Filament só existia
+ * para agendados e contava como desistência do cliente.
  *
  * Cada uma é a MESMA operação que o Filament corre (DespacharPedidoPersonalizado
  * e CloseService), com as mesmas guardas de estado e o mesmo lock -- só muda a
@@ -77,6 +79,27 @@ class ServiceActionController extends Controller
     {
         return $this->correr($service, ServiceStatus::CLOSED_PENDING_PAYMENT, 'Este serviço não tem um pagamento por cobrar.',
             fn () => (new CloseService($service))->abandonAndRefund());
+    }
+
+    /**
+     * POST /v1/admin/services/{service}/cancelar — a equipa cancela o pedido,
+     * antes de o trabalho começar: o cliente não paga nada (o que pagou volta)
+     * e o técnico não é penalizado. As regras estão em CancelarPeloBackoffice;
+     * um estado de onde não se cancela responde 409 com o porquê.
+     */
+    public function cancelar(Service $service, CancelarPeloBackoffice $cancelar): ApiSuccessResponse|ApiErrorResponse
+    {
+        try {
+            $cancelar($service);
+        } catch (\DomainException $e) {
+            return new ApiErrorResponse(null, $e->getMessage(), 409);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return new ApiErrorResponse(null, 'Não foi possível cancelar: '.$e->getMessage(), 502);
+        }
+
+        return ApiSuccessResponse::make($this->resultado($service));
     }
 
     /**
