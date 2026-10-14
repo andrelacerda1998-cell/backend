@@ -196,6 +196,20 @@ return [
         'title' => 'Tu as gagné :valor € 🎉',
         'description' => ':amigo a fait sa première intervention avec Piquet. Tu as :valor € dans ton Portefeuille, valables :meses mois.',
     ],
+    'conviteRecompensaEmail' => [
+        'subject' => 'Tu as gagné :valor € dans ton Portefeuille Piquet',
+        'greeting' => 'Bonjour :nome,',
+        'greeting_sem_nome' => 'Bonjour,',
+        'line1' => ':amigo a fait sa première intervention avec Piquet grâce à ton code d’invitation.',
+        'line2' => 'Tu as gagné :valor € dans ton Portefeuille, valables :meses mois. Ils sont utilisés automatiquement lors de ta prochaine intervention dans l’app.',
+        'line3' => 'Merci de recommander Piquet !',
+        'salutation' => 'L’équipe Piquet',
+    ],
+    'creditoAExpirar' => [
+        'title' => 'Ton crédit de :valor € expire le :data',
+        'body' => 'Utilise-le pour une intervention dans l’app d’ici là : il est appliqué automatiquement au paiement.',
+        'body_primeiro_servico' => 'Utilise-le pour ta première intervention de :minimo € ou plus d’ici là : il est appliqué automatiquement au paiement.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Service clôturé',
         'description' => ':hours heures se sont écoulées sans problème signalé, nous avons donc clôturé votre service :service_type. Dites-nous comment cela s’est passé.',
