@@ -96,6 +96,8 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::post('/services/{service}/fechar', [ServiceActionController::class, 'fechar']);
     Route::post('/services/{service}/tentar-cobrar', [ServiceActionController::class, 'tentarCobrar']);
     Route::post('/services/{service}/desistir-e-devolver', [ServiceActionController::class, 'desistirEDevolver']);
+    // A equipa cancela o pedido: o cliente não paga, o técnico não é penalizado.
+    Route::post('/services/{service}/cancelar', [ServiceActionController::class, 'cancelar']);
 
     // De que pedido é cada pagamento (por uuid, até 200 de uma vez) -- para
     // o backoffice abrir o pedido a partir de um pagamento do Payshop.

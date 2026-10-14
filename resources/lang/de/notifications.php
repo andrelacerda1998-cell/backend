@@ -282,6 +282,19 @@ return [
         'title' => 'Auftrag storniert',
         'description' => ':vendor_name hat deinen Auftrag für :service_type storniert',
     ],
+    // A equipa da Piquet cancelou, pelo backoffice (CancelarPeloBackoffice).
+    'canceladoPelaPiquet' => [
+        'cliente' => [
+            'title' => 'Anfrage storniert',
+            'description' => 'Piquet hat deine Anfrage für :service_type storniert. Falls du schon bezahlt hast, bekommst du das Geld zurück.',
+            'description_sem_tipo' => 'Piquet hat deine Anfrage storniert. Falls du schon bezahlt hast, bekommst du das Geld zurück.',
+        ],
+        'tecnico' => [
+            'title' => 'Auftrag storniert',
+            'description' => 'Piquet hat den Auftrag für :service_type storniert. Du musst nicht mehr hinfahren.',
+            'description_sem_tipo' => 'Piquet hat diesen Auftrag storniert. Du musst nicht mehr hinfahren.',
+        ],
+    ],
     'documents' => [
         'accept' => [
             'title' => 'Dokument bestätigt: :type',

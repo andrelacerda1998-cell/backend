@@ -69,7 +69,9 @@ class ServiceController extends Controller
             // Explícito porque a lista junta colunas calculadas (o motivo de
             // atenção) — sem isto o select ficava só com elas.
             ->select('services.*')
-            ->with(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'media', 'operationAreas'])
+            // O tipo também quando já saiu do catálogo: um pedido antigo de um
+            // tipo apagado ficava sem nome nenhum na lista e no detalhe.
+            ->with(['customerUser', 'vendor.user', 'serviceType' => fn ($t) => $t->withTrashed(), 'schedule', 'media', 'operationAreas'])
             ->withCount([
                 'candidates as candidates_invited',
                 'candidates as candidates_notified' => fn ($q) => $q->where('status', CandidateStatus::NOTIFIED),
@@ -131,7 +133,7 @@ class ServiceController extends Controller
          */
         if ($request->filled('operation_area_id')) {
             $area = $request->integer('operation_area_id');
-            $query->whereHas('serviceType', fn ($t) => $t->where('operation_area_id', $area));
+            $query->whereHas('serviceType', fn ($t) => $t->withTrashed()->where('operation_area_id', $area));
         }
 
         // Os pedidos de UMA pessoa, para as fichas do cliente e do técnico:
@@ -242,7 +244,7 @@ class ServiceController extends Controller
      */
     public function show(Service $service): ApiSuccessResponse
     {
-        $service->load(['customerUser', 'vendor.user', 'serviceType', 'schedule', 'candidates.vendor.user', 'media', 'operationAreas', 'paymentOrder']);
+        $service->load(['customerUser', 'vendor.user', 'serviceType' => fn ($t) => $t->withTrashed(), 'schedule', 'candidates.vendor.user', 'media', 'operationAreas', 'paymentOrder']);
 
         // O mesmo alerta que a lista calcula, para o detalhe o poder mostrar.
         [$sql, $bindings] = $this->sqlDoMotivoDeAtencao();
@@ -393,6 +395,9 @@ class ServiceController extends Controller
             // A categoria que a equipa conhece, para o backoffice filtrar por ela.
             'operation_area_id' => $service->serviceType?->operation_area_id,
             'service_name' => $service->serviceType?->name,
+            // O tipo já não está no catálogo (apagado depois do pedido): o nome
+            // continua a ser o dele, mas já ninguém o pode pedir.
+            'service_type_removed' => (bool) $service->serviceType?->trashed(),
             'location' => $morada['address'] ?? $morada['street'] ?? null,
             'city' => $morada['city'] ?? $morada['locality'] ?? null,
             'source' => 'app',
