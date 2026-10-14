@@ -80,6 +80,10 @@ Schedule::command(CreateInvoiceSequencesCommand::class)->yearlyOn(1, 1);
 // Crédito de convites fora de prazo volta à Piquet (CarteiraDoCliente::expirar).
 Schedule::command('carteira:expirar')->dailyAt('03:40')->withoutOverlapping();
 
+// Uma semana antes de o crédito de convites expirar, um aviso (uma vez por
+// crédito). Às 11:00, a uma hora a que o cliente ainda pode marcar um serviço.
+Schedule::command('carteira:avisar-expiracao')->dailyAt('11:00')->withoutOverlapping();
+
 // Faturas de serviços fechados que ficaram por emitir (técnico sem conta de
 // faturação ou sem AT quando o serviço fechou). Ver FaturasEmAtraso.
 Schedule::command('faturas:emitir-em-atraso')->dailyAt('06:20')->withoutOverlapping();

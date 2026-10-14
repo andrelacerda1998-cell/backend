@@ -196,6 +196,20 @@ return [
         'title' => 'Has ganado :valor € 🎉',
         'description' => ':amigo hizo su primer servicio en Piquet. Tienes :valor € en tu Cartera, válidos :meses meses.',
     ],
+    'conviteRecompensaEmail' => [
+        'subject' => 'Has ganado :valor € en tu Cartera Piquet',
+        'greeting' => 'Hola :nome,',
+        'greeting_sem_nome' => 'Hola,',
+        'line1' => ':amigo hizo su primer servicio en Piquet con tu código de invitación.',
+        'line2' => 'Has ganado :valor € en tu Cartera, válidos durante :meses meses. Se usan automáticamente en tu próximo servicio en la app.',
+        'line3' => '¡Gracias por recomendar Piquet!',
+        'salutation' => 'El equipo de Piquet',
+    ],
+    'creditoAExpirar' => [
+        'title' => 'Tu crédito de :valor € caduca el :data',
+        'body' => 'Úsalo en un servicio en la app antes de esa fecha: se aplica automáticamente en el pago.',
+        'body_primeiro_servico' => 'Úsalo en tu primer servicio de :minimo € o más antes de esa fecha: se aplica automáticamente en el pago.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Servicio cerrado',
         'description' => 'Pasaron :hours horas sin ningún problema informado, así que cerramos tu servicio de :service_type. Cuéntanos qué tal fue.',

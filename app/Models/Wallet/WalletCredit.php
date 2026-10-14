@@ -17,13 +17,14 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  */
 class WalletCredit extends Model
 {
-    protected $fillable = ['user_id', 'amount', 'remaining', 'expires_at', 'expired_at', 'reason', 'source_type', 'source_id'];
+    protected $fillable = ['user_id', 'amount', 'remaining', 'expires_at', 'expired_at', 'expiry_warned_at', 'reason', 'source_type', 'source_id'];
 
     protected $casts = [
         'amount' => 'integer',
         'remaining' => 'integer',
         'expires_at' => 'datetime',
         'expired_at' => 'datetime',
+        'expiry_warned_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

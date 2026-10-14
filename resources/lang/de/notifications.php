@@ -188,6 +188,20 @@ return [
         'title' => 'Du hast :valor € verdient 🎉',
         'description' => ':amigo hat den ersten Auftrag bei Piquet abgeschlossen. Du hast :valor € in deiner Wallet, gültig :meses Monate.',
     ],
+    'conviteRecompensaEmail' => [
+        'subject' => 'Du hast :valor € in deiner Piquet Wallet verdient',
+        'greeting' => 'Hallo :nome,',
+        'greeting_sem_nome' => 'Hallo,',
+        'line1' => ':amigo hat mit deinem Einladungscode den ersten Auftrag bei Piquet abgeschlossen.',
+        'line2' => 'Du hast :valor € in deiner Wallet verdient, gültig :meses Monate. Sie werden bei deinem nächsten Auftrag in der App automatisch verwendet.',
+        'line3' => 'Danke, dass du Piquet weiterempfiehlst!',
+        'salutation' => 'Dein Piquet-Team',
+    ],
+    'creditoAExpirar' => [
+        'title' => 'Dein Guthaben von :valor € läuft am :data ab',
+        'body' => 'Nutze es bis dahin für einen Auftrag in der App: Es wird beim Bezahlen automatisch angerechnet.',
+        'body_primeiro_servico' => 'Nutze es bis dahin für deinen ersten Auftrag ab :minimo €: Es wird beim Bezahlen automatisch angerechnet.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Service abgeschlossen',
         'description' => ':hours Stunden sind ohne gemeldetes Problem vergangen, deshalb haben wir deinen Service :service_type abgeschlossen. Erzähl uns, wie es war.',

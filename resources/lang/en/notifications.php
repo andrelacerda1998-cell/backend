@@ -193,6 +193,20 @@ return [
         'title' => 'You earned :valor € 🎉',
         'description' => ':amigo completed their first service with Piquet. You have :valor € in your Wallet, valid for :meses months.',
     ],
+    'conviteRecompensaEmail' => [
+        'subject' => 'You earned :valor € in your Piquet Wallet',
+        'greeting' => 'Hi :nome,',
+        'greeting_sem_nome' => 'Hi,',
+        'line1' => ':amigo completed their first service with Piquet using your invite code.',
+        'line2' => 'You earned :valor € in your Wallet, valid for :meses months. It is used automatically on your next service in the app.',
+        'line3' => 'Thank you for recommending Piquet!',
+        'salutation' => 'The Piquet team',
+    ],
+    'creditoAExpirar' => [
+        'title' => 'Your :valor € credit expires on :data',
+        'body' => 'Use it on a service in the app before then: it is applied automatically at checkout.',
+        'body_primeiro_servico' => 'Use it on your first service of :minimo € or more before then: it is applied automatically at checkout.',
+    ],
     'serviceAutoClosed' => [
         'title' => 'Service closed',
         'description' => ':hours hours went by with no problem reported, so we closed your :service_type service. Tell us how it went.',

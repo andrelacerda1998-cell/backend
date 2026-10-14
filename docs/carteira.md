@@ -59,7 +59,9 @@ Regras em `App\Services\Carteira\Convites`. As constantes estão no topo da clas
 
 **Endpoints:** `GET /customer/referral` devolve o código, se pode convidar, os contadores e as recompensas que restam no ano.
 
+## Avisos
+- **Crédito a expirar** (`carteira:avisar-expiracao`, diário às 11:00): uma semana antes, push + notificação na app (`CreditoAExpirarNotification`, `open_type: wallet`), uma vez por crédito (`wallet_credits.expiry_warned_at`). Um aviso por cliente, com o que sobra dos créditos que expiram nessa semana. Ao convidado que já pagou um serviço não se avisa: o crédito dele já não serve.
+- **Recompensa de quem convida** (`ConviteRecompensaNotification`): push, notificação na app e, desde 14/10/2026, email. O email não sai para contas anonimizadas.
+
 ## Por fazer (fases seguintes)
-- Aviso uma semana antes de o crédito expirar.
-- Ecrã Carteira na app.
 - No backoffice, as duas carteiras na ficha do cliente. Hoje o `WalletRelationManager` só mostra a `default`.
