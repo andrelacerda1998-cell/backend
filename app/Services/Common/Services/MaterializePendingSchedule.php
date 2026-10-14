@@ -12,6 +12,7 @@ use App\Models\Schedule\Schedule;
 use App\Models\Service;
 use App\Notifications\Vendor\NewScheduledServiceNotification;
 use App\Notifications\Vendor\NewServiceAvailableNotification;
+use App\Services\Matching\MatchingService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -52,9 +53,15 @@ class MaterializePendingSchedule
 
         if (! $service->pending_schedule_data) {
             // Fluxo de seleção imediato: ele aceitou antes de o cliente escolher.
-            // Notificá-lo aqui seria mandar-lhe "novo serviço, tens 60 segundos"
-            // para um serviço que já é dele, e armar um job que o cancelaria.
+            // Notificá-lo aqui como "novo serviço, tens 3 minutos" seria errado,
+            // e o job cancelaria um serviço que já é dele.
+            //
+            // Mas tem de saber que GANHOU. É por aqui que passam o MB Way, o
+            // regresso do 3DS e o resgate de um pagamento tardio, e nenhum o
+            // avisava: só o cartão que passa à primeira (`activate()`).
             if ($alreadyAccepted) {
+                app(MatchingService::class)->avisarQueGanhou($service);
+
                 return;
             }
 

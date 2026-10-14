@@ -21,7 +21,16 @@ use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
 use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
+use App\Jobs\Services\MbwayPaymentCheckJob;
+use App\Notifications\Vendor\NewServiceAvailableNotification;
+use App\Notifications\Vendor\ServiceWonNotification;
+use App\Services\Common\Services\MaterializePendingSchedule;
+use App\Services\Common\Services\MbwayPaymentResolver;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
+use ReflectionMethod;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -622,5 +631,90 @@ class MatchingFlowTest extends TestCase
         $this->assertNotSame($first, $second);
         $this->assertSame(ServiceStatus::CANCELED, Service::find($first)->status);
         $this->assertSame($outro->id, Service::find($second)->services_type_id);
+    }
+
+    // ── quem ganha fica a saber, pague o cliente como pagar ────────────────
+
+    /** O caminho que já avisava: cartão que passa à primeira (`activate()`). */
+    public function test_quem_ganha_um_imediato_pago_a_cartao_e_avisado_uma_vez(): void
+    {
+        $service = Service::find($this->start()->assertOk()->json('data.service.id'));
+        $candidate = $service->candidates()->orderBy('rank')->first();
+        app(MatchingService::class)->accept($candidate);
+
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/select/{$candidate->id}")
+            ->assertOk();
+        $this->actingAs($this->customer, 'api')
+            ->postJson("/api/v1/customer/services/matching/{$service->id}/checkout")
+            ->assertOk();
+
+        $this->assertSame(ServiceStatus::ACCEPTED, $service->refresh()->status);
+        Notification::assertSentToTimes($candidate->vendor->user, ServiceWonNotification::class, 1);
+    }
+
+    /**
+     * MB Way: o MbwayPaymentCheckJob confirma o pagamento. O serviço ficava
+     * aceite, mas o profissional não recebia aviso nenhum.
+     */
+    public function test_quem_ganha_um_imediato_pago_por_mb_way_e_avisado(): void
+    {
+        [$service] = $this->withAnMbwayWaiting();
+        $vendedor = $service->vendor->user;
+
+        // O passo do job depois de o Payshop dizer que pagou (o resto do job
+        // fala com o gateway, que aqui não existe).
+        $job = new MbwayPaymentCheckJob($service);
+        (new ReflectionMethod($job, 'confirmPayment'))->invoke($job);
+
+        $service->refresh();
+        $this->assertSame(PaymentStatus::PAID, $service->payment_status);
+        $this->assertSame(ServiceStatus::ACCEPTED, $service->status);
+        Notification::assertSentToTimes($vendedor, ServiceWonNotification::class, 1);
+        // E não como um pedido novo, com prazo para aceitar o que já é dele.
+        Notification::assertNotSentTo($vendedor, NewServiceAvailableNotification::class);
+    }
+
+    /**
+     * Regresso do 3DS: o SuccessController passava sempre a PENDING. Num pedido
+     * de seleção imediato o serviço ficava parado em PENDING, pago, sem aviso
+     * e sem prazo. Agora faz a mesma transição dos outros caminhos (markPaid)
+     * e a seguir a materialização, como o controller.
+     */
+    public function test_quem_ganha_um_imediato_pago_com_3ds_fica_aceite_e_e_avisado(): void
+    {
+        [$service] = $this->withAnMbwayWaiting();
+        $service->forceFill(['status' => ServiceStatus::PENDING_3DS])->save();
+        $vendedor = $service->vendor->user;
+
+        DB::transaction(function () use ($service) {
+            $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
+            app(MbwayPaymentResolver::class)->markPaid($locked);
+        });
+        app(MaterializePendingSchedule::class)->handle($service->refresh());
+
+        $this->assertSame(ServiceStatus::ACCEPTED, $service->refresh()->status);
+        Notification::assertSentToTimes($vendedor, ServiceWonNotification::class, 1);
+    }
+
+    /** Fluxo antigo (sem candidato escolhido): continua a perguntar ao técnico. */
+    public function test_um_pedido_direto_pago_com_3ds_continua_a_esperar_pela_resposta(): void
+    {
+        Queue::fake(); // o job de "sem resposta" corria logo com a fila síncrona
+
+        [$service] = $this->withAnMbwayWaiting();
+        $service->candidates()->update(['status' => CandidateStatus::LOST]);
+        $service->forceFill(['status' => ServiceStatus::PENDING_3DS])->save();
+        $vendedor = $service->vendor->user;
+
+        DB::transaction(function () use ($service) {
+            $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
+            app(MbwayPaymentResolver::class)->markPaid($locked);
+        });
+        app(MaterializePendingSchedule::class)->handle($service->refresh());
+
+        $this->assertSame(ServiceStatus::PENDING, $service->refresh()->status);
+        Notification::assertSentTo($vendedor, NewServiceAvailableNotification::class);
+        Notification::assertNotSentTo($vendedor, ServiceWonNotification::class);
     }
 }

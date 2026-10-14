@@ -391,6 +391,15 @@ implementações divergirem em silêncio, e divergirem aqui é cobrar mal a algu
 Mantém-se do fluxo antigo: o lock do cupão, a barreira da comissão negativa, o
 3DS, o MBWay, e a saída antecipada para contas de teste.
 
+**Quem ganha fica a saber, pague o cliente como pagar.** Num pedido imediato,
+o pagamento confirmado passa o serviço a `Accepted` e manda ao escolhido o
+`ServiceWonNotification` (`MatchingService::avisarQueGanhou`). O cartão que
+passa à primeira fá-lo no `activate()` do checkout. O MB Way, o regresso do
+3DS (`Validation\SuccessController`) e o resgate de um pagamento tardio
+confirmam com `MbwayPaymentResolver::markPaid` e avisam no
+`MaterializePendingSchedule`. Até 14/10/2026 só o cartão avisava, e o regresso
+do 3DS deixava o serviço em `Pending`.
+
 ## Endpoints do profissional
 
 | método | rota | o que faz |
