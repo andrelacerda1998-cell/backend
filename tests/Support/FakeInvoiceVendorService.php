@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Exceptions\Api\Vendor\Invoicing\VendorInvalidAtCredentials;
+use App\Exceptions\Api\Vendor\VendorDuplicatedSequence;
 use App\Models\Service;
 use App\Models\Vendor;
 use App\Services\InvoiceXpress\InvoiceVendorService;
@@ -32,6 +33,12 @@ class FakeInvoiceVendorService extends InvoiceVendorService
     public array $respostasAoFinalizar = [];
 
     public bool $credenciaisDaAtRecusadas = false;
+
+    /** O que o passo da comunicação com a AT lança (validar a AT). Null = corre bem. */
+    public ?\Exception $falhaNaComunicacaoComAt = null;
+
+    /** A série do ano já existe no InvoiceXpress (validar a AT de quem já a tinha). */
+    public bool $serieJaExiste = false;
 
     private int $proximoId = 9001;
 
@@ -110,7 +117,38 @@ class FakeInvoiceVendorService extends InvoiceVendorService
             throw new VendorInvalidAtCredentials;
         }
 
+        if ($this->serieJaExiste) {
+            throw new VendorDuplicatedSequence;
+        }
+
         return [];
+    }
+
+    /**
+     * Os dados fiscais, com as credenciais da AT. Sem isto o duplo caía no
+     * verdadeiro, que faz o pedido HTTP.
+     */
+    public function updateFiscalDetails(): array
+    {
+        $this->chamadas[] = ['dados_fiscais'];
+
+        // Como o verdadeiro: é aqui que o InvoiceXpress recusa credenciais erradas.
+        if ($this->credenciaisDaAtRecusadas) {
+            throw new VendorInvalidAtCredentials;
+        }
+
+        return [];
+    }
+
+    public function createAtCommunications(): bool
+    {
+        $this->chamadas[] = ['comunicacao_at'];
+
+        if ($this->falhaNaComunicacaoComAt) {
+            throw $this->falhaNaComunicacaoComAt;
+        }
+
+        return true;
     }
 
     public function downloadPdf(int $invoiceId, Service $service): Media
