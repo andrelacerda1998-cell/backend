@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Services\AddressType;
+use App\Models\Address;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -37,9 +39,22 @@ class AdminValidarAtTest extends TestCase
     }
 
     /** Um técnico com tudo o que a validação precisa, menos o que o teste mudar. */
-    private function tecnico(array $dados = []): Vendor
+    private function tecnico(array $dados = [], bool $morada = true): Vendor
     {
         $user = User::factory()->create();
+
+        if ($morada) {
+            Address::create([
+                'user_id' => $user->id,
+                'street_name' => 'Rua do Teste',
+                'street_number' => '1',
+                'postal_code' => '1000-001',
+                'city' => 'Lisboa',
+                'state' => 'Lisboa',
+                'country' => 'Portugal',
+                'address_type' => AddressType::FISCAL_ADDRESS,
+            ]);
+        }
 
         $vendor = Vendor::create(['user_id' => $user->id, 'username' => 'tec_'.$user->id]);
         $vendor->forceFill(array_merge([
@@ -139,6 +154,22 @@ class AdminValidarAtTest extends TestCase
         $resposta = $this->validar($vendor)->assertStatus(409);
 
         $this->assertStringContainsString('NIF/número', $resposta->json('message'));
+        $this->assertSame([], $this->invoiceXpress->passos());
+        $this->assertFalse($vendor->fresh()->at_valid);
+    }
+
+    /**
+     * Sem morada nenhuma, os dados fiscais não têm o que mandar. Respondia 502 com
+     * o erro do serviço em inglês ("Address is not set"), como se o InvoiceXpress
+     * tivesse falhado. Visto no ensaio de ponta a ponta de 14/10.
+     */
+    public function test_sem_morada_diz_o_que_falta_sem_chegar_ao_invoicexpress(): void
+    {
+        $vendor = $this->tecnico([], morada: false);
+
+        $resposta = $this->validar($vendor)->assertStatus(409);
+
+        $this->assertStringContainsString('não tem morada', $resposta->json('message'));
         $this->assertSame([], $this->invoiceXpress->passos());
         $this->assertFalse($vendor->fresh()->at_valid);
     }
