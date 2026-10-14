@@ -1,0 +1,357 @@
+name: Ler a prontidão dos técnicos em produção
+
+# Só leitura, por accionamento manual. Responde a UMA pergunta: porque é que,
+# dos ~460 técnicos registados, só ~50 podem trabalhar, e desses quantos o
+# matching chega mesmo a convidar.
+#
+# O QUE ISTO MEDE (só totais, nunca nomes, emails ou telefones):
+#   1. O funil do `can_accept_service`, condição a condição e pela ordem da
+#      regra: telemóvel, email, documentos, serviço aberto e faturação a partir
+#      do 4.º serviço. Para cada uma, quantos falham e quantos falham SÓ essa
+#      (os que estão a um passo), e as combinações mais comuns.
+#   2. O detalhe de cada bloqueio: documentos nunca enviados, em falta,
+#      pendentes e caducados, por tipo; email por confirmar, pela idade do
+#      registo; serviços abertos, por estado e idade; faturação.
+#   3. Dos que podem trabalhar, os filtros que o matching junta
+#      (`VendorRankingService::eligibleVendors` e o cálculo da distância):
+#      Online, "Novos pedidos" desligado, sem tipos de serviço, sem morada (que
+#      exclui dos agendados), em pausa, ocupados.
+#   4. Os registos por mês e até onde chegou cada mês.
+#
+# Usa as MESMAS definições do código que decide (`can_accept_service`,
+# `PodemTrabalhar::ids`, `missing_documents`, `openServices`...), e confirma
+# no topo que o funil dá o mesmo número que o ecrã. Medir com outra definição
+# era medir outra coisa.
+on:
+  workflow_dispatch:
+
+# De propósito SEM o grupo `deploy-production`: é uma leitura, não deve segurar
+# o lugar a um deploy nem ficar atrás de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler a prontidão dos técnicos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Os mesmos segredos do deploy, e com eles o portão de aprovação manual.
+    # Abrir uma sessão SSH a produção merece uma aprovação, mesmo só para ler.
+    environment: production
+    steps:
+      - name: Ler no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          # O comando é FIXO neste ficheiro, e NÃO um input do workflow. Aceitar
+          # um comando por parâmetro transformava este botão numa shell remota
+          # para produção. Para ler outra coisa, altera-se o ficheiro.
+          script: |
+            # SEM `-e`: uma leitura que falhe não pode levar as outras atrás.
+            set -uo pipefail
+            cd ~/project-laravel
+
+            ART="docker compose exec -T laravel-prod php artisan"
+
+            # A saída é capturada e impressa DEPOIS: o `ssh-action` perde o que
+            # tinha em buffer quando um comando falha (ver reindexar-profissionais).
+            correr() {
+              local nome="$1"; shift
+              local saida codigo
+              saida=$("$@" 2>&1); codigo=$?
+              echo "$saida"
+              [ "$codigo" -ne 0 ] && echo ">>> ${nome} FALHOU com código ${codigo}"
+              return 0
+            }
+
+            echo "hora em Lisboa: $(TZ=Europe/Lisbon date '+%a %d/%m %H:%M')"
+
+            echo
+            echo "=========== 1. O FUNIL: DOS REGISTADOS AOS QUE PODEM TRABALHAR ==========="
+            correr "funil" $ART tinker --execute='
+              // str_pad conta bytes e os acentos desalinham as colunas; isto conta letras.
+              $pad = fn ($s, int $n, bool $esq = false) => $esq
+                  ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
+                  : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
+              $ts = App\Models\Vendor::query()
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->with("user")
+                  ->orderBy("id")
+                  ->get();
+
+              // As MESMAS condições do Vendor::canAcceptService, pela mesma ordem.
+              $nomes = ["telemóvel confirmado", "email confirmado", "documentos em dia", "sem serviço aberto", "faturação em dia (4.º serviço)"];
+              $falhas = function ($v) use ($nomes) {
+                  $f = [];
+                  if (! $v->user?->hasVerifiedPhoneNumber()) { $f[] = $nomes[0]; }
+                  if (! $v->user?->hasVerifiedEmail()) { $f[] = $nomes[1]; }
+                  if (! $v->all_documents_verified) { $f[] = $nomes[2]; }
+                  if ($v->openServices()->exists()) { $f[] = $nomes[3]; }
+                  if (! $v->faturacao_em_dia) { $f[] = $nomes[4]; }
+                  return $f;
+              };
+
+              $total = $ts->count();
+              $falha = array_fill_keys($nomes, 0);
+              $so = array_fill_keys($nomes, 0);
+              $passam = array_fill_keys($nomes, 0);
+              $combo = [];
+              $podem = 0;
+              $diferentes = 0;
+
+              foreach ($ts as $v) {
+                  $f = $falhas($v);
+                  foreach ($f as $m) { $falha[$m]++; }
+                  if (count($f) === 1) { $so[$f[0]]++; }
+                  $chave = $f ? "falta: " . implode(" + ", $f) : "nada (pode trabalhar)";
+                  $combo[$chave] = ($combo[$chave] ?? 0) + 1;
+                  $ok = true;
+                  foreach ($nomes as $m) {
+                      if (in_array($m, $f, true)) { $ok = false; }
+                      if ($ok) { $passam[$m]++; }
+                  }
+                  if (! $f) { $podem++; }
+                  if ((! $f) !== (bool) $v->can_accept_service) { $diferentes++; }
+              }
+
+              echo "técnicos reais (sem contas de teste nem suspensos) = " . $total . PHP_EOL;
+              echo "podem trabalhar (can_accept_service)               = " . $podem . PHP_EOL;
+              echo "o número do ecrã (PodemTrabalhar::ids)              = " . App\Services\Operacoes\PodemTrabalhar::ids()->count() . PHP_EOL;
+              echo "casos em que esta conta difere do can_accept_service = " . $diferentes . PHP_EOL;
+
+              echo PHP_EOL . "-- funil, pela ordem da regra: quantos chegam a cada passo --" . PHP_EOL;
+              echo $pad("registados", 34) . " " . $pad((string) $total, 5, true) . PHP_EOL;
+              $antes = $total;
+              foreach ($nomes as $m) {
+                  echo $pad("+ " . $m, 34) . " " . $pad((string) $passam[$m], 5, true) . "   (perdem-se " . ($antes - $passam[$m]) . ")" . PHP_EOL;
+                  $antes = $passam[$m];
+              }
+
+              echo PHP_EOL . "-- quantos falham cada condição (um técnico pode falhar várias) --" . PHP_EOL;
+              foreach ($nomes as $m) {
+                  echo $pad($m, 34) . " falham " . $pad((string) $falha[$m], 4, true) . "   só por esta: " . $so[$m] . PHP_EOL;
+              }
+
+              echo PHP_EOL . "-- combinações mais comuns --" . PHP_EOL;
+              arsort($combo);
+              foreach (array_slice($combo, 0, 15, true) as $chave => $n) {
+                  echo $pad((string) $n, 5, true) . "  " . $chave . PHP_EOL;
+              }
+            '
+
+            echo
+            echo "=========== 2. O DETALHE DE CADA BLOQUEIO ==========="
+            correr "bloqueios" $ART tinker --execute='
+              // str_pad conta bytes e os acentos desalinham as colunas; isto conta letras.
+              $pad = fn ($s, int $n, bool $esq = false) => $esq
+                  ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
+                  : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
+              $hoje = now()->toDateString();
+              $ts = App\Models\Vendor::query()
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->with("user")
+                  ->orderBy("id")
+                  ->get();
+
+              $soma = function (array &$mapa, $nomes) {
+                  foreach ($nomes as $n) { $mapa[$n] = ($mapa[$n] ?? 0) + 1; }
+              };
+              $listar = function (array $mapa) use ($pad) {
+                  arsort($mapa);
+                  foreach ($mapa as $n => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $n . PHP_EOL; }
+                  if (! $mapa) { echo "     (nenhum)" . PHP_EOL; }
+              };
+
+              // ---------------- DOCUMENTOS ----------------
+              $comFalha = 0; $nuncaEnviou = 0; $comFaltas = 0; $comPendentes = 0; $comExpirados = 0;
+              $falta = []; $pendente = []; $expirado = [];
+              foreach ($ts as $v) {
+                  if ($v->all_documents_verified) { continue; }
+                  $comFalha++;
+                  if ($v->documents()->doesntExist()) { $nuncaEnviou++; }
+                  // Como o Vendor::cannotAcceptServiceReasons: expirado não conta como em falta.
+                  $exp = $v->documents()
+                      ->where("status", "approved")
+                      ->whereNotNull("expiration_date")
+                      ->whereDate("expiration_date", "<", $hoje)
+                      ->get()
+                      ->map(fn ($d) => $d->type?->name)
+                      ->filter()
+                      ->unique();
+                  $fal = $v->missing_documents->pluck("name")->filter()->diff($exp)->unique();
+                  $pen = $v->pending_documents->pluck("name")->filter()->unique();
+                  if ($fal->isNotEmpty()) { $comFaltas++; }
+                  if ($pen->isNotEmpty()) { $comPendentes++; }
+                  if ($exp->isNotEmpty()) { $comExpirados++; }
+                  $soma($falta, $fal);
+                  $soma($pendente, $pen);
+                  $soma($expirado, $exp);
+              }
+              echo "-- DOCUMENTOS (" . $comFalha . " técnicos sem os documentos em dia) --" . PHP_EOL;
+              echo "nunca enviaram nenhum documento     = " . $nuncaEnviou . PHP_EOL;
+              echo "com algum obrigatório em falta      = " . $comFaltas . PHP_EOL;
+              $listar($falta);
+              echo "com algum à espera de validação     = " . $comPendentes . PHP_EOL;
+              $listar($pendente);
+              echo "com algum aprovado mas caducado     = " . $comExpirados . PHP_EOL;
+              $listar($expirado);
+
+              // ---------------- EMAIL ----------------
+              $semEmail = 0; $comTelemovel = 0; $idade = ["até 1 dia" => 0, "1 a 7 dias" => 0, "7 a 30 dias" => 0, "mais de 30 dias" => 0];
+              foreach ($ts as $v) {
+                  if ($v->user?->hasVerifiedEmail()) { continue; }
+                  $semEmail++;
+                  if ($v->user?->hasVerifiedPhoneNumber()) { $comTelemovel++; }
+                  $d = $v->created_at ? abs($v->created_at->diffInDays(now())) : 9999;
+                  $faixa = $d < 1 ? "até 1 dia" : ($d < 7 ? "1 a 7 dias" : ($d < 30 ? "7 a 30 dias" : "mais de 30 dias"));
+                  $idade[$faixa]++;
+              }
+              echo PHP_EOL . "-- EMAIL POR CONFIRMAR (" . $semEmail . " técnicos) --" . PHP_EOL;
+              echo "com o telemóvel já confirmado       = " . $comTelemovel . PHP_EOL;
+              echo "registados há:" . PHP_EOL;
+              foreach ($idade as $faixa => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $faixa . PHP_EOL; }
+              echo "(o link do email vale " . config("auth.verification.expire", 60) . " minutos)" . PHP_EOL;
+
+              // ---------------- SERVIÇOS ABERTOS ----------------
+              $presos = 0; $servicos = 0; $estado = []; $agendaApagada = 0;
+              $idadeServ = ["até 1 dia" => 0, "1 a 7 dias" => 0, "7 a 30 dias" => 0, "mais de 30 dias" => 0];
+              foreach ($ts as $v) {
+                  $abertos = $v->openServices()->get();
+                  if ($abertos->isEmpty()) { continue; }
+                  $presos++;
+                  foreach ($abertos as $s) {
+                      $servicos++;
+                      $e = $s->status instanceof BackedEnum ? $s->status->value : (string) $s->status;
+                      $p = $s->payment_status instanceof BackedEnum ? $s->payment_status->value : (string) $s->payment_status;
+                      $chave = $e . " / pagamento " . $p;
+                      $estado[$chave] = ($estado[$chave] ?? 0) + 1;
+                      $ref = $s->updated_at ?? $s->created_at;
+                      $d = $ref ? abs($ref->diffInDays(now())) : 9999;
+                      $faixa = $d < 1 ? "até 1 dia" : ($d < 7 ? "1 a 7 dias" : ($d < 30 ? "7 a 30 dias" : "mais de 30 dias"));
+                      $idadeServ[$faixa]++;
+                      if (App\Models\Schedule\Schedule::withTrashed()->where("service_id", $s->id)->exists()) { $agendaApagada++; }
+                  }
+              }
+              echo PHP_EOL . "-- SERVIÇO ABERTO (" . $presos . " técnicos travados por " . $servicos . " serviços) --" . PHP_EOL;
+              echo "por estado:" . PHP_EOL;
+              $listar($estado);
+              echo "última mudança há:" . PHP_EOL;
+              foreach ($idadeServ as $faixa => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $faixa . PHP_EOL; }
+              echo "que eram agendados com a agenda apagada = " . $agendaApagada . PHP_EOL;
+
+              // ---------------- FATURAÇÃO (a partir do 4.º serviço) ----------------
+              $exigida = 0; $travados = 0; $semIban = 0; $semWorkspace = 0; $atNaoPronta = 0;
+              foreach ($ts as $v) {
+                  if (! $v->at_required) { continue; }
+                  $exigida++;
+                  if (! $v->faturacao_em_dia) { $travados++; }
+                  if ($v->iban == null) { $semIban++; }
+                  if ($v->invoice_workspace == null) { $semWorkspace++; }
+                  if (! $v->at_ready) { $atNaoPronta++; }
+              }
+              echo PHP_EOL . "-- FATURAÇÃO: " . $exigida . " técnicos já fizeram 3 serviços, " . $travados . " travados por ela --" . PHP_EOL;
+              echo "sem IBAN                            = " . $semIban . PHP_EOL;
+              echo "sem conta de faturação (workspace)  = " . $semWorkspace . PHP_EOL;
+              echo "sem AT pronta (flag ou subutilizador) = " . $atNaoPronta . PHP_EOL;
+            '
+
+            echo
+            echo "=========== 3. DOS QUE PODEM TRABALHAR, QUANTOS O MATCHING CONVIDA ==========="
+            correr "convidados" $ART tinker --execute='
+              // Dos que podem trabalhar, quantos o matching convida de facto
+              // (VendorRankingService::eligibleVendors e o cálculo da distância).
+              // str_pad conta bytes e os acentos desalinham as colunas; isto conta letras.
+              $pad = fn ($s, int $n, bool $esq = false) => $esq
+                  ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
+                  : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
+              $ids = App\Services\Operacoes\PodemTrabalhar::ids();
+              $ps = App\Models\Vendor::query()->whereIn("id", $ids)->with(["user", "currentLocation"])->get();
+              $moradas = [App\Enums\Services\AddressType::SCHEDULE_ADDRESS, App\Enums\Services\AddressType::FISCAL_ADDRESS];
+
+              $c = [
+                  "Online agora" => 0,
+                  "Offline" => 0,
+                  "desligaram \"Novos pedidos\"" => 0,
+                  "sem nenhum tipo de serviço" => 0,
+                  "sem cidades escolhidas (sem restrição)" => 0,
+                  "sem morada de agenda nem fiscal" => 0,
+                  "sem localização e sem morada" => 0,
+                  "em pausa (3 cancelamentos no mês)" => 0,
+                  "ocupados agora num serviço" => 0,
+                  "com a AT validada (flag e data)" => 0,
+              ];
+              $imediato = 0; $agendado = 0;
+              foreach ($ps as $v) {
+                  $online = $v->status === App\Enums\Vendors\StatusVendor::ONLINE;
+                  $novos = $v->shouldReceive("new_requests");
+                  $tipos = $v->servicesTypes()->exists();
+                  $morada = $v->addresses()->whereIn("address_type", $moradas)->exists();
+                  $local = (bool) ($v->currentLocation?->latitude && $v->currentLocation?->longitude);
+                  $pausa = $v->invitesPausedUntil() !== null;
+                  $ocupado = $v->ocupadoAgora();
+
+                  $c[$online ? "Online agora" : "Offline"]++;
+                  if (! $novos) { $c["desligaram \"Novos pedidos\""]++; }
+                  if (! $tipos) { $c["sem nenhum tipo de serviço"]++; }
+                  if ($v->availableCities()->doesntExist()) { $c["sem cidades escolhidas (sem restrição)"]++; }
+                  if (! $morada) { $c["sem morada de agenda nem fiscal"]++; }
+                  if (! $morada && ! $local) { $c["sem localização e sem morada"]++; }
+                  if ($pausa) { $c["em pausa (3 cancelamentos no mês)"]++; }
+                  if ($ocupado) { $c["ocupados agora num serviço"]++; }
+                  if ($v->at_valid && $v->at_validated_at) { $c["com a AT validada (flag e data)"]++; }
+
+                  $base = $online && $novos && $tipos && ! $pausa;
+                  if ($base && ! $ocupado && ($local || $morada)) { $imediato++; }
+                  if ($base && $morada) { $agendado++; }
+              }
+              echo "podem trabalhar (o número do ecrã) = " . $ps->count() . PHP_EOL;
+              foreach ($c as $n => $q) { echo $pad($n, 42) . " = " . $q . PHP_EOL; }
+              echo PHP_EOL . "convidáveis AGORA para um imediato (falta só a distância e as cidades) = " . $imediato . PHP_EOL;
+              echo "convidáveis AGORA para um agendado (falta só a agenda, a distância e as cidades) = " . $agendado . PHP_EOL;
+
+              $todosOnline = App\Models\Vendor::query()
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->where("status", App\Enums\Vendors\StatusVendor::ONLINE)
+                  ->pluck("id");
+              echo PHP_EOL . "Online no total = " . $todosOnline->count() . ", dos quais não podem trabalhar = " . $todosOnline->diff($ids)->count() . PHP_EOL;
+            '
+
+            echo
+            echo "=========== 4. OS REGISTOS POR MÊS ==========="
+            correr "por mês" $ART tinker --execute='
+              // Registos por mês e até onde chegaram. "podem" é o PodemTrabalhar de hoje.
+              // str_pad conta bytes e os acentos desalinham as colunas; isto conta letras.
+              $pad = fn ($s, int $n, bool $esq = false) => $esq
+                  ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
+                  : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
+              $podem = App\Services\Operacoes\PodemTrabalhar::ids()->flip();
+              $ts = App\Models\Vendor::query()
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->with("user")
+                  ->orderBy("id")
+                  ->get();
+
+              $meses = [];
+              foreach ($ts as $v) {
+                  $m = $v->created_at ? $v->created_at->format("Y-m") : "sem data";
+                  $meses[$m] ??= ["registados" => 0, "telemóvel" => 0, "email" => 0, "documentos" => 0, "podem" => 0];
+                  $meses[$m]["registados"]++;
+                  if ($v->user?->hasVerifiedPhoneNumber()) { $meses[$m]["telemóvel"]++; }
+                  if ($v->user?->hasVerifiedEmail()) { $meses[$m]["email"]++; }
+                  if ($v->all_documents_verified) { $meses[$m]["documentos"]++; }
+                  if ($podem->has($v->id)) { $meses[$m]["podem"]++; }
+              }
+              ksort($meses);
+              echo "mês       registados  telemóvel  email  documentos  podem trabalhar" . PHP_EOL;
+              foreach ($meses as $m => $r) {
+                  echo $pad($m, 9)
+                      . $pad((string) $r["registados"], 11, true)
+                      . $pad((string) $r["telemóvel"], 11, true)
+                      . $pad((string) $r["email"], 7, true)
+                      . $pad((string) $r["documentos"], 12, true)
+                      . $pad((string) $r["podem"], 17, true) . PHP_EOL;
+              }
+            '
