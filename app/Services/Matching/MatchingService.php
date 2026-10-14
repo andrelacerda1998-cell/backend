@@ -5,6 +5,7 @@ namespace App\Services\Matching;
 use App\DTO\Services\AddressCoordinatesDTO;
 use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\ServiceStatus;
+use App\Events\Common\Services\ServiceAcceptedEvent;
 use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
 use App\Events\Matching\MatchingInvitationEvent;
@@ -15,11 +16,13 @@ use App\Notifications\Customer\MatchingCandidatesReadyNotification;
 use App\Notifications\Customer\MatchingFailedNotification;
 use App\Notifications\Vendor\MatchingInvitationNotification;
 use App\Notifications\Vendor\MatchingOutcomeNotification;
+use App\Notifications\Vendor\ServiceWonNotification;
 use App\Settings\MatchingSettings;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Põe candidatos em cima da mesa para um serviço — ver docs/matching.md.
@@ -333,6 +336,31 @@ class MatchingService
             $service->save();
 
             return true;
+        });
+    }
+
+    /**
+     * O cliente pagou um pedido IMEDIATO: o trabalho é de quem ele escolheu, e
+     * esse profissional tem de o saber já.
+     *
+     * Um só sítio para todos os caminhos de pagamento. Estava só no `activate()`
+     * do checkout, que é o cartão que passa à primeira. Com MB Way, 3DS ou o
+     * resgate de um pagamento tardio, o serviço ficava aceite (ou nem isso) e
+     * o profissional não recebia nada: só o via se abrisse a app.
+     *
+     * Depois do commit e sem poder rebentar quem chama: o cliente já pagou e o
+     * serviço já é dele. Uma falha do Expo reporta-se, não desfaz nada. Fora de
+     * uma transação, o `afterCommit` corre logo.
+     */
+    public function avisarQueGanhou(Service $service): void
+    {
+        DB::afterCommit(function () use ($service) {
+            try {
+                ServiceAcceptedEvent::dispatch($service->customer, ['id' => $service->id]);
+                $service->vendor?->user?->notify(new ServiceWonNotification($service));
+            } catch (Throwable $e) {
+                report($e);
+            }
         });
     }
 

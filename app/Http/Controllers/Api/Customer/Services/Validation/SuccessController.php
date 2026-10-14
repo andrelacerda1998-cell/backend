@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Customer\Services\traits\ProcessPendingScheduleAfte
 use App\Http\Controllers\Controller;
 use App\Models\Service;
 use App\Services\Common\Services\AcceptService;
+use App\Services\Common\Services\MbwayPaymentResolver;
 use App\Services\Common\Services\ResolveServiceExtraValidation;
 use Illuminate\Http\Request;
 use RwInteractive\PayshopSdk\Api\Payments\PaymentOrder;
@@ -67,11 +68,11 @@ class SuccessController extends Controller
                 return 'archived';
             }
 
-            $locked->payment_status = PaymentStatus::PAID;
-            if ($locked->status === ServiceStatus::PENDING_3DS) {
-                $locked->status = ServiceStatus::PENDING;
-            }
-            $locked->save();
+            // A mesma transição do MB Way, do poll e do resgate do 3DS. Aqui
+            // passava sempre a PENDING: num pedido de seleção imediato, que já
+            // tem o profissional escolhido, o serviço ficava parado em PENDING,
+            // sem aviso a ninguém e sem prazo, em vez de ACCEPTED.
+            app(MbwayPaymentResolver::class)->markPaid($locked);
 
             return 'confirmed_now';
         });
