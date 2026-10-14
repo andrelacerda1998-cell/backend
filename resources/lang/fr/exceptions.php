@@ -44,6 +44,7 @@ return [
         'service' => [
             'service_is_not_pending' => 'L\'intervention n\'est pas en attente.',
             'service_is_not_accepted' => 'L\'intervention n\'a pas été acceptée.',
+            'vendor_is_busy' => 'Vous avez déjà une intervention en cours. Terminez-la avant d\'accepter une autre demande immédiate.',
         ],
         'vendor_cannot_accept_service' => 'Le pro ne peut pas accepter l\'intervention.',
         'has_service_open' => 'Le pro a une intervention en cours.',

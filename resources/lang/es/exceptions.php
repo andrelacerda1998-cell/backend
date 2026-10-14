@@ -42,6 +42,7 @@ return [
         'service' => [
             'service_is_not_pending' => 'El servicio no está pendiente.',
             'service_is_not_accepted' => 'El servicio no ha sido aceptado.',
+            'vendor_is_busy' => 'Ya tienes un servicio en curso. Termínalo antes de aceptar otra solicitud inmediata.',
         ],
         'vendor_cannot_accept_service' => 'El profesional no puede aceptar el servicio.',
         'has_service_open' => 'El profesional tiene un servicio abierto.',

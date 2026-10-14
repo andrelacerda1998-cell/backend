@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Services\AddressType;
+use App\Enums\Services\CandidateStatus;
 use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Enums\Vendors\StatusVendor;
@@ -732,6 +733,61 @@ class Vendor extends Model implements Auditable
         return Attribute::make(get: function () {
             return $this->user?->full_name;
         });
+    }
+
+    /**
+     * Está comprometido com um trabalho AGORA?
+     *
+     * É a pergunta de "posso dar-lhe mais um imediato?". Um imediato é "podes
+     * agora?": quem já está a caminho ou no local de outro, ou foi escolhido
+     * para outro que o cliente está a pagar, não pode, e dizer que sim era
+     * prometer estar em dois sítios à mesma hora. O segundo cliente só o
+     * descobria quando ninguém aparecesse.
+     *
+     * Conta:
+     *  - um serviço no local (ARRIVED), imediato ou agendado;
+     *  - um imediato aceite (ACCEPTED), e um agendado aceite depois do "vou a
+     *    caminho" (é o GoToLocationController que o põe em ACCEPTED);
+     *  - um imediato de seleção em que ele foi o ESCOLHIDO e o cliente ainda
+     *    está a pagar (MB Way, 3DS, ou o regresso do 3DS ainda por resolver).
+     *
+     * NÃO conta o FINISHED: o trabalho está feito e ele está livre, mesmo que
+     * o cliente ainda não tenha confirmado (o fecho automático demora 24 h).
+     * Nem os agendados para mais tarde: um trabalho de quinta não colide com
+     * um que começa agora.
+     *
+     * Separado de `openServices`/`can_accept_service` de propósito: esses
+     * alimentam os filtros do backoffice e o ranking, com regras próprias.
+     */
+    public function ocupadoAgora(?int $exceto = null): bool
+    {
+        $servicos = fn () => $this->services()
+            ->when($exceto, fn ($q) => $q->whereKeyNot($exceto))
+            ->whereIn('payment_status', [PaymentStatus::PAID, PaymentStatus::PENDING]);
+
+        $aTrabalhar = $servicos()
+            ->where(fn ($q) => $q
+                ->where('status', ServiceStatus::ARRIVED)
+                ->orWhere(fn ($q) => $q
+                    ->where('status', ServiceStatus::ACCEPTED)
+                    ->where(fn ($q) => $q->whereDoesntHave('schedule')->orWhereNotNull('on_the_way_at'))))
+            ->exists();
+
+        if ($aTrabalhar) {
+            return true;
+        }
+
+        // Escolhido para um imediato que o cliente está a pagar. "Imediato" é
+        // a mesma regra do MatchingService::isScheduled: sem agenda e sem
+        // intenção de agendamento guardada.
+        return $servicos()
+            ->whereIn('status', [ServiceStatus::AWAITING_PAYMENT, ServiceStatus::PENDING_3DS, ServiceStatus::PENDING])
+            ->whereDoesntHave('schedule')
+            ->whereHas('candidates', fn ($q) => $q
+                ->where('vendor_id', $this->getKey())
+                ->where('status', CandidateStatus::SELECTED))
+            ->get()
+            ->contains(fn (Service $s) => $s->scheduleIntent() === null);
     }
 
     public function openServices(): HasMany
