@@ -30,6 +30,7 @@ return [
         'service_already_canceled' => 'L\'intervention a déjà été annulée.',
         'service_not_possible_to_cancel' => 'L\'intervention ne peut pas être annulée.',
         'payment_already_confirmed' => 'Le paiement a déjà été confirmé — ta demande suit son cours.',
+        'checkout_expired' => 'Le temps pour payer est écoulé. Tu n\'as pas été débité — tu peux refaire une demande.',
     ],
     'customer' => [
         'only_customers_allowed' => 'Seuls les clients peuvent accéder à cet endpoint.',

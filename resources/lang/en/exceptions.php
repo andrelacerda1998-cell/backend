@@ -24,6 +24,7 @@ return [
         'service_already_canceled' => 'Service already canceled.',
         'service_not_possible_to_cancel' => 'Service is not possible to cancel.',
         'payment_already_confirmed' => 'The payment was already confirmed — your request is moving forward.',
+        'checkout_expired' => 'Your time to pay ran out. You were not charged — you can request again.',
     ],
     'customer' => [
         'only_customers_allowed' => 'Only customers can access this endpoint.',

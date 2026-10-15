@@ -39,7 +39,12 @@ class CurrentMatchingRequestController extends Controller
                 ServiceStatus::AWAITING_PAYMENT,
             ])
             ->latest('id')
-            ->get();
+            ->get()
+            // Um pedido com o prazo já passado sai daqui, em vez de esperar
+            // até um minuto pelo `matching:advance`: era o cartão "Faltam 0
+            // min" na Home a levar a um pedido que já não aceita nada.
+            ->reject(fn (Service $s) => $this->matching->expirarSeJaPassou($s))
+            ->values();
 
         if ($abertos->isEmpty()) {
             return new ApiSuccessResponse(['request' => null, 'requests' => []]);

@@ -3,9 +3,11 @@
 namespace App\Notifications\Vendor;
 
 use App\Models\ServiceCandidate;
+use App\Notifications\Concerns\RoutesExpoToPushQueue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\Expo\ExpoMessage;
 
 /**
  * O desfecho de um convite que o profissional ACEITOU.
@@ -27,6 +29,12 @@ use Illuminate\Notifications\Notification;
  * Canal `database` apenas — o aviso ao vivo, para quem tem a app aberta,
  * continua a ser o websocket.
  *
+ * EXCEÇÃO (`$comPush`), pedida pelo André a 15/10/2026: o ESCOLHIDO cujo
+ * cliente não pagou. Não é dizer-lhe que perdeu — é dizer-lhe que já não está
+ * à espera de nada. Foi avisado de que foi escolhido, e num imediato ficou
+ * fora de outros convites enquanto o cliente pagava. Sem push, só o sabia ao
+ * abrir a app.
+ *
  * NAO passa pela preferencia "novos pedidos" (`RespectsVendorPreference`), ao
  * contrario do convite. Quem desliga os avisos de pedidos novos nao esta a dizer
  * que nao quer saber o que aconteceu a um pedido que aceitou — e sem push nao ha
@@ -35,16 +43,36 @@ use Illuminate\Notifications\Notification;
 class MatchingOutcomeNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+    use RoutesExpoToPushQueue;
 
     /** @param 'lost'|'closed' $outcome */
     public function __construct(
         private readonly ServiceCandidate $candidate,
         private readonly string $outcome,
+        private readonly bool $comPush = false,
     ) {}
 
     public function via($notifiable): array
     {
-        return ['database'];
+        // O histórico primeiro: com a fila síncrona, um push que falhe já não
+        // deixava escrever o registo que vinha a seguir.
+        return $this->comPush ? ['database', 'expo'] : ['database'];
+    }
+
+    public function toExpo($notifiable): ExpoMessage
+    {
+        $language = $this->language($notifiable);
+
+        return ExpoMessage::create(__("notifications.matchingOutcome.{$this->outcome}.title", [], $language))
+            ->body(__("notifications.matchingOutcome.{$this->outcome}.description", [], $language))
+            ->priority('high')
+            ->playSound()
+            ->channelId('requests');
+    }
+
+    private function language($notifiable): string
+    {
+        return $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
     }
 
     /**
@@ -52,7 +80,7 @@ class MatchingOutcomeNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
-        $language = $notifiable->language ?? app()->getLocale() ?? config('app.fallback_locale');
+        $language = $this->language($notifiable);
 
         return [
             'title' => __("notifications.matchingOutcome.{$this->outcome}.title", [], $language),

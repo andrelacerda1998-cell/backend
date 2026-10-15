@@ -25,11 +25,30 @@ class MatchingFailedNotification extends Notification implements ShouldQueue
     use Queueable;
     use RoutesExpoToPushQueue;
 
-    public function __construct(private readonly Service $service) {}
+    /** Ninguém aceitou: o texto de sempre. */
+    public const SEM_PROFISSIONAIS = 'sem_profissionais';
+
+    /** Houve quem aceitasse e o cliente não escolheu a tempo. */
+    public const ESCOLHA_EXPIROU = 'escolha_expirou';
+
+    /** Escolheu e não pagou a tempo. */
+    public const PAGAMENTO_EXPIROU = 'pagamento_expirou';
+
+    /**
+     * O motivo muda o texto. Até 15/10/2026 havia um só, "Ninguém disponível
+     * de momento", e ia também a quem tinha profissionais à espera e ficou
+     * sem tempo para escolher — e quem não pagava a tempo não recebia nada.
+     */
+    public function __construct(
+        private readonly Service $service,
+        private readonly string $motivo = self::SEM_PROFISSIONAIS,
+    ) {}
 
     public function via($notifiable): array
     {
-        return ['expo', 'database'];
+        // O histórico primeiro: com a fila síncrona, um push que falhe já não
+        // deixava escrever o registo que vinha a seguir.
+        return ['database', 'expo'];
     }
 
     public function toExpo($notifiable): ExpoMessage
@@ -53,12 +72,20 @@ class MatchingFailedNotification extends Notification implements ShouldQueue
 
     private function title($notifiable): string
     {
+        if ($this->motivo !== self::SEM_PROFISSIONAIS) {
+            return __("notifications.matchingExpired.{$this->motivo}.title", [], $this->language($notifiable));
+        }
+
         return __('notifications.matchingFailed.title', [], $this->language($notifiable));
     }
 
     private function body($notifiable): string
     {
         $language = $this->language($notifiable);
+
+        if ($this->motivo !== self::SEM_PROFISSIONAIS) {
+            return __("notifications.matchingExpired.{$this->motivo}.description", [], $language);
+        }
 
         return __('notifications.matchingFailed.description', [
             'service_type' => $this->service->serviceType?->getTranslation('name', $language) ?? '',

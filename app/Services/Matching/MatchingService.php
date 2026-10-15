@@ -498,14 +498,36 @@ class MatchingService
         });
     }
 
-    /** Ninguém aceitou, ou esgotaram-se as ondas: o cliente tenta outra vez. */
+    /**
+     * Ninguém aceitou, esgotaram-se as ondas, ou o cliente não escolheu a
+     * tempo: o pedido acaba e o cliente pode pedir outra vez.
+     *
+     * Um pedido que já acabou não acaba duas vezes. O `matching:advance` e o
+     * `expirarSeJaPassou` (chamado quando o cliente volta a pedir) podem
+     * chegar ao mesmo pedido no mesmo segundo, e cada um mandava os seus
+     * avisos.
+     */
     public function fail(Service $service): void
     {
         DB::transaction(function () use ($service) {
-            $pending = $service->candidates()->live()->with('vendor')->get();
+            $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
 
-            $service->candidates()->live()->update(['status' => CandidateStatus::LOST]);
-            $service->update(['status' => ServiceStatus::MATCHING_FAILED]);
+            if (! $locked || $locked->status === ServiceStatus::MATCHING_FAILED) {
+                return;
+            }
+
+            $pending = $locked->candidates()->live()->with('vendor')->get();
+
+            // Havia quem tivesse aceitado: não faltou ninguém, faltou o
+            // cliente escolher. Dizer-lhe "ninguém disponível" era mentir,
+            // e mandá-lo tentar outra vez à espera de um resultado diferente.
+            $motivo = $pending->contains(fn (ServiceCandidate $c) => $c->status === CandidateStatus::ACCEPTED)
+                ? MatchingFailedNotification::ESCOLHA_EXPIROU
+                : MatchingFailedNotification::SEM_PROFISSIONAIS;
+
+            $locked->candidates()->live()->update(['status' => CandidateStatus::LOST]);
+            $locked->update(['status' => ServiceStatus::MATCHING_FAILED]);
+            $service->setRawAttributes($locked->getAttributes(), true);
 
             foreach ($pending as $candidate) {
                 $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
@@ -514,13 +536,88 @@ class MatchingService
             // O desfecho negativo tem de chegar pelo mesmo caminho que o
             // positivo. Sem isto, quem fechou a app ficava a acreditar que o
             // pedido continuava vivo e só descobria que não ao voltar.
-            DB::afterCommit(function () use ($service) {
-                try {
-                    $service->customer?->notify(new MatchingFailedNotification($service));
-                } catch (\Throwable $e) {
-                    report($e);
-                }
-            });
+            $this->avisarClienteDoFim($locked, $motivo);
+        });
+    }
+
+    /**
+     * Acaba já um pedido cujo prazo do cliente passou, sem esperar pelo
+     * `matching:advance`.
+     *
+     * O comando corre de minuto a minuto, e durante esse minuto o pedido
+     * morto continuava "aberto": quem voltava a pedir o mesmo serviço recebia
+     * de volta o pedido expirado (o `start()` devolve o que está aberto), com
+     * o relógio a zero e sem saída — ficava preso. Chamado onde o cliente
+     * chega a um pedido: ao pedir outra vez e ao ler os pedidos abertos.
+     *
+     * As mesmas regras do comando, pelos mesmos métodos: o prazo é o
+     * `customerDeadline` (ou, antes de alguém aceitar, o dos convites), e um
+     * pagamento já em curso não é cortado aqui — quem decide é a janela do
+     * próprio meio de pagamento (ver `expireCheckout`).
+     *
+     * Devolve true se o pedido acabou agora.
+     */
+    public function expirarSeJaPassou(Service $service): bool
+    {
+        if ($service->status === ServiceStatus::AWAITING_PAYMENT) {
+            if ($service->payment_order_id !== null) {
+                return false;
+            }
+
+            $prazo = $this->customerDeadline($service);
+
+            return $prazo !== null && $prazo->isPast() && $this->expireCheckout($service);
+        }
+
+        if ($service->status !== ServiceStatus::MATCHING) {
+            return false;
+        }
+
+        $prazo = $this->customerDeadline($service) ?? $this->invitationDeadline($service);
+
+        if ($prazo === null || $prazo->isFuture()) {
+            return false;
+        }
+
+        $this->fail($service);
+
+        return $service->refresh()->status === ServiceStatus::MATCHING_FAILED;
+    }
+
+    /**
+     * Porque é que um pedido acabou, para a app dizer a verdade no ecrã.
+     *
+     * `expired`: alguém aceitou e o cliente não escolheu ou não pagou a tempo.
+     * `no_vendors`: ninguém aceitou. null: o pedido não acabou.
+     *
+     * Lido das respostas que ficaram gravadas: quem aceitou tem
+     * `responded_at` e acaba LOST; quem recusou fica DECLINED.
+     */
+    public function motivoDoFim(Service $service): ?string
+    {
+        if ($service->status !== ServiceStatus::MATCHING_FAILED) {
+            return null;
+        }
+
+        $alguemAceitou = $service->candidates()
+            ->where('status', CandidateStatus::LOST)
+            ->whereNotNull('responded_at')
+            ->exists();
+
+        return $alguemAceitou ? 'expired' : 'no_vendors';
+    }
+
+    /** Push e histórico para o cliente quando o pedido acaba sem serviço. */
+    private function avisarClienteDoFim(Service $service, string $motivo): void
+    {
+        DB::afterCommit(function () use ($service, $motivo) {
+            try {
+                // `customerUser`: a relação `customer` exclui quem também tem
+                // perfil de técnico, e esse cliente ficava sem o aviso.
+                $service->customerUser?->notify(new MatchingFailedNotification($service, $motivo));
+            } catch (\Throwable $e) {
+                report($e);
+            }
         });
     }
 
@@ -562,9 +659,18 @@ class MatchingService
             $locked->status = ServiceStatus::MATCHING_FAILED;
             $locked->save();
 
+            // Com push, ao contrário dos outros desfechos. Este foi ESCOLHIDO:
+            // num imediato ficou fora dos outros convites enquanto o cliente
+            // pagava, e o aviso de que foi escolhido também lhe chegou. Saber
+            // que o cliente afinal não pagou só quando abrisse a app deixava-o
+            // à espera de um trabalho que já não existia.
             foreach ($selected as $candidate) {
-                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class, comPush: true);
             }
+
+            // Até aqui o cliente não sabia de nada: o checkout ficava aberto
+            // com o relógio a zero, e o pedido desaparecia sem explicação.
+            $this->avisarClienteDoFim($locked, MatchingFailedNotification::PAGAMENTO_EXPIROU);
 
             return true;
         });
@@ -607,7 +713,7 @@ class MatchingService
         $this->notifyVendor($candidate->refresh(), MatchingInvitationEvent::class);
     }
 
-    private function notifyVendor(ServiceCandidate $candidate, string $event): void
+    private function notifyVendor(ServiceCandidate $candidate, string $event, bool $comPush = false): void
     {
         $userId = $candidate->vendor?->user_id;
 
@@ -627,7 +733,8 @@ class MatchingService
 
         // Só o convite leva push. Os outros eventos (perdeu, pedido fechou) são
         // informação de desfecho — tocar-lhe o telemóvel para dizer que não
-        // ganhou seria castigá-lo por ter aceitado.
+        // ganhou seria castigá-lo por ter aceitado. A exceção é `$comPush`: o
+        // escolhido cujo cliente não pagou (ver `expireCheckout`).
         //
         // O websocket acima chega a quem tem a app aberta; este push é para
         // quem a tem fechada, que é a maioria enquanto trabalha.
@@ -648,7 +755,7 @@ class MatchingService
         if ($outcome !== null) {
             try {
                 $candidate->vendor?->user?->notify(
-                    new MatchingOutcomeNotification($candidate, $outcome)
+                    new MatchingOutcomeNotification($candidate, $outcome, $comPush)
                 );
             } catch (\Throwable $e) {
                 // O registo do desfecho não pode impedir o desfecho: quem perdeu

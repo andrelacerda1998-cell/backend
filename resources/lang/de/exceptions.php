@@ -24,6 +24,7 @@ return [
         'service_already_canceled' => 'Der Auftrag wurde schon storniert.',
         'service_not_possible_to_cancel' => 'Der Auftrag kann nicht storniert werden.',
         'payment_already_confirmed' => 'Die Zahlung ist schon bestätigt — die Anfrage läuft weiter.',
+        'checkout_expired' => 'Die Zeit zum Bezahlen ist abgelaufen. Dir wurde nichts berechnet — du kannst neu anfragen.',
     ],
     'customer' => [
         'only_customers_allowed' => 'Nur Kunden haben Zugriff auf diesen Endpoint.',
