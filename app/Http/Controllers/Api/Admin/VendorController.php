@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\Api\ApiErrorResponse;
 use App\Http\Responses\Api\ApiSuccessResponse;
 use App\Models\GeneralSettings\AllowedZone;
+use App\Models\GeneralSettings\City;
 use App\Models\GeneralSettings\Document;
 use App\Models\GeneralSettings\OperationArea;
 use App\Models\Service;
@@ -874,9 +875,13 @@ class VendorController extends Controller
 
     /**
      * Procura vs oferta por cidade, limitado às 20 cidades com mais procura
-     * para o heatmap não ficar ilegível.
+     * para o heatmap não ficar ilegível. Só cidades do catálogo da app.
      *
-     * - procura: pedidos de serviço reais nessa cidade (Service.address->city).
+     * - procura: pedidos de serviço reais na cidade. Cada pedido conta na
+     *   cidade do catálogo onde fica a morada (CoberturaPelasCidades::
+     *   cidadeDaMorada): o nome da morada tanto é uma cidade como uma
+     *   localidade ("Turcifal" conta em Torres Vedras). Os que não caem em
+     *   cidade nenhuma vão para `metaData.pedidos_fora_das_cidades`.
      * - oferta: quem marcou a cidade no questionário antigo da app
      *   (`vendor_allowed_zones`). A app já não o mostra; fica para o backoffice
      *   que ainda o lê.
@@ -887,6 +892,8 @@ class VendorController extends Controller
      */
     public function coverage(): ApiSuccessResponse
     {
+        $nasCidades = new CoberturaPelasCidades;
+
         $supplyByZoneId = DB::table('vendor_allowed_zones')
             ->join('vendors', 'vendors.id', '=', 'vendor_allowed_zones.vendor_id')
             ->join('users', 'users.id', '=', 'vendors.user_id')
@@ -896,44 +903,85 @@ class VendorController extends Controller
             ->groupBy('vendor_allowed_zones.allowed_zone_id')
             ->pluck('supply', 'allowed_zone_id');
 
+        /** @var array<int, City> $cidades */
+        $cidades = [];
         $supplyByCity = [];
-        AllowedZone::select('id', 'city')->get()->each(function ($zone) use (&$supplyByCity, $supplyByZoneId) {
-            $supplyByCity[$zone->city] = ($supplyByCity[$zone->city] ?? 0) + (int) ($supplyByZoneId[$zone->id] ?? 0);
+        AllowedZone::select('id', 'city', 'district')->get()->each(function (AllowedZone $zone) use ($nasCidades, &$cidades, &$supplyByCity, $supplyByZoneId) {
+            $cidade = $nasCidades->cidadeDaMorada($zone->city, $zone->district, null, null);
+
+            if ($cidade !== null) {
+                $cidades[$cidade->id] = $cidade;
+                $supplyByCity[$cidade->id] = ($supplyByCity[$cidade->id] ?? 0) + (int) ($supplyByZoneId[$zone->id] ?? 0);
+            }
         });
 
-        $demandByCity = Service::query()
+        // Agrupado por morada (o mesmo cliente pede para a mesma casa) e só
+        // depois levado à cidade: as coordenadas não se comparam em SQL. Um
+        // valor null no JSON sai do JSON_UNQUOTE como o texto "null".
+        $texto = fn (?string $valor) => $valor === null || trim($valor) === '' || $valor === 'null' ? null : $valor;
+        $numero = fn (?string $valor) => is_numeric($valor) ? (float) $valor : null;
+
+        $demandByCity = [];
+        $foraDasCidades = 0;
+        Service::query()
             ->where('is_test', false)
             ->whereNotNull('address')
-            ->selectRaw('JSON_UNQUOTE(JSON_EXTRACT(address, \'$.city\')) as city, COUNT(*) as total')
-            ->groupBy('city')
-            ->pluck('total', 'city');
+            ->selectRaw(<<<'SQL'
+                JSON_UNQUOTE(JSON_EXTRACT(address, '$.city')) as morada_cidade,
+                JSON_UNQUOTE(JSON_EXTRACT(address, '$.locality')) as morada_localidade,
+                JSON_UNQUOTE(JSON_EXTRACT(address, '$.state')) as morada_distrito,
+                JSON_UNQUOTE(JSON_EXTRACT(address, '$.latitude')) as morada_latitude,
+                JSON_UNQUOTE(JSON_EXTRACT(address, '$.longitude')) as morada_longitude,
+                COUNT(*) as total
+                SQL)
+            ->groupBy('morada_cidade', 'morada_localidade', 'morada_distrito', 'morada_latitude', 'morada_longitude')
+            ->toBase()
+            ->get()
+            ->each(function (object $morada) use ($nasCidades, $texto, $numero, &$cidades, &$demandByCity, &$foraDasCidades) {
+                $cidade = $nasCidades->cidadeDaMorada(
+                    $texto($morada->morada_cidade) ?? $texto($morada->morada_localidade),
+                    $texto($morada->morada_distrito),
+                    $numero($morada->morada_latitude),
+                    $numero($morada->morada_longitude),
+                );
 
-        $cities = collect($supplyByCity)->keys()->merge($demandByCity->keys())->unique()->filter();
+                if ($cidade === null) {
+                    $foraDasCidades += (int) $morada->total;
 
-        $rows = $cities->map(function ($city) use ($supplyByCity, $demandByCity) {
-            $supply = $supplyByCity[$city] ?? 0;
-            $demand = (int) ($demandByCity[$city] ?? 0);
+                    return;
+                }
+
+                $cidades[$cidade->id] = $cidade;
+                $demandByCity[$cidade->id] = ($demandByCity[$cidade->id] ?? 0) + (int) $morada->total;
+            });
+
+        $rows = collect($cidades)->map(function (City $cidade, int $id) use ($supplyByCity, $demandByCity) {
+            $supply = $supplyByCity[$id] ?? 0;
+            $demand = $demandByCity[$id] ?? 0;
 
             return [
-                'name' => $city,
+                'name' => $cidade->name,
+                'district' => $cidade->district,
                 'procura' => $demand,
                 'oferta' => $supply,
                 'ratio' => $supply > 0 ? round($demand / $supply, 2) : $demand,
             ];
         })->sortByDesc('procura')->take(20)->values();
 
-        $nasCidades = new CoberturaPelasCidades;
         $podem = PodemTrabalhar::ids()->flip();
 
         return ApiSuccessResponse::make($rows->map(function (array $row) use ($nasCidades, $podem) {
-            $quem = $nasCidades->naCidade((string) $row['name']);
+            $quem = $nasCidades->naCidade((string) $row['name'], $row['district']);
 
             return $row + [
                 'oferta_cidades' => count($quem['tecnicos']),
                 'podem_trabalhar' => count(array_filter($quem['tecnicos'], fn (int $id) => $podem->has($id))),
                 'contagem' => $quem['contagem'],
             ];
-        })->all());
+        })->all(), [
+            'message' => 'Successfully',
+            'pedidos_fora_das_cidades' => $foraDasCidades,
+        ]);
     }
 
     /**

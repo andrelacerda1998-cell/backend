@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -239,6 +240,80 @@ class AdminTecnicosPelasCidadesTest extends TestCase
         $this->assertSame(3, $linha['oferta_cidades']);
         $this->assertSame(2, $linha['podem_trabalhar']);
         $this->assertSame('raio', $linha['contagem']);
+    }
+
+    /**
+     * A procura conta só cidades. A morada traz o nome que o mapa lhe deu, que
+     * pode ser uma localidade ("Turcifal"): conta na cidade do catálogo onde
+     * fica, pelas coordenadas, e não aparece como se fosse uma cidade.
+     */
+    public function test_a_procura_leva_cada_localidade_a_cidade_onde_fica(): void
+    {
+        $this->cenarioDoRaio();
+
+        // A ~2 km do centro e a ~9 km da vizinha: as duas a contêm, conta a mais perto.
+        $this->pedido(['city' => 'Lugar Teste Pequeno', 'latitude' => 30.02, 'longitude' => -40.0]);
+        $this->pedido(['city' => 'Lugar Teste Pequeno', 'latitude' => '30.02', 'longitude' => '-40.0']);
+        // O nome de uma cidade do catálogo manda, mesmo mais perto de outra.
+        $this->pedido(['city' => 'Vila Teste Vizinha', 'latitude' => 30.02, 'longitude' => -40.0]);
+        // Sem cidade, o nome que vem em "locality".
+        $this->pedido(['city' => null, 'locality' => 'Vila Teste Longe']);
+
+        $linhas = collect($this->procuraEOferta()->json('data'))->keyBy('name');
+
+        $this->assertSame(2, $linhas['Vila Teste Centro']['procura']);
+        $this->assertSame(1, $linhas['Vila Teste Vizinha']['procura']);
+        $this->assertSame(1, $linhas['Vila Teste Longe']['procura']);
+        $this->assertSame('Teste', $linhas['Vila Teste Centro']['district']);
+        $this->assertArrayNotHasKey('Lugar Teste Pequeno', $linhas->all());
+    }
+
+    /** A morada diz "Costa de Caparica" e o catálogo "Costa da Caparica": é a mesma cidade. */
+    public function test_a_procura_reconhece_a_cidade_escrita_com_outra_particula(): void
+    {
+        $this->cidade('Vila Teste da Ponte');
+        $this->pedido(['city' => 'Vila Teste de Ponte']);
+
+        $linhas = collect($this->procuraEOferta()->json('data'))->keyBy('name');
+
+        $this->assertSame(1, $linhas['Vila Teste da Ponte']['procura']);
+        $this->assertArrayNotHasKey('Vila Teste de Ponte', $linhas->all());
+    }
+
+    /** O que não cai em cidade nenhuma não vira linha: conta-se à parte, para não sumir. */
+    public function test_a_procura_fora_das_cidades_e_contada_a_parte(): void
+    {
+        $this->cenarioDoRaio();
+        $antes = $this->procuraEOferta()->json('metaData.pedidos_fora_das_cidades');
+
+        // A ~450 km da cidade mais perto, e um nome que o catálogo não tem, sem coordenadas.
+        $this->pedido(['city' => 'Lugar Teste Perdido', 'latitude' => 35.0, 'longitude' => -40.0]);
+        $this->pedido(['city' => 'Lugar Teste Sem Mapa']);
+
+        $resposta = $this->procuraEOferta();
+        $nomes = collect($resposta->json('data'))->pluck('name');
+
+        $this->assertSame($antes + 2, $resposta->json('metaData.pedidos_fora_das_cidades'));
+        $this->assertNotContains('Lugar Teste Perdido', $nomes);
+        $this->assertNotContains('Lugar Teste Sem Mapa', $nomes);
+    }
+
+    /** Um pedido real com esta morada (só os campos que contam). */
+    private function pedido(array $morada): void
+    {
+        DB::table('services')->insert([
+            'status' => ServiceStatus::CLOSED->value,
+            'payment_status' => PaymentStatus::PAID->value,
+            'address' => json_encode($morada),
+            'is_test' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function procuraEOferta(): TestResponse
+    {
+        return $this->withAuth()->getJson('/api/v1/admin/vendors/coverage')->assertOk();
     }
 
     /**
