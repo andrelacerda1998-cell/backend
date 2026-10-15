@@ -162,6 +162,15 @@ return [
             'description' => 'O cliente não concluiu o pagamento a tempo. Já podes aceitar outros pedidos.',
         ],
     ],
+    /**
+     * Escolhido, à espera do pagamento. Também SEM PUSH: a notícia que vale
+     * o telemóvel é a do pagamento (serviceWon). Não promete o trabalho antes
+     * de o dinheiro entrar.
+     */
+    'matchingSelected' => [
+        'title' => 'O cliente escolheu-te',
+        'description' => 'Falta o pagamento. Quando o cliente pagar, avisamos-te e o trabalho é teu.',
+    ],
     'customRequest' => [
         'label' => 'o teu pedido personalizado',
     ],

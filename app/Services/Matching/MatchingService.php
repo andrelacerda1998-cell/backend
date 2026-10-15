@@ -8,6 +8,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Events\Common\Services\ServiceAcceptedEvent;
 use App\Events\Matching\MatchingCandidateAcceptedEvent;
 use App\Events\Matching\MatchingCandidateLostEvent;
+use App\Events\Matching\MatchingCandidateSelectedEvent;
 use App\Events\Matching\MatchingInvitationEvent;
 use App\Events\Matching\MatchingRequestClosedEvent;
 use App\Models\Service;
@@ -17,6 +18,7 @@ use App\Notifications\Customer\MatchingCandidatesReadyNotification;
 use App\Notifications\Customer\MatchingFailedNotification;
 use App\Notifications\Vendor\MatchingInvitationNotification;
 use App\Notifications\Vendor\MatchingOutcomeNotification;
+use App\Notifications\Vendor\MatchingSelectedNotification;
 use App\Notifications\Vendor\ServiceWonNotification;
 use App\Settings\MatchingSettings;
 use Carbon\Carbon;
@@ -352,7 +354,52 @@ class MatchingService
             $service->amount_for_vendor = $fresh->quoted_amount_for_vendor;
             $service->save();
 
+            $this->avisarQueFoiEscolhido($fresh, $service);
+
             return true;
+        });
+    }
+
+    /**
+     * O cliente escolheu-o e ainda não pagou. Diz-lho, e até quando.
+     *
+     * O ecrã do "ficaste na lista" promete "avisamos-te assim que o cliente
+     * decidir", e a decisão era a única coisa que não chegava: os perdedores
+     * sabiam em segundos, o escolhido ficava em silêncio até o pagamento
+     * entrar (ou o prazo acabar). Num imediato, ainda por cima, deixava de
+     * receber outros convites imediatos sem saber porquê.
+     *
+     * O prazo vai no aviso porque é o que ele precisa para decidir o que faz
+     * a seguir. É o MESMO que o `matching:advance` aplica (`customerDeadline`),
+     * lido já com o serviço em `AwaitingPayment`.
+     *
+     * Depois do commit: uma escolha que não chega a gravar não avisa ninguém.
+     * E sem rebentar quem chama, porque a escolha já está feita.
+     */
+    private function avisarQueFoiEscolhido(ServiceCandidate $candidate, Service $service): void
+    {
+        $payBy = $this->customerDeadline($service)?->toIso8601String();
+
+        DB::afterCommit(function () use ($candidate, $payBy) {
+            $user = $candidate->vendor?->user;
+
+            if (! $user) {
+                return;
+            }
+
+            try {
+                MatchingCandidateSelectedEvent::dispatch($user->id, [
+                    'service_id' => $candidate->service_id,
+                    'candidate_id' => $candidate->id,
+                    'amount_for_vendor' => $candidate->quoted_amount_for_vendor,
+                    'pay_by' => $payBy,
+                    'server_time' => now()->toIso8601String(),
+                ]);
+
+                $user->notify(new MatchingSelectedNotification($candidate, $payBy));
+            } catch (Throwable $e) {
+                report($e);
+            }
         });
     }
 

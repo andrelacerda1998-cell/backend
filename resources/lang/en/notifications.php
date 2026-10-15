@@ -147,6 +147,10 @@ return [
             'description' => 'The customer did not complete the payment in time. You are free to take other requests.',
         ],
     ],
+    'matchingSelected' => [
+        'title' => 'The customer chose you',
+        'description' => 'Only the payment is missing. When the customer pays, we will let you know and the job is yours.',
+    ],
     'customRequestDispatched' => [
         'title' => 'Your request is with the professionals',
         'description' => 'We read what you wrote and sent it out. We will let you know as soon as someone is available.',
