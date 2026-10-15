@@ -11,7 +11,9 @@ use App\Models\ServiceCandidate;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Notifications\Customer\PedidoCanceladoPelaPiquetNotification;
+use App\Notifications\Vendor\MatchingOutcomeNotification;
 use App\Notifications\Vendor\ServicoCanceladoPelaPiquetNotification;
+use App\Services\Matching\MatchingService;
 use App\Services\Operacoes\CancelarPeloBackoffice;
 use Database\Seeders\GenderSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -226,6 +228,91 @@ class AdminCancelarPedidoTest extends TestCase
 
         $this->assertSame(ServiceStatus::PENDING_3DS, $s->refresh()->status);
         Notification::assertNothingSent();
+    }
+
+    /**
+     * À espera de pagamento com um MB Way já enviado: o pedido 299 (15/10/2026).
+     * O técnico foi escolhido, o cliente autorizou no telemóvel, e a
+     * confirmação falhou do nosso lado.
+     */
+    private function aEsperaDoMbWay(Status $estadoDaOrdem): array
+    {
+        $s = $this->servico(ServiceStatus::AWAITING_PAYMENT, ['payment_status' => PaymentStatus::PENDING]);
+        $escolhido = ServiceCandidate::query()->create([
+            'service_id' => $s->id, 'vendor_id' => $s->vendor_id, 'rank' => 1, 'wave' => 1,
+            'status' => CandidateStatus::SELECTED, 'quoted_amount' => 5000, 'quoted_amount_for_vendor' => 3750,
+            'quoted_distance' => 2.4, 'notified_at' => now()->subHours(5), 'responded_at' => now()->subHours(5),
+        ]);
+        $this->ordem($s, $estadoDaOrdem);
+
+        return [$s->refresh(), $escolhido];
+    }
+
+    public function test_com_o_mb_way_autorizado_e_preso_cancela_e_o_cliente_nao_paga(): void
+    {
+        [$s, $escolhido] = $this->aEsperaDoMbWay(Status::PENDING_CONFIRMATION);
+        $tecnico = $s->vendor->user;
+        $cliente = $s->customerUser;
+
+        // Era aqui que respondia "o cliente está a meio do pagamento", sempre.
+        $this->cancelar($s)->assertOk()
+            ->assertJsonPath('data.status', ServiceStatus::CANCELED->value)
+            ->assertJsonPath('data.payment_status', PaymentStatus::CANCELED->value);
+
+        $this->assertCanceladoPelaPiquet($s);
+        $this->assertNull($s->vendor_id);
+        $this->assertSame(CandidateStatus::LOST, $escolhido->refresh()->status);
+
+        Notification::assertSentTo($cliente, PedidoCanceladoPelaPiquetNotification::class);
+        // O técnico nunca soube que ganhou: não leva o push de "cancelado pela
+        // Piquet", só o desfecho no histórico, como quando um cliente desiste.
+        Notification::assertNotSentTo($tecnico, ServicoCanceladoPelaPiquetNotification::class);
+        Notification::assertSentTo(
+            $tecnico,
+            MatchingOutcomeNotification::class,
+            fn (MatchingOutcomeNotification $n) => $n->via($tecnico) === ['database'],
+        );
+    }
+
+    public function test_com_o_mb_way_por_responder_no_telemovel_nao_se_cancela(): void
+    {
+        [$s, $escolhido] = $this->aEsperaDoMbWay(Status::PENDING_PAYMENT);
+
+        $this->cancelar($s)->assertStatus(409)
+            ->assertJsonPath('message', 'O MB Way ainda está por responder no telemóvel do cliente. Espera uns minutos e volta a tentar.');
+
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $s->refresh()->status);
+        $this->assertSame(CandidateStatus::SELECTED, $escolhido->refresh()->status);
+    }
+
+    public function test_com_o_mb_way_recusado_ou_expirado_cancela(): void
+    {
+        foreach ([Status::REFUSED, Status::EXPIRED, Status::REFUNDED] as $estado) {
+            [$s] = $this->aEsperaDoMbWay($estado);
+
+            $this->cancelar($s)->assertOk()
+                ->assertJsonPath('data.payment_status', PaymentStatus::CANCELED->value);
+            $this->assertCanceladoPelaPiquet($s);
+        }
+    }
+
+    /** Cobrado de facto (não devia acontecer sem confirmação, mas se acontecer): devolve-se. */
+    public function test_com_o_mb_way_ja_cobrado_cancela_e_devolve(): void
+    {
+        [$s] = $this->aEsperaDoMbWay(Status::SUCCESS);
+
+        $this->cancelar($s)->assertOk()
+            ->assertJsonPath('data.payment_status', PaymentStatus::REFUNDED->value);
+        $this->assertCanceladoPelaPiquet($s);
+    }
+
+    /** A regra do lado do cliente não muda: com um MB Way enviado, ele não cancela pela app. */
+    public function test_o_cliente_continua_sem_poder_cancelar_com_o_mb_way_enviado(): void
+    {
+        [$s] = $this->aEsperaDoMbWay(Status::PENDING_CONFIRMATION);
+
+        $this->assertFalse(app(MatchingService::class)->cancelByCustomer($s));
+        $this->assertSame(ServiceStatus::AWAITING_PAYMENT, $s->refresh()->status);
     }
 
     public function test_depois_de_o_trabalho_comecar_nao_se_cancela_e_diz_porque(): void
