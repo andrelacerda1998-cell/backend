@@ -46,7 +46,9 @@ class MatchingFailedNotification extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return ['expo', 'database'];
+        // O histórico primeiro: com a fila síncrona, um push que falhe já não
+        // deixava escrever o registo que vinha a seguir.
+        return ['database', 'expo'];
     }
 
     public function toExpo($notifiable): ExpoMessage

@@ -201,7 +201,7 @@ class FimDoPrazoDoClienteTest extends TestCase
         Notification::assertSentTo(
             $user,
             MatchingOutcomeNotification::class,
-            fn (MatchingOutcomeNotification $n) => $n->via($user) === ['expo', 'database']
+            fn (MatchingOutcomeNotification $n) => $n->via($user) === ['database', 'expo']
                 && $n->toArray($user)['outcome'] === 'closed'
                 && ! str_starts_with($n->toArray($user)['title'], 'notifications.'),
         );

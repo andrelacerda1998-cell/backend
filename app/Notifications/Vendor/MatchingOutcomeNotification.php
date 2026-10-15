@@ -54,7 +54,9 @@ class MatchingOutcomeNotification extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return $this->comPush ? ['expo', 'database'] : ['database'];
+        // O histórico primeiro: com a fila síncrona, um push que falhe já não
+        // deixava escrever o registo que vinha a seguir.
+        return $this->comPush ? ['database', 'expo'] : ['database'];
     }
 
     public function toExpo($notifiable): ExpoMessage
