@@ -118,11 +118,86 @@ final class CancelarPeloBackoffice
      */
     private function emSelecao(Service $service): void
     {
-        if (! $this->matching->cancelByCustomer($service)) {
-            throw new \DomainException('O cliente está a meio do pagamento. Espera um minuto e volta a tentar.');
+        if ($this->matching->cancelByCustomer($service)) {
+            Service::whereKey($service->getKey())->update(['status_justification' => self::JUSTIFICACAO]);
+
+            return;
         }
 
-        Service::whereKey($service->getKey())->update(['status_justification' => self::JUSTIFICACAO]);
+        // O `cancelByCustomer` recusa um pedido à espera de pagamento que já
+        // tem uma ordem (MB Way enviado). Para o cliente é a regra certa; para
+        // a equipa era um beco: um MB Way cuja confirmação falhou deixava o
+        // pedido assim para sempre, e o botão respondia "espera um minuto" a
+        // cada tentativa (pedido 299, 15/10/2026).
+        $service->refresh();
+
+        if ($service->status !== ServiceStatus::AWAITING_PAYMENT || ! $service->payment_order_id) {
+            throw new \DomainException('O pedido mudou entretanto de estado. Atualiza e volta a ver.');
+        }
+
+        $this->comPagamentoEnviado($service);
+    }
+
+    /**
+     * Estados de uma ordem que ainda está nas mãos do cliente: o MB Way por
+     * aceitar no telemóvel, ou um passo do cartão por terminar. Não se cancela
+     * por cima: uma ordem MB Way não se cancela antes de ser respondida, e o
+     * cliente podia aceitá-la depois — ficava com o dinheiro cativo e sem
+     * pedido. O banco dá-lhe poucos minutos; depois disso a ordem já não está
+     * neste estado.
+     */
+    private const ORDEM_POR_RESPONDER = [
+        Status::CREATED,
+        Status::PENDING_PAYMENT,
+        Status::PENDING_PROCESSOR_RESPONSE,
+        Status::PENDING_3DS_RESPONSE,
+        Status::PENDING_CARD,
+        Status::REDIRECTED_TO_3DS,
+        Status::AUTHENTICATION_REQUIRED,
+    ];
+
+    /**
+     * À espera de pagamento com um MB Way já enviado. Pergunta-se ao Payshop
+     * em que estado está:
+     *
+     *  - ainda por responder no telemóvel: não se cancela (ver acima);
+     *  - autorizado (cativo), cobrado, recusado ou expirado: cancela-se. O
+     *    ServiceObserver liberta o cativo ou devolve o cobrado ao gravar
+     *    CANCELED, como em todos os cancelamentos.
+     *
+     * Payshop em baixo: decide-se com o último estado que se conhece, como no
+     * `antesDePagar`.
+     */
+    private function comPagamentoEnviado(Service $service): void
+    {
+        $ordem = $service->paymentOrder;
+
+        if ($ordem) {
+            try {
+                $ordem->updateData();
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        if ($ordem && in_array($ordem->status, self::ORDEM_POR_RESPONDER, true)) {
+            throw new \DomainException('O MB Way ainda está por responder no telemóvel do cliente. Espera uns minutos e volta a tentar.');
+        }
+
+        // Cobrado de facto: volta como reembolso. Cativo, recusado ou expirado:
+        // o cliente não pagou nada.
+        $pagamento = in_array($ordem?->status, [Status::SUCCESS, Status::PARTIALLY_CONFIRMED], true)
+            ? PaymentStatus::REFUNDED
+            : PaymentStatus::CANCELED;
+
+        $cancelou = $this->matching->cancelComPagamentoResolvido($service, function (Service $s) use ($pagamento) {
+            $s->payment_status = $pagamento;
+            $s->status_justification = self::JUSTIFICACAO;
+        });
+
+        if (! $cancelou) {
+            throw new \DomainException('O pedido mudou entretanto de estado. Atualiza e volta a ver.');
+        }
     }
 
     /**

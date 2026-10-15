@@ -470,32 +470,81 @@ class MatchingService
                 return false;
             }
 
-            $open = $locked->candidates()
-                ->whereIn('status', [
-                    CandidateStatus::SHORTLISTED,
-                    CandidateStatus::NOTIFIED,
-                    CandidateStatus::ACCEPTED,
-                    CandidateStatus::SELECTED,
-                ])
-                ->with('vendor')
-                ->get();
-
-            $locked->candidates()
-                ->whereKey($open->modelKeys())
-                ->update(['status' => CandidateStatus::LOST]);
-
-            $locked->vendor_id = null;
-            $locked->status = ServiceStatus::CANCELED;
-            $locked->status_justification = 'internal/services.cancel.description';
-            $locked->pending_schedule_data = null;
-            $locked->save();
-
-            foreach ($open as $candidate) {
-                $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
-            }
+            $this->fecharSelecao($locked);
 
             return true;
         });
+    }
+
+    /**
+     * A equipa cancela, pelo backoffice, um pedido à espera de pagamento que
+     * já tem uma ordem de MB Way — o caso que o `cancelByCustomer` recusa.
+     *
+     * Existe por causa do pedido 299 (15/10/2026): o MB Way foi autorizado, a
+     * confirmação rebentou (corrigido no #198), e o pedido ficou em
+     * AwaitingPayment com o dinheiro cativo. O cliente não conseguia pedir mais
+     * nada (o `start()` devolvia-lhe sempre este) e o "Cancelar" do backoffice
+     * recusava com "o cliente está a meio do pagamento".
+     *
+     * Quem chama (CancelarPeloBackoffice) já perguntou ao Payshop e só chega
+     * aqui quando o MB Way NÃO está por responder no telemóvel — uma ordem
+     * nesse estado não se consegue cancelar, e o cliente podia aceitá-la
+     * depois. O dinheiro trata-o o ServiceObserver ao gravar CANCELED: liberta
+     * o cativo, ou devolve se já tinha sido cobrado.
+     *
+     * `$antes` corre sobre o serviço trancado, antes de gravar (o estado do
+     * pagamento e a justificação são de quem cancela).
+     */
+    public function cancelComPagamentoResolvido(Service $service, ?\Closure $antes = null): bool
+    {
+        return DB::transaction(function () use ($service, $antes) {
+            $locked = Service::whereKey($service->getKey())->lockForUpdate()->first();
+
+            if (! $locked || $locked->status !== ServiceStatus::AWAITING_PAYMENT || $locked->payment_order_id === null) {
+                return false;
+            }
+
+            $this->fecharSelecao($locked, $antes);
+
+            return true;
+        });
+    }
+
+    /**
+     * Fecha um pedido em seleção: os convites e o escolhido passam a LOST, o
+     * pedido a CANCELED, e quem tinha respondido é avisado de que o pedido
+     * fechou (histórico e websocket, sem push — não perdeu para ninguém).
+     */
+    private function fecharSelecao(Service $locked, ?\Closure $antes = null): void
+    {
+        $open = $locked->candidates()
+            ->whereIn('status', [
+                CandidateStatus::SHORTLISTED,
+                CandidateStatus::NOTIFIED,
+                CandidateStatus::ACCEPTED,
+                CandidateStatus::SELECTED,
+            ])
+            ->with('vendor')
+            ->get();
+
+        $locked->candidates()
+            ->whereKey($open->modelKeys())
+            ->update(['status' => CandidateStatus::LOST]);
+
+        $locked->vendor_id = null;
+        $locked->status = ServiceStatus::CANCELED;
+        $locked->status_justification = 'internal/services.cancel.description';
+        $locked->pending_schedule_data = null;
+
+        if ($antes) {
+            $antes($locked);
+        }
+
+        $locked->save();
+
+        foreach ($open as $candidate) {
+            $this->notifyVendor($candidate, MatchingRequestClosedEvent::class);
+        }
     }
 
     /**
