@@ -144,6 +144,10 @@ return [
             'description' => 'Der Kunde hat nicht rechtzeitig bezahlt. Du kannst wieder andere Aufträge annehmen.',
         ],
     ],
+    'matchingSelected' => [
+        'title' => 'Der Kunde hat dich ausgewählt',
+        'description' => 'Es fehlt nur noch die Zahlung. Sobald der Kunde bezahlt, sagen wir dir Bescheid und der Auftrag gehört dir.',
+    ],
     'customRequest' => [
         'label' => 'deine individuelle Anfrage',
     ],

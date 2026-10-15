@@ -213,6 +213,16 @@ que desiste da app.
 **O perdedor é avisado em segundos, com motivo.** "O cliente escolheu outro
 profissional" imediatamente, nunca silêncio. Silêncio é o que destrói a confiança.
 
+**O escolhido também é avisado logo, antes de o cliente pagar.** "O cliente
+escolheu-te" com o prazo do pagamento (`pay_by`, o mesmo `customerDeadline` que
+o `matching:advance` aplica), por websocket e no histórico, sem push
+(`MatchingService::avisarQueFoiEscolhido`). Até 15/10/2026 os perdedores sabiam
+em segundos e o escolhido ficava em silêncio até o pagamento entrar ou o prazo
+acabar. Num imediato, nesses minutos, nem recebia outros convites imediatos
+(`Vendor::ocupadoAgora`). O push fica para o pagamento (`ServiceWonNotification`):
+um push "foste escolhido" seguido de um cancelamento sem push seria pior do que
+nada.
+
 **O corte é por ranking, não por rapidez.** Toda a gente convidada pode aceitar
 enquanto a janela dela corre, e o cliente vê os melhores `shortlist_size` de quem
 aceitou. Sem isto, quem chegasse ao cliente era quem tivesse o telemóvel na mão,
@@ -425,12 +435,13 @@ partida.
 | `MatchingCandidateAcceptedEvent` | `service.customer.{userId}` | alguém aceitou — aparece ao vivo no ecrã do cliente |
 | `MatchingRequestClosedEvent` | `service.vendor.{userId}` | o pedido fechou; deixa de o ver |
 | `MatchingCandidateLostEvent` | `service.vendor.{userId}` | o cliente escolheu outro |
+| `MatchingCandidateSelectedEvent` | `service.vendor.{userId}` | o cliente escolheu-o; falta pagar até `pay_by` |
 
 O `MatchingCandidateAcceptedEvent` é o que torna a espera progressiva: o cliente
 não espera que a janela feche, vê cada profissional entrar à medida que aceita.
 Aos poucos segundos já tem uma opção, e decide se quer esperar por mais.
 
-Os três dirigidos ao profissional existem pelo mesmo motivo: **nunca silêncio**.
+Os quatro dirigidos ao profissional existem pelo mesmo motivo: **nunca silêncio**.
 Um "sim" que fica sem resposta é o que ensina alguém a deixar de responder.
 
 ## Agendados com antecedência são assíncronos (06/10/2026)

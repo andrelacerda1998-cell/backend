@@ -147,6 +147,10 @@ return [
             'description' => 'El cliente no completó el pago a tiempo. Ya puedes aceptar otras solicitudes.',
         ],
     ],
+    'matchingSelected' => [
+        'title' => 'El cliente te ha elegido',
+        'description' => 'Falta el pago. Cuando el cliente pague, te avisamos y el trabajo es tuyo.',
+    ],
     'customRequest' => [
         'label' => 'tu solicitud personalizada',
     ],
