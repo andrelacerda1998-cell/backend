@@ -153,6 +153,7 @@ class MbwayPaymentCheckJob implements ShouldQueue
                 return null;
             }
 
+            MbwayPaymentResolver::prepararAgendadoDaSelecao($locked);
             app(MaterializePendingSchedule::class)->handle($locked);
             app(MbwayPaymentResolver::class)->markPaid($locked);
 

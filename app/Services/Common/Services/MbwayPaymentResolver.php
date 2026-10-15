@@ -77,4 +77,39 @@ class MbwayPaymentResolver
 
         $service->save();
     }
+
+    /**
+     * Agendado do fluxo de seleção pago por MB Way: põe-no em PENDING antes de
+     * materializar, como faz o `MatchingController::activate()` no cartão.
+     *
+     * Nestes dois caminhos (o poll da app e o MbwayPaymentCheckJob) a
+     * materialização corre ANTES do `markPaid` (F-05), e com o profissional já
+     * escolhido ela confirma a marcação pelo `acceptSchedule`, que exige
+     * PENDING. No fluxo antigo o serviço estava em PENDING durante o MB Way; no
+     * de seleção está em AwaitingPayment, e o `acceptSchedule` lançava
+     * ServiceIsNotPending. Rollback, o poll respondia "pendente", o job falhava
+     * três vezes e desistia, e o pedido ficava em AwaitingPayment para sempre
+     * com o dinheiro cativo (pedido 299, 15/10/2026).
+     *
+     * Só mexe quando há agenda por materializar e um profissional escolhido.
+     * Um imediato não passa pelo `acceptSchedule` e o `markPaid` leva-o a
+     * Accepted como sempre.
+     */
+    public static function prepararAgendadoDaSelecao(Service $service): void
+    {
+        if (! $service->pending_schedule_data) {
+            return;
+        }
+
+        if (! in_array($service->status, [ServiceStatus::AWAITING_PAYMENT, ServiceStatus::PENDING_3DS], true)) {
+            return;
+        }
+
+        if (! MaterializePendingSchedule::vendorAlreadyAccepted($service)) {
+            return;
+        }
+
+        $service->status = ServiceStatus::PENDING;
+        $service->save();
+    }
 }
