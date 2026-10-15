@@ -76,25 +76,15 @@ jobs:
               $pad = fn ($s, int $n, bool $esq = false) => $esq
                   ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
                   : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
-              $ts = App\Models\Vendor::query()
-                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
-                  ->with("user")
-                  ->orderBy("id")
-                  ->get();
+              // Margem para a leitura: o PHP de produção tem 128 MB, e o modelo do técnico
+              // carrega sempre os tipos de serviço (o PodemTrabalhar::ids incluído).
+              ini_set("memory_limit", "256M");
+              // Uma leitura não deixa rasto no Telescope (nem lhe enche a memória).
+              if (class_exists(Laravel\Telescope\Telescope::class)) { Laravel\Telescope\Telescope::stopRecording(); }
 
               // As MESMAS condições do Vendor::canAcceptService, pela mesma ordem.
               $nomes = ["telemóvel confirmado", "email confirmado", "documentos em dia", "sem serviço aberto", "faturação em dia (4.º serviço)"];
-              $falhas = function ($v) use ($nomes) {
-                  $f = [];
-                  if (! $v->user?->hasVerifiedPhoneNumber()) { $f[] = $nomes[0]; }
-                  if (! $v->user?->hasVerifiedEmail()) { $f[] = $nomes[1]; }
-                  if (! $v->all_documents_verified) { $f[] = $nomes[2]; }
-                  if ($v->openServices()->exists()) { $f[] = $nomes[3]; }
-                  if (! $v->faturacao_em_dia) { $f[] = $nomes[4]; }
-                  return $f;
-              };
-
-              $total = $ts->count();
+              $total = 0;
               $falha = array_fill_keys($nomes, 0);
               $so = array_fill_keys($nomes, 0);
               $passam = array_fill_keys($nomes, 0);
@@ -102,20 +92,35 @@ jobs:
               $podem = 0;
               $diferentes = 0;
 
-              foreach ($ts as $v) {
-                  $f = $falhas($v);
-                  foreach ($f as $m) { $falha[$m]++; }
-                  if (count($f) === 1) { $so[$f[0]]++; }
-                  $chave = $f ? "falta: " . implode(" + ", $f) : "nada (pode trabalhar)";
-                  $combo[$chave] = ($combo[$chave] ?? 0) + 1;
-                  $ok = true;
-                  foreach ($nomes as $m) {
-                      if (in_array($m, $f, true)) { $ok = false; }
-                      if ($ok) { $passam[$m]++; }
-                  }
-                  if (! $f) { $podem++; }
-                  if ((! $f) !== (bool) $v->can_accept_service) { $diferentes++; }
-              }
+              // Aos grupos de 50 e sem as relações que o modelo carrega sempre (tipos de
+              // serviço, categorias, localização): de uma vez, a produção passava os 128 MB.
+              App\Models\Vendor::query()
+                  ->without(["servicesTypes", "operationAreas", "currentLocation"])
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->with("user")
+                  ->chunkById(50, function ($lote) use ($nomes, &$total, &$falha, &$so, &$passam, &$combo, &$podem, &$diferentes) {
+                      foreach ($lote as $v) {
+                          $total++;
+                          $f = [];
+                          if (! $v->user?->hasVerifiedPhoneNumber()) { $f[] = $nomes[0]; }
+                          if (! $v->user?->hasVerifiedEmail()) { $f[] = $nomes[1]; }
+                          if (! $v->all_documents_verified) { $f[] = $nomes[2]; }
+                          if ($v->openServices()->exists()) { $f[] = $nomes[3]; }
+                          if (! $v->faturacao_em_dia) { $f[] = $nomes[4]; }
+
+                          foreach ($f as $m) { $falha[$m]++; }
+                          if (count($f) === 1) { $so[$f[0]]++; }
+                          $chave = $f ? "falta: " . implode(" + ", $f) : "nada (pode trabalhar)";
+                          $combo[$chave] = ($combo[$chave] ?? 0) + 1;
+                          $ok = true;
+                          foreach ($nomes as $m) {
+                              if (in_array($m, $f, true)) { $ok = false; }
+                              if ($ok) { $passam[$m]++; }
+                          }
+                          if (! $f) { $podem++; }
+                          if ((! $f) !== (bool) $v->can_accept_service) { $diferentes++; }
+                      }
+                  });
 
               echo "técnicos reais (sem contas de teste nem suspensos) = " . $total . PHP_EOL;
               echo "podem trabalhar (can_accept_service)               = " . $podem . PHP_EOL;
@@ -140,6 +145,7 @@ jobs:
               foreach (array_slice($combo, 0, 15, true) as $chave => $n) {
                   echo $pad((string) $n, 5, true) . "  " . $chave . PHP_EOL;
               }
+              echo "(memória máxima usada: " . round(memory_get_peak_usage(true) / 1048576) . " MB)" . PHP_EOL;
             '
 
             echo
@@ -149,113 +155,126 @@ jobs:
               $pad = fn ($s, int $n, bool $esq = false) => $esq
                   ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
                   : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
+              // Margem para a leitura: o PHP de produção tem 128 MB, e o modelo do técnico
+              // carrega sempre os tipos de serviço (o PodemTrabalhar::ids incluído).
+              ini_set("memory_limit", "256M");
+              // Uma leitura não deixa rasto no Telescope (nem lhe enche a memória).
+              if (class_exists(Laravel\Telescope\Telescope::class)) { Laravel\Telescope\Telescope::stopRecording(); }
               $hoje = now()->toDateString();
-              $ts = App\Models\Vendor::query()
+              $faixa = function ($data) {
+                  $d = $data ? abs($data->diffInDays(now())) : 9999;
+                  return $d < 1 ? "até 1 dia" : ($d < 7 ? "1 a 7 dias" : ($d < 30 ? "7 a 30 dias" : "mais de 30 dias"));
+              };
+              $faixas = fn () => ["até 1 dia" => 0, "1 a 7 dias" => 0, "7 a 30 dias" => 0, "mais de 30 dias" => 0];
+
+              $doc = ["falham" => 0, "nunca enviaram" => 0, "em falta" => 0, "pendentes" => 0, "caducados" => 0];
+              $falta = []; $pendente = []; $expirado = [];
+              $email = ["por confirmar" => 0, "com telemóvel" => 0];
+              $emailIdade = $faixas();
+              $aberto = ["técnicos" => 0, "serviços" => 0, "agenda apagada" => 0];
+              $abertoEstado = [];
+              $abertoIdade = $faixas();
+              $fat = ["exigida" => 0, "travados" => 0, "sem IBAN" => 0, "sem workspace" => 0, "sem AT pronta" => 0];
+
+              // Uma só passagem, aos grupos de 50 e sem as relações pesadas do modelo.
+              App\Models\Vendor::query()
+                  ->without(["servicesTypes", "operationAreas", "currentLocation"])
                   ->whereHas("user", fn ($q) => $q->where("is_test", false))
                   ->with("user")
-                  ->orderBy("id")
-                  ->get();
+                  ->chunkById(50, function ($lote) use ($hoje, $faixa, &$doc, &$falta, &$pendente, &$expirado, &$email, &$emailIdade, &$aberto, &$abertoEstado, &$abertoIdade, &$fat) {
+                      foreach ($lote as $v) {
+                          // DOCUMENTOS -- como o Vendor::cannotAcceptServiceReasons: um
+                          // documento caducado não conta também como em falta.
+                          if (! $v->all_documents_verified) {
+                              $doc["falham"]++;
+                              if ($v->documents()->doesntExist()) { $doc["nunca enviaram"]++; }
+                              $exp = $v->documents()
+                                  ->where("status", "approved")
+                                  ->whereNotNull("expiration_date")
+                                  ->whereDate("expiration_date", "<", $hoje)
+                                  ->get()
+                                  ->map(fn ($d) => $d->type?->name)
+                                  ->filter()
+                                  ->unique();
+                              $fal = $v->missing_documents->pluck("name")->filter()->diff($exp)->unique();
+                              $pen = $v->pending_documents->pluck("name")->filter()->unique();
+                              if ($fal->isNotEmpty()) { $doc["em falta"]++; }
+                              if ($pen->isNotEmpty()) { $doc["pendentes"]++; }
+                              if ($exp->isNotEmpty()) { $doc["caducados"]++; }
+                              foreach ($fal as $n) { $falta[$n] = ($falta[$n] ?? 0) + 1; }
+                              foreach ($pen as $n) { $pendente[$n] = ($pendente[$n] ?? 0) + 1; }
+                              foreach ($exp as $n) { $expirado[$n] = ($expirado[$n] ?? 0) + 1; }
+                          }
 
-              $soma = function (array &$mapa, $nomes) {
-                  foreach ($nomes as $n) { $mapa[$n] = ($mapa[$n] ?? 0) + 1; }
-              };
+                          // EMAIL
+                          if (! $v->user?->hasVerifiedEmail()) {
+                              $email["por confirmar"]++;
+                              if ($v->user?->hasVerifiedPhoneNumber()) { $email["com telemóvel"]++; }
+                              $emailIdade[$faixa($v->created_at)]++;
+                          }
+
+                          // SERVIÇOS ABERTOS
+                          $abertos = $v->openServices()->get();
+                          if ($abertos->isNotEmpty()) {
+                              $aberto["técnicos"]++;
+                              foreach ($abertos as $s) {
+                                  $aberto["serviços"]++;
+                                  $e = $s->status instanceof BackedEnum ? $s->status->value : (string) $s->status;
+                                  $p = $s->payment_status instanceof BackedEnum ? $s->payment_status->value : (string) $s->payment_status;
+                                  $chave = $e . " / pagamento " . $p;
+                                  $abertoEstado[$chave] = ($abertoEstado[$chave] ?? 0) + 1;
+                                  $abertoIdade[$faixa($s->updated_at ?? $s->created_at)]++;
+                                  if (App\Models\Schedule\Schedule::withTrashed()->where("service_id", $s->id)->exists()) { $aberto["agenda apagada"]++; }
+                              }
+                          }
+
+                          // FATURAÇÃO (a partir do 4.º serviço)
+                          if ($v->at_required) {
+                              $fat["exigida"]++;
+                              if (! $v->faturacao_em_dia) { $fat["travados"]++; }
+                              if ($v->iban == null) { $fat["sem IBAN"]++; }
+                              if ($v->invoice_workspace == null) { $fat["sem workspace"]++; }
+                              if (! $v->at_ready) { $fat["sem AT pronta"]++; }
+                          }
+                      }
+                  });
+
               $listar = function (array $mapa) use ($pad) {
                   arsort($mapa);
                   foreach ($mapa as $n => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $n . PHP_EOL; }
                   if (! $mapa) { echo "     (nenhum)" . PHP_EOL; }
               };
+              $listarFaixas = function (array $mapa) use ($pad) {
+                  foreach ($mapa as $n => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $n . PHP_EOL; }
+              };
 
-              // ---------------- DOCUMENTOS ----------------
-              $comFalha = 0; $nuncaEnviou = 0; $comFaltas = 0; $comPendentes = 0; $comExpirados = 0;
-              $falta = []; $pendente = []; $expirado = [];
-              foreach ($ts as $v) {
-                  if ($v->all_documents_verified) { continue; }
-                  $comFalha++;
-                  if ($v->documents()->doesntExist()) { $nuncaEnviou++; }
-                  // Como o Vendor::cannotAcceptServiceReasons: expirado não conta como em falta.
-                  $exp = $v->documents()
-                      ->where("status", "approved")
-                      ->whereNotNull("expiration_date")
-                      ->whereDate("expiration_date", "<", $hoje)
-                      ->get()
-                      ->map(fn ($d) => $d->type?->name)
-                      ->filter()
-                      ->unique();
-                  $fal = $v->missing_documents->pluck("name")->filter()->diff($exp)->unique();
-                  $pen = $v->pending_documents->pluck("name")->filter()->unique();
-                  if ($fal->isNotEmpty()) { $comFaltas++; }
-                  if ($pen->isNotEmpty()) { $comPendentes++; }
-                  if ($exp->isNotEmpty()) { $comExpirados++; }
-                  $soma($falta, $fal);
-                  $soma($pendente, $pen);
-                  $soma($expirado, $exp);
-              }
-              echo "-- DOCUMENTOS (" . $comFalha . " técnicos sem os documentos em dia) --" . PHP_EOL;
-              echo "nunca enviaram nenhum documento     = " . $nuncaEnviou . PHP_EOL;
-              echo "com algum obrigatório em falta      = " . $comFaltas . PHP_EOL;
+              echo "-- DOCUMENTOS (" . $doc["falham"] . " técnicos sem os documentos em dia) --" . PHP_EOL;
+              echo "nunca enviaram nenhum documento     = " . $doc["nunca enviaram"] . PHP_EOL;
+              echo "com algum obrigatório em falta      = " . $doc["em falta"] . PHP_EOL;
               $listar($falta);
-              echo "com algum à espera de validação     = " . $comPendentes . PHP_EOL;
+              echo "com algum à espera de validação     = " . $doc["pendentes"] . PHP_EOL;
               $listar($pendente);
-              echo "com algum aprovado mas caducado     = " . $comExpirados . PHP_EOL;
+              echo "com algum aprovado mas caducado     = " . $doc["caducados"] . PHP_EOL;
               $listar($expirado);
 
-              // ---------------- EMAIL ----------------
-              $semEmail = 0; $comTelemovel = 0; $idade = ["até 1 dia" => 0, "1 a 7 dias" => 0, "7 a 30 dias" => 0, "mais de 30 dias" => 0];
-              foreach ($ts as $v) {
-                  if ($v->user?->hasVerifiedEmail()) { continue; }
-                  $semEmail++;
-                  if ($v->user?->hasVerifiedPhoneNumber()) { $comTelemovel++; }
-                  $d = $v->created_at ? abs($v->created_at->diffInDays(now())) : 9999;
-                  $faixa = $d < 1 ? "até 1 dia" : ($d < 7 ? "1 a 7 dias" : ($d < 30 ? "7 a 30 dias" : "mais de 30 dias"));
-                  $idade[$faixa]++;
-              }
-              echo PHP_EOL . "-- EMAIL POR CONFIRMAR (" . $semEmail . " técnicos) --" . PHP_EOL;
-              echo "com o telemóvel já confirmado       = " . $comTelemovel . PHP_EOL;
+              echo PHP_EOL . "-- EMAIL POR CONFIRMAR (" . $email["por confirmar"] . " técnicos) --" . PHP_EOL;
+              echo "com o telemóvel já confirmado       = " . $email["com telemóvel"] . PHP_EOL;
               echo "registados há:" . PHP_EOL;
-              foreach ($idade as $faixa => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $faixa . PHP_EOL; }
+              $listarFaixas($emailIdade);
               echo "(o link do email vale " . config("auth.verification.expire", 60) . " minutos)" . PHP_EOL;
 
-              // ---------------- SERVIÇOS ABERTOS ----------------
-              $presos = 0; $servicos = 0; $estado = []; $agendaApagada = 0;
-              $idadeServ = ["até 1 dia" => 0, "1 a 7 dias" => 0, "7 a 30 dias" => 0, "mais de 30 dias" => 0];
-              foreach ($ts as $v) {
-                  $abertos = $v->openServices()->get();
-                  if ($abertos->isEmpty()) { continue; }
-                  $presos++;
-                  foreach ($abertos as $s) {
-                      $servicos++;
-                      $e = $s->status instanceof BackedEnum ? $s->status->value : (string) $s->status;
-                      $p = $s->payment_status instanceof BackedEnum ? $s->payment_status->value : (string) $s->payment_status;
-                      $chave = $e . " / pagamento " . $p;
-                      $estado[$chave] = ($estado[$chave] ?? 0) + 1;
-                      $ref = $s->updated_at ?? $s->created_at;
-                      $d = $ref ? abs($ref->diffInDays(now())) : 9999;
-                      $faixa = $d < 1 ? "até 1 dia" : ($d < 7 ? "1 a 7 dias" : ($d < 30 ? "7 a 30 dias" : "mais de 30 dias"));
-                      $idadeServ[$faixa]++;
-                      if (App\Models\Schedule\Schedule::withTrashed()->where("service_id", $s->id)->exists()) { $agendaApagada++; }
-                  }
-              }
-              echo PHP_EOL . "-- SERVIÇO ABERTO (" . $presos . " técnicos travados por " . $servicos . " serviços) --" . PHP_EOL;
+              echo PHP_EOL . "-- SERVIÇO ABERTO (" . $aberto["técnicos"] . " técnicos travados por " . $aberto["serviços"] . " serviços) --" . PHP_EOL;
               echo "por estado:" . PHP_EOL;
-              $listar($estado);
+              $listar($abertoEstado);
               echo "última mudança há:" . PHP_EOL;
-              foreach ($idadeServ as $faixa => $q) { echo "     " . $pad((string) $q, 4, true) . "  " . $faixa . PHP_EOL; }
-              echo "que eram agendados com a agenda apagada = " . $agendaApagada . PHP_EOL;
+              $listarFaixas($abertoIdade);
+              echo "que eram agendados com a agenda apagada = " . $aberto["agenda apagada"] . PHP_EOL;
 
-              // ---------------- FATURAÇÃO (a partir do 4.º serviço) ----------------
-              $exigida = 0; $travados = 0; $semIban = 0; $semWorkspace = 0; $atNaoPronta = 0;
-              foreach ($ts as $v) {
-                  if (! $v->at_required) { continue; }
-                  $exigida++;
-                  if (! $v->faturacao_em_dia) { $travados++; }
-                  if ($v->iban == null) { $semIban++; }
-                  if ($v->invoice_workspace == null) { $semWorkspace++; }
-                  if (! $v->at_ready) { $atNaoPronta++; }
-              }
-              echo PHP_EOL . "-- FATURAÇÃO: " . $exigida . " técnicos já fizeram 3 serviços, " . $travados . " travados por ela --" . PHP_EOL;
-              echo "sem IBAN                            = " . $semIban . PHP_EOL;
-              echo "sem conta de faturação (workspace)  = " . $semWorkspace . PHP_EOL;
-              echo "sem AT pronta (flag ou subutilizador) = " . $atNaoPronta . PHP_EOL;
+              echo PHP_EOL . "-- FATURAÇÃO: " . $fat["exigida"] . " técnicos já fizeram 3 serviços, " . $fat["travados"] . " travados por ela --" . PHP_EOL;
+              echo "sem IBAN                            = " . $fat["sem IBAN"] . PHP_EOL;
+              echo "sem conta de faturação (workspace)  = " . $fat["sem workspace"] . PHP_EOL;
+              echo "sem AT pronta (flag ou subutilizador) = " . $fat["sem AT pronta"] . PHP_EOL;
+              echo "(memória máxima usada: " . round(memory_get_peak_usage(true) / 1048576) . " MB)" . PHP_EOL;
             '
 
             echo
@@ -267,10 +286,14 @@ jobs:
               $pad = fn ($s, int $n, bool $esq = false) => $esq
                   ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
                   : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
-              $ids = App\Services\Operacoes\PodemTrabalhar::ids();
-              $ps = App\Models\Vendor::query()->whereIn("id", $ids)->with(["user", "currentLocation"])->get();
-              $moradas = [App\Enums\Services\AddressType::SCHEDULE_ADDRESS, App\Enums\Services\AddressType::FISCAL_ADDRESS];
+              // Margem para a leitura: o PHP de produção tem 128 MB, e o modelo do técnico
+              // carrega sempre os tipos de serviço (o PodemTrabalhar::ids incluído).
+              ini_set("memory_limit", "256M");
+              // Uma leitura não deixa rasto no Telescope (nem lhe enche a memória).
+              if (class_exists(Laravel\Telescope\Telescope::class)) { Laravel\Telescope\Telescope::stopRecording(); }
 
+              $ids = App\Services\Operacoes\PodemTrabalhar::ids();
+              $moradas = [App\Enums\Services\AddressType::SCHEDULE_ADDRESS, App\Enums\Services\AddressType::FISCAL_ADDRESS];
               $c = [
                   "Online agora" => 0,
                   "Offline" => 0,
@@ -283,31 +306,40 @@ jobs:
                   "ocupados agora num serviço" => 0,
                   "com a AT validada (flag e data)" => 0,
               ];
-              $imediato = 0; $agendado = 0;
-              foreach ($ps as $v) {
-                  $online = $v->status === App\Enums\Vendors\StatusVendor::ONLINE;
-                  $novos = $v->shouldReceive("new_requests");
-                  $tipos = $v->servicesTypes()->exists();
-                  $morada = $v->addresses()->whereIn("address_type", $moradas)->exists();
-                  $local = (bool) ($v->currentLocation?->latitude && $v->currentLocation?->longitude);
-                  $pausa = $v->invitesPausedUntil() !== null;
-                  $ocupado = $v->ocupadoAgora();
+              $total = 0; $imediato = 0; $agendado = 0;
 
-                  $c[$online ? "Online agora" : "Offline"]++;
-                  if (! $novos) { $c["desligaram \"Novos pedidos\""]++; }
-                  if (! $tipos) { $c["sem nenhum tipo de serviço"]++; }
-                  if ($v->availableCities()->doesntExist()) { $c["sem cidades escolhidas (sem restrição)"]++; }
-                  if (! $morada) { $c["sem morada de agenda nem fiscal"]++; }
-                  if (! $morada && ! $local) { $c["sem localização e sem morada"]++; }
-                  if ($pausa) { $c["em pausa (3 cancelamentos no mês)"]++; }
-                  if ($ocupado) { $c["ocupados agora num serviço"]++; }
-                  if ($v->at_valid && $v->at_validated_at) { $c["com a AT validada (flag e data)"]++; }
+              App\Models\Vendor::query()
+                  ->without(["servicesTypes", "operationAreas"])
+                  ->whereIn("id", $ids)
+                  ->with(["user", "currentLocation"])
+                  ->chunkById(50, function ($lote) use ($moradas, &$c, &$total, &$imediato, &$agendado) {
+                      foreach ($lote as $v) {
+                          $total++;
+                          $online = $v->status === App\Enums\Vendors\StatusVendor::ONLINE;
+                          $novos = $v->shouldReceive("new_requests");
+                          $tipos = $v->servicesTypes()->exists();
+                          $morada = $v->addresses()->whereIn("address_type", $moradas)->exists();
+                          $local = (bool) ($v->currentLocation?->latitude && $v->currentLocation?->longitude);
+                          $pausa = $v->invitesPausedUntil() !== null;
+                          $ocupado = $v->ocupadoAgora();
 
-                  $base = $online && $novos && $tipos && ! $pausa;
-                  if ($base && ! $ocupado && ($local || $morada)) { $imediato++; }
-                  if ($base && $morada) { $agendado++; }
-              }
-              echo "podem trabalhar (o número do ecrã) = " . $ps->count() . PHP_EOL;
+                          $c[$online ? "Online agora" : "Offline"]++;
+                          if (! $novos) { $c["desligaram \"Novos pedidos\""]++; }
+                          if (! $tipos) { $c["sem nenhum tipo de serviço"]++; }
+                          if ($v->availableCities()->doesntExist()) { $c["sem cidades escolhidas (sem restrição)"]++; }
+                          if (! $morada) { $c["sem morada de agenda nem fiscal"]++; }
+                          if (! $morada && ! $local) { $c["sem localização e sem morada"]++; }
+                          if ($pausa) { $c["em pausa (3 cancelamentos no mês)"]++; }
+                          if ($ocupado) { $c["ocupados agora num serviço"]++; }
+                          if ($v->at_valid && $v->at_validated_at) { $c["com a AT validada (flag e data)"]++; }
+
+                          $base = $online && $novos && $tipos && ! $pausa;
+                          if ($base && ! $ocupado && ($local || $morada)) { $imediato++; }
+                          if ($base && $morada) { $agendado++; }
+                      }
+                  });
+
+              echo "podem trabalhar (o número do ecrã) = " . $total . PHP_EOL;
               foreach ($c as $n => $q) { echo $pad($n, 42) . " = " . $q . PHP_EOL; }
               echo PHP_EOL . "convidáveis AGORA para um imediato (falta só a distância e as cidades) = " . $imediato . PHP_EOL;
               echo "convidáveis AGORA para um agendado (falta só a agenda, a distância e as cidades) = " . $agendado . PHP_EOL;
@@ -317,6 +349,7 @@ jobs:
                   ->where("status", App\Enums\Vendors\StatusVendor::ONLINE)
                   ->pluck("id");
               echo PHP_EOL . "Online no total = " . $todosOnline->count() . ", dos quais não podem trabalhar = " . $todosOnline->diff($ids)->count() . PHP_EOL;
+              echo "(memória máxima usada: " . round(memory_get_peak_usage(true) / 1048576) . " MB)" . PHP_EOL;
             '
 
             echo
@@ -327,23 +360,30 @@ jobs:
               $pad = fn ($s, int $n, bool $esq = false) => $esq
                   ? str_repeat(" ", max(0, $n - mb_strlen((string) $s))) . $s
                   : $s . str_repeat(" ", max(0, $n - mb_strlen((string) $s)));
+              // Margem para a leitura: o PHP de produção tem 128 MB, e o modelo do técnico
+              // carrega sempre os tipos de serviço (o PodemTrabalhar::ids incluído).
+              ini_set("memory_limit", "256M");
+              // Uma leitura não deixa rasto no Telescope (nem lhe enche a memória).
+              if (class_exists(Laravel\Telescope\Telescope::class)) { Laravel\Telescope\Telescope::stopRecording(); }
               $podem = App\Services\Operacoes\PodemTrabalhar::ids()->flip();
-              $ts = App\Models\Vendor::query()
-                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
-                  ->with("user")
-                  ->orderBy("id")
-                  ->get();
 
               $meses = [];
-              foreach ($ts as $v) {
-                  $m = $v->created_at ? $v->created_at->format("Y-m") : "sem data";
-                  $meses[$m] ??= ["registados" => 0, "telemóvel" => 0, "email" => 0, "documentos" => 0, "podem" => 0];
-                  $meses[$m]["registados"]++;
-                  if ($v->user?->hasVerifiedPhoneNumber()) { $meses[$m]["telemóvel"]++; }
-                  if ($v->user?->hasVerifiedEmail()) { $meses[$m]["email"]++; }
-                  if ($v->all_documents_verified) { $meses[$m]["documentos"]++; }
-                  if ($podem->has($v->id)) { $meses[$m]["podem"]++; }
-              }
+              App\Models\Vendor::query()
+                  ->without(["servicesTypes", "operationAreas", "currentLocation"])
+                  ->whereHas("user", fn ($q) => $q->where("is_test", false))
+                  ->with("user")
+                  ->chunkById(50, function ($lote) use ($podem, &$meses) {
+                      foreach ($lote as $v) {
+                          $m = $v->created_at ? $v->created_at->format("Y-m") : "sem data";
+                          $meses[$m] ??= ["registados" => 0, "telemóvel" => 0, "email" => 0, "documentos" => 0, "podem" => 0];
+                          $meses[$m]["registados"]++;
+                          if ($v->user?->hasVerifiedPhoneNumber()) { $meses[$m]["telemóvel"]++; }
+                          if ($v->user?->hasVerifiedEmail()) { $meses[$m]["email"]++; }
+                          if ($v->all_documents_verified) { $meses[$m]["documentos"]++; }
+                          if ($podem->has($v->id)) { $meses[$m]["podem"]++; }
+                      }
+                  });
+
               ksort($meses);
               echo "mês       registados  telemóvel  email  documentos  podem trabalhar" . PHP_EOL;
               foreach ($meses as $m => $r) {
@@ -354,4 +394,5 @@ jobs:
                       . $pad((string) $r["documentos"], 12, true)
                       . $pad((string) $r["podem"], 17, true) . PHP_EOL;
               }
+              echo "(memória máxima usada: " . round(memory_get_peak_usage(true) / 1048576) . " MB)" . PHP_EOL;
             '
