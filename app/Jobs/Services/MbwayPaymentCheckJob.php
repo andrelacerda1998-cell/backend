@@ -110,7 +110,7 @@ class MbwayPaymentCheckJob implements ShouldQueue
             if ($expired && Cache::add('payment-expired-notified:'.$this->service->id, true, now()->addHours(6))) {
                 // Guard atómico: notifica uma só vez por serviço (defesa contra dispatch duplo
                 // job-vs-reaper ou re-execução), para o mesmo push não ir duas vezes.
-                $this->service->customer->notify(new PaymentExpiredNotification($this->service->refresh()));
+                $this->service->customerUser?->notify(new PaymentExpiredNotification($this->service->refresh()));
             }
 
             return;
@@ -161,7 +161,10 @@ class MbwayPaymentCheckJob implements ShouldQueue
         });
 
         if ($confirmed) {
-            $confirmed->customer->notify(new PaymentSuccessNotification($confirmed));
+            // `customerUser`: a relação `customer` vem null quando o cliente
+            // também tem perfil de técnico, e o aviso rebentava depois de o
+            // pagamento já estar confirmado.
+            $confirmed->customerUser?->notify(new PaymentSuccessNotification($confirmed));
         }
     }
 }

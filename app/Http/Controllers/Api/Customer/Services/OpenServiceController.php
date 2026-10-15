@@ -420,9 +420,7 @@ class OpenServiceController extends Controller
             // fire another vendor push, producing many duplicate notifications. Once the service is
             // already PAID, just return the current state without re-notifying.
             if ($service->payment_status === PaymentStatus::PAID) {
-                return ApiSuccessResponse::make([
-                    'service' => $service->formatDataForCustomer(),
-                ]);
+                return $this->pagamentoConfirmado($service);
             }
 
             // Desfecho MBWay já decidido: devolver 402 para a app navegar para o ecrã de recusa
@@ -509,14 +507,41 @@ class OpenServiceController extends Controller
             });
 
             return match ($outcome) {
-                'confirmed_now', 'already_paid' => ApiSuccessResponse::make([
-                    'service' => $service->refresh()->formatDataForCustomer(),
-                ]),
+                'confirmed_now', 'already_paid' => $this->pagamentoConfirmado($service->refresh()),
                 'refused' => throw new PaymentRefused,
                 default => throw new PaymentNotComplete,
             };
         } catch (Exception $e) {
             return new ApiErrorResponse($e, 'Payment not completed', 400);
+        }
+    }
+
+    /**
+     * Pagamento confirmado: a app tem de o saber, aconteça o que acontecer ao
+     * resto da resposta.
+     *
+     * Formatar o serviço vinha depois do commit e fora do `catch (Exception)`.
+     * Um \Error na formatação (a 15/10/2026: `customer` null num cliente que
+     * também é técnico) dava 500, a app ignora-o e o ecrã "Estamos a aguardar
+     * o pagamento" continuava a perguntar por um pagamento já feito — até
+     * desistir e dizer que não tinha recebido a confirmação.
+     */
+    private function pagamentoConfirmado(Service $service)
+    {
+        try {
+            return ApiSuccessResponse::make([
+                'service' => $service->formatDataForCustomer(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return ApiSuccessResponse::make([
+                'service' => [
+                    'id' => $service->id,
+                    'status' => $service->status,
+                    'server_time' => now()->toIso8601String(),
+                ],
+            ]);
         }
     }
 

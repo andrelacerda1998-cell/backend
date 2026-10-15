@@ -608,7 +608,11 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             // explícito evita que o cliente confunda com o total do serviço.
             'amount' => $service->amount_for_vendor,
             'amount_for_vendor' => $service->amount_for_vendor,
-            'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),
+            // `customerUser` e não `customer`: a relação `customer` exclui quem
+            // também tem perfil de técnico, e aqui vinha null — a resposta
+            // rebentava (15/10/2026: o ecrã do MB Way ficava a aguardar um
+            // pagamento já confirmado).
+            'customer' => $service->customerUser?->only('name', 'phone_number', 'email', 'avatar'),
             'vendor' => $service->vendor->user ? [
                 'user' => $service->vendor->user->only('name', 'phone_number', 'email', 'avatar'),
                 'price_rate' => $service->vendor->price_rate,
@@ -789,7 +793,11 @@ class Service extends Model implements Auditable, HasMedia, ProductLimitedInterf
             // usa paymentOrder->payment_method_id —, e sem isto a app pedia ao
             // cliente para aprovar uma cobrança sem lhe dizer onde ia sair.
             'payment_method' => $service->paymentMethodPayload(),
-            'customer' => $service->customer->only('name', 'phone_number', 'email', 'avatar'),
+            // `customerUser` e não `customer`: a relação `customer` exclui quem
+            // também tem perfil de técnico, e aqui vinha null — a resposta
+            // rebentava (15/10/2026: o ecrã do MB Way ficava a aguardar um
+            // pagamento já confirmado).
+            'customer' => $service->customerUser?->only('name', 'phone_number', 'email', 'avatar'),
             'vendor' => $service?->vendor?->user ? [
                 'user' => $service->vendor->user->only('name', 'phone_number', 'email', 'avatar'),
                 'price_rate' => $service->vendor->price_rate,

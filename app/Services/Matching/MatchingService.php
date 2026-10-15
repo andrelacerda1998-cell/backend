@@ -202,7 +202,7 @@ class MatchingService
     {
         DB::afterCommit(function () use ($service) {
             try {
-                $service->customer?->notify(new MatchingCandidatesReadyNotification($service));
+                $service->customerUser?->notify(new MatchingCandidatesReadyNotification($service));
             } catch (\Throwable $e) {
                 report($e);
             }
@@ -419,8 +419,20 @@ class MatchingService
     public function avisarQueGanhou(Service $service): void
     {
         DB::afterCommit(function () use ($service) {
+            // Cada aviso no seu try. Estavam no mesmo, e o do cliente vinha
+            // primeiro: com um cliente que também é técnico, `customer` vinha
+            // null, o evento rebentava, e o push "O trabalho é teu" nunca saía.
+            // `customerUser` não tem o filtro que exclui quem tem perfil de
+            // técnico.
             try {
-                ServiceAcceptedEvent::dispatch($service->customer, ['id' => $service->id]);
+                if ($cliente = $service->customerUser) {
+                    ServiceAcceptedEvent::dispatch($cliente, ['id' => $service->id]);
+                }
+            } catch (Throwable $e) {
+                report($e);
+            }
+
+            try {
                 $service->vendor?->user?->notify(new ServiceWonNotification($service));
             } catch (Throwable $e) {
                 report($e);
