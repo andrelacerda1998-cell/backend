@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\AllowedZoneController;
 use App\Http\Controllers\Api\Admin\AuditController;
+use App\Http\Controllers\Api\Admin\ConversaDoServicoController;
 use App\Http\Controllers\Api\Admin\CoverageController;
 use App\Http\Controllers\Api\Admin\CustomerController;
 use App\Http\Controllers\Api\Admin\DocumentController;
@@ -98,6 +99,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     Route::post('/services/{service}/desistir-e-devolver', [ServiceActionController::class, 'desistirEDevolver']);
     // A equipa cancela o pedido: o cliente não paga, o técnico não é penalizado.
     Route::post('/services/{service}/cancelar', [ServiceActionController::class, 'cancelar']);
+    // A conversa cliente-técnico, só para resolver uma reclamação ou disputa
+    // (ver ConversaDoServicoController): os casos, e a leitura com caso e motivo.
+    Route::get('/services/{service}/conversa/casos', [ConversaDoServicoController::class, 'casos']);
+    // POST: o caso e o motivo vão no corpo e não no endereço, que fica nos logs.
+    Route::post('/services/{service}/conversa', [ConversaDoServicoController::class, 'ler']);
 
     // De que pedido é cada pagamento (por uuid, até 200 de uma vez) -- para
     // o backoffice abrir o pedido a partir de um pagamento do Payshop.
