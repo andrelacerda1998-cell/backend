@@ -49,7 +49,7 @@ class MbwayPaymentResolver
         $service->pending_schedule_data = null;
         $service->save();
 
-        $service->customer->notify(new PaymentRefusedNotification($service));
+        $service->customerUser?->notify(new PaymentRefusedNotification($service));
     }
 
     /**
