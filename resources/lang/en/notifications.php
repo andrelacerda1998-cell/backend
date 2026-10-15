@@ -172,6 +172,16 @@ return [
         'title' => 'Nobody available right now',
         'description' => 'We could not find professionals for :service_type. Try again or book another time.',
     ],
+    'matchingExpired' => [
+        'escolha_expirou' => [
+            'title' => 'Your time to choose ran out',
+            'description' => 'The request was cancelled and you were not charged. You can request again whenever you like.',
+        ],
+        'pagamento_expirou' => [
+            'title' => 'Your time to pay ran out',
+            'description' => 'The request was cancelled and you were not charged. You can request again whenever you like.',
+        ],
+    ],
     'serviceTimedOut' => [
         'title' => 'No response to your request',
         'description' => 'Nobody responded to your :service_type request in time. It has been canceled — you can try again.',

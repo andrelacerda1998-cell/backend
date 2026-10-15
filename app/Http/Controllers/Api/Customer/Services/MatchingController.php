@@ -74,6 +74,15 @@ class MatchingController extends Controller
                 ->latest('id')
                 ->first();
 
+            // Um pedido cujo prazo já passou não é "o que está aberto": só
+            // ainda não foi fechado, porque o `matching:advance` corre de
+            // minuto a minuto. Devolvê-lo era mandar o cliente de volta para
+            // um pedido morto, com o relógio a zero — e a cada toque em
+            // "pedir" acontecia o mesmo. Fecha-se aqui e segue um pedido novo.
+            if ($existing && $this->matching->expirarSeJaPassou($existing)) {
+                $existing = null;
+            }
+
             // ...mas só quando é o MESMO pedido. Devolvia-se o aberto fosse ele
             // qual fosse: quem desistia de um desentupimento e pedia um
             // eletricista recebia de volta o desentupimento, com os técnicos
@@ -375,6 +384,13 @@ class MatchingController extends Controller
                 ));
             }
 
+            // O prazo de pagar já tinha acabado (o `matching:advance` fechou o
+            // pedido). Era "This service is not awaiting payment", em inglês,
+            // a quem tocou em pagar no último segundo.
+            if ($service->status === ServiceStatus::MATCHING_FAILED) {
+                throw new MatchingCheckoutException('exceptions.services.checkout_expired', 409);
+            }
+
             if ($service->status !== ServiceStatus::AWAITING_PAYMENT) {
                 throw new MatchingCheckoutException('This service is not awaiting payment', 409);
             }
@@ -626,6 +642,11 @@ class MatchingController extends Controller
                 // cinco minutos um desvio de trinta segundos e um decimo do
                 // tempo. A app conta pela diferenca entre estes dois.
                 'server_time' => now()->toIso8601String(),
+                // Porque é que acabou, quando acabou: `expired` (havia quem
+                // aceitasse e o tempo do cliente acabou) ou `no_vendors`. Sem
+                // isto o ecrã dizia "nenhum técnico aceitou" a quem tinha dois
+                // à espera e ficou sem tempo para escolher.
+                'end_reason' => $this->matching->motivoDoFim($service),
             ],
             'candidates' => $candidates->map(fn (ServiceCandidate $c) => [
                 'id' => $c->id,

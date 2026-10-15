@@ -219,8 +219,12 @@ trait CalculateServicePriceForCustomer
             throw new CustomerCantRequestServices('exceptions.services.verify_phone_to_request');
         }
 
+        // Com o motivo, escrito para o cliente. A frase genérica ("O cliente
+        // não pode solicitar um serviço") era tudo o que a app mostrava ao
+        // tocar em "Pedir agora" — sem dizer se faltava a morada ou se havia
+        // um serviço por terminar, o cliente ficava sem saber o que fazer.
         if (! $customer->can_request_service) {
-            throw new CustomerCantRequestServices;
+            throw CustomerCantRequestServices::comMotivos($customer->cannotRequestServiceReasonsForApp());
         }
 
         return $customer;

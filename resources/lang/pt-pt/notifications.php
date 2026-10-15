@@ -195,6 +195,21 @@ return [
         'title' => 'Ninguém disponível de momento',
         'description' => 'Não encontrámos profissionais para :service_type. Tenta outra vez ou marca para outra hora.',
     ],
+    /**
+     * O pedido acabou porque o CLIENTE ficou sem tempo — havia profissionais.
+     * Não é o "ninguém disponível": diz o que aconteceu e que não houve
+     * cobrança, que é a primeira dúvida de quem estava a pagar.
+     */
+    'matchingExpired' => [
+        'escolha_expirou' => [
+            'title' => 'O tempo para escolher acabou',
+            'description' => 'O pedido foi cancelado e não foste cobrado. Podes pedir outra vez quando quiseres.',
+        ],
+        'pagamento_expirou' => [
+            'title' => 'O tempo para pagar acabou',
+            'description' => 'O pedido foi cancelado e não foste cobrado. Podes pedir outra vez quando quiseres.',
+        ],
+    ],
     'serviceTimedOut' => [
         'title' => 'Pedido sem resposta',
         'description' => 'Ninguém respondeu ao teu pedido de :service_type a tempo. Foi cancelado — podes tentar outra vez.',

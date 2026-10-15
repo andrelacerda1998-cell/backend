@@ -175,6 +175,16 @@ return [
         'title' => 'Nadie disponible ahora mismo',
         'description' => 'No hemos encontrado profesionales para :service_type. Inténtalo otra vez o reserva para otra hora.',
     ],
+    'matchingExpired' => [
+        'escolha_expirou' => [
+            'title' => 'Se acabó el tiempo para elegir',
+            'description' => 'La solicitud se canceló y no se te ha cobrado nada. Puedes volver a pedir cuando quieras.',
+        ],
+        'pagamento_expirou' => [
+            'title' => 'Se acabó el tiempo para pagar',
+            'description' => 'La solicitud se canceló y no se te ha cobrado nada. Puedes volver a pedir cuando quieras.',
+        ],
+    ],
     'serviceTimedOut' => [
         'title' => 'Solicitud sin respuesta',
         'description' => 'Nadie ha respondido a tu solicitud de :service_type a tiempo. Se ha cancelado — puedes intentarlo otra vez.',

@@ -175,6 +175,16 @@ return [
         'title' => 'Personne de disponible pour le moment',
         'description' => 'Nous n\'avons pas trouvé de pros pour :service_type. Réessaie ou choisis une autre heure.',
     ],
+    'matchingExpired' => [
+        'escolha_expirou' => [
+            'title' => 'Le temps pour choisir est écoulé',
+            'description' => 'La demande a été annulée et tu n\'as pas été débité. Tu peux refaire une demande quand tu veux.',
+        ],
+        'pagamento_expirou' => [
+            'title' => 'Le temps pour payer est écoulé',
+            'description' => 'La demande a été annulée et tu n\'as pas été débité. Tu peux refaire une demande quand tu veux.',
+        ],
+    ],
     'serviceTimedOut' => [
         'title' => 'Demande sans réponse',
         'description' => 'Personne n\'a répondu à ta demande :service_type à temps. Elle a été annulée — tu peux réessayer.',

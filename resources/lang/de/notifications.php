@@ -167,6 +167,16 @@ return [
         'title' => 'Gerade niemand verfügbar',
         'description' => 'Wir haben keine Profis für :service_type gefunden. Versuche es noch einmal oder wähle eine andere Zeit.',
     ],
+    'matchingExpired' => [
+        'escolha_expirou' => [
+            'title' => 'Die Zeit zum Auswählen ist abgelaufen',
+            'description' => 'Die Anfrage wurde storniert und dir wurde nichts berechnet. Du kannst jederzeit neu anfragen.',
+        ],
+        'pagamento_expirou' => [
+            'title' => 'Die Zeit zum Bezahlen ist abgelaufen',
+            'description' => 'Die Anfrage wurde storniert und dir wurde nichts berechnet. Du kannst jederzeit neu anfragen.',
+        ],
+    ],
     'serviceTimedOut' => [
         'title' => 'Anfrage ohne Antwort',
         'description' => 'Niemand hat rechtzeitig auf deine Anfrage für :service_type geantwortet. Wir haben sie storniert — du kannst es noch einmal versuchen.',

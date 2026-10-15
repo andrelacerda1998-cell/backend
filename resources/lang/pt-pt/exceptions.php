@@ -28,6 +28,7 @@ return [
         'service_already_canceled' => 'O serviço já foi cancelado.',
         'service_not_possible_to_cancel' => 'O serviço não pode ser cancelado.',
         'payment_already_confirmed' => 'O pagamento já foi confirmado — o pedido segue em frente.',
+        'checkout_expired' => 'O tempo para pagar acabou. Não foste cobrado — podes pedir outra vez.',
     ],
     'customer' => [
         'only_customers_allowed' => 'Apenas clientes podem aceder a este endpoint.',
