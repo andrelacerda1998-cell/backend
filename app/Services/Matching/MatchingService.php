@@ -511,6 +511,46 @@ class MatchingService
     }
 
     /**
+     * O pagamento de um pedido de seleção falhou (MB Way recusado ou nunca
+     * respondido): quem ainda estava ligado a ele fica a saber.
+     *
+     * Até 15/10/2026 ninguém lho dizia: o escolhido recebia "O cliente
+     * escolheu-te, falta o pagamento" e depois nada — a recusa e a expiração do
+     * MB Way passavam o pedido a REFUSED_MBWAY/EXPIRED_MBWAY sem tocar nos
+     * candidatos. O escolhido leva push, como no `expireCheckout`; os outros
+     * (se ainda houver) só o histórico. Num pedido do fluxo antigo não há
+     * candidatos e não faz nada.
+     */
+    public function fecharSemPagamento(Service $service): void
+    {
+        $abertos = $service->candidates()
+            ->whereIn('status', [
+                CandidateStatus::SHORTLISTED,
+                CandidateStatus::NOTIFIED,
+                CandidateStatus::ACCEPTED,
+                CandidateStatus::SELECTED,
+            ])
+            ->with('vendor')
+            ->get();
+
+        if ($abertos->isEmpty()) {
+            return;
+        }
+
+        $service->candidates()
+            ->whereKey($abertos->modelKeys())
+            ->update(['status' => CandidateStatus::LOST]);
+
+        foreach ($abertos as $candidate) {
+            $this->notifyVendor(
+                $candidate,
+                MatchingRequestClosedEvent::class,
+                comPush: $candidate->status === CandidateStatus::SELECTED,
+            );
+        }
+    }
+
+    /**
      * Fecha um pedido em seleção: os convites e o escolhido passam a LOST, o
      * pedido a CANCELED, e quem tinha respondido é avisado de que o pedido
      * fechou (histórico e websocket, sem push — não perdeu para ninguém).

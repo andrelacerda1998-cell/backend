@@ -8,7 +8,9 @@ use App\Models\Service;
 use App\Notifications\Customer\Mbway\PaymentExpiredNotification;
 use App\Notifications\Customer\Mbway\PaymentSuccessNotification;
 use App\Services\Common\Services\MaterializePendingSchedule;
+use App\Services\Common\Services\ConsultarOrdemPayshop;
 use App\Services\Common\Services\MbwayPaymentResolver;
+use App\Services\Matching\MatchingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -28,6 +30,9 @@ class MbwayPaymentCheckJob implements ShouldQueue
     // O job é idempotente (guards de PAID e estado terminal no handle), por isso repetir é seguro.
     public int $tries = 3;
 
+    /** Verificações de 10 em 10 s antes de desistir: 24 × 10 s = 4 minutos. */
+    public const MAX_TENTATIVAS = 24;
+
     private int $attempts;
 
     public function __construct(private readonly Service $service, int $attempts = 1)
@@ -41,6 +46,21 @@ class MbwayPaymentCheckJob implements ShouldQueue
     public function backoff(): array
     {
         return [10, 30, 60];
+    }
+
+    /**
+     * A última verificação, fora da cadeia normal de 10 em 10 s: o que o job
+     * decide quando as tentativas acabam. Pagamento autorizado → confirma;
+     * recusado → recusa; ainda sem resposta → expira e liberta.
+     *
+     * Usado pela rede de segurança (`services:resgatar-mbway-presos`) quando
+     * a cadeia parou a meio — um erro na confirmação esgotava as 3 tentativas
+     * do job e o pedido ficava em AwaitingPayment para sempre, com o dinheiro
+     * cativo (pedido 299, 15/10/2026).
+     */
+    public static function ultimaVerificacao(Service $service): void
+    {
+        (new self($service, self::MAX_TENTATIVAS + 1))->handle();
     }
 
     public function failed(\Throwable $e): void
@@ -70,7 +90,7 @@ class MbwayPaymentCheckJob implements ShouldQueue
         }
 
         $paymentOrder = $this->service->paymentOrder;
-        $paymentOrder = $paymentOrder?->updateData();
+        $paymentOrder = $paymentOrder ? app(ConsultarOrdemPayshop::class)->atualizar($paymentOrder) : null;
 
         if (! $paymentOrder) {
             $this->confirmPayment();
@@ -80,7 +100,7 @@ class MbwayPaymentCheckJob implements ShouldQueue
 
         if (! in_array($paymentOrder->status, [Status::SUCCESS, Status::PENDING_CONFIRMATION, Status::REFUNDED])) {
             // 24 attempts * 10 seconds = 240 seconds = 4 minutes (max time to wait for payment)
-            if ($this->attempts <= 24) {
+            if ($this->attempts <= self::MAX_TENTATIVAS) {
                 MbwayPaymentCheckJob::dispatch($this->service, $this->attempts + 1)->delay(
                     now()->addSeconds(config('services.request.mbway_payment_check_timeout'))
                 );
@@ -103,6 +123,10 @@ class MbwayPaymentCheckJob implements ShouldQueue
                 $locked->status_justification = 'internal/services.mbway.expired';
                 $locked->pending_schedule_data = null;
                 $locked->save();
+
+                // Fluxo de seleção: o técnico escolhido fica a saber que o
+                // pedido caiu (ver MatchingService::fecharSemPagamento).
+                app(MatchingService::class)->fecharSemPagamento($locked);
 
                 return true;
             });

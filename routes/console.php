@@ -37,6 +37,10 @@ Schedule::command('notifications:process-campaigns')->everyMinute()->withoutOver
 // expira os não confirmados). Read-only no Payshop (details()); não chama cancel() — ver item 15.
 Schedule::command('services:expire-pending-3ds')->everyFiveMinutes()->withoutOverlapping();
 
+// Rede de segurança dos MB Way: confirma, recusa ou expira os que a verificação
+// automática (MbwayPaymentCheckJob) deixou por resolver. Ver o comando.
+Schedule::command('services:resgatar-mbway-presos')->everyFiveMinutes()->withoutOverlapping();
+
 // Seleção de profissional: fecha convites expirados, alarga as ondas e desiste
 // dos pedidos sem resposta (docs/matching.md). Ao minuto porque as janelas do
 // fluxo imediato são de 60 segundos — de cinco em cinco minutos, um cliente
