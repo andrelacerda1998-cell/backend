@@ -501,6 +501,7 @@ class OpenServiceController extends Controller
                 // MbwayPaymentCheckJob::confirmPayment). Se a materialização lançar, o rollback anula
                 // o markPaid → o serviço nunca fica "PAID mas não materializado"; o próximo poll/job
                 // repete (MaterializePendingSchedule é idempotente via guard scheduleExists).
+                MbwayPaymentResolver::prepararAgendadoDaSelecao($locked);
                 app(MaterializePendingSchedule::class)->handle($locked);
                 app(MbwayPaymentResolver::class)->markPaid($locked);
 
