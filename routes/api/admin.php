@@ -84,6 +84,14 @@ Route::group(['prefix' => 'admin', 'middleware' => 'admin.api'], function () {
     // a correr mal. Criar continua no Filament — criar uma é enviar push a
     // milhares de pessoas.
     Route::get('/notification-campaigns', [NotificationCampaignController::class, 'index']);
+    // Criar no backoffice (15/10/2026): nasce desligada, como rascunho; conta-se
+    // o público antes de a ligar. As rotas fixas vêm antes de {campaign}.
+    Route::post('/notification-campaigns', [NotificationCampaignController::class, 'store']);
+    Route::post('/notification-campaigns/publico', [NotificationCampaignController::class, 'publico']);
+    Route::post('/notification-campaigns/traduzir', [NotificationCampaignController::class, 'traduzir']);
+    Route::get('/notification-campaigns/{campaign}/publico', [NotificationCampaignController::class, 'publicoDe']);
+    Route::put('/notification-campaigns/{campaign}', [NotificationCampaignController::class, 'update']);
+    Route::delete('/notification-campaigns/{campaign}', [NotificationCampaignController::class, 'destroy']);
     Route::put('/notification-campaigns/{campaign}/active', [NotificationCampaignController::class, 'setActive']);
 
     // O estado do marketplace agora: pedidos, oferta e liquidez (backoffice › Operações ao vivo).
