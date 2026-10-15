@@ -6,6 +6,7 @@ use App\Enums\Services\AddressType;
 use App\Exceptions\Api\Vendor\Invoicing\VendorInvalidAtCredentials;
 use App\Exceptions\Api\Vendor\VendorDuplicatedSequence;
 use App\Models\Service;
+use App\Models\ServiceExtra;
 use App\Models\Vendor;
 use App\Services\InvoiceXpress\Contracts\HasInvoiceActions;
 use App\Services\InvoiceXpress\Contracts\HasInvoicesItems;
@@ -159,13 +160,60 @@ class InvoiceVendorService
             $data = $emitidaEm;
         }
 
-        $payload = $this->generateInvoicePayload($data, $data, $service->id, $customer, [$this->item($descricao, $amount)]);
+        $payload = $this->generateInvoicePayload($data, $data, $service->id, $customer, $this->linhasDaFatura($service, $descricao, $amount));
         $response = $this->sendRequest('/invoice_receipts.json', 'POST', $payload);
         $service->invoice_id = $response['invoice_receipt']['id'];
         $service->save();
 
         return $response['invoice_receipt']['id'];
 
+    }
+
+    /**
+     * As linhas da fatura: o serviço e os extras que o cliente pagou.
+     *
+     * As peças e o tempo extra são cobrados ao cliente quando ele os aprova, e
+     * o `CloseService::settleExtras` credita-os ao técnico no fecho. Mas a
+     * fatura levava só `$service->amount`, onde os extras não entram: num
+     * serviço de 60 € com uma peça de 50 € e meia hora extra de 15 €, o cliente
+     * pagava 125 € e a fatura dizia 60 €. Ficavam 65 € sem documento fiscal, em
+     * nome do técnico.
+     *
+     * Entra o mesmo que o `settleExtras` credita: aprovado e cobrado
+     * (`isCharged()`). O que vai para a carteira do técnico é o que vai para a
+     * fatura; o que o cliente recusou, ou cuja cobrança falhou, não entra em
+     * nenhuma das duas. A fatura sai 30 s depois do fecho (ServiceObserver), já
+     * com a captura dos extras MBWay feita.
+     *
+     * IVA a 23% em tudo (decisão do André, 02/10/2026): a taxa é do documento
+     * (`generateInvoicePayload`), e as linhas dos extras herdam-na.
+     */
+    private function linhasDaFatura(Service $service, string $descricao, $amount): array
+    {
+        $linhas = [$this->item($descricao, $amount)];
+
+        $extras = $service->extras()->where('status', 'approved')->orderBy('id')->get();
+
+        foreach ($extras as $extra) {
+            // Zero euros não é uma linha de fatura, e o que não foi cobrado não se fatura.
+            if (! $extra->isCharged() || (int) $extra->amount <= 0) {
+                continue;
+            }
+
+            $linhas[] = $this->item($this->descricaoDoExtra($extra), (int) $extra->amount);
+        }
+
+        return $linhas;
+    }
+
+    /** O que o cliente lê na fatura por baixo do serviço. */
+    private function descricaoDoExtra(ServiceExtra $extra): string
+    {
+        if ($extra->type === 'part') {
+            return 'Peça/material: '.($extra->description ? Str::limit($extra->description, 100) : 'sem descrição');
+        }
+
+        return 'Tempo extra: '.((int) $extra->minutes).' min';
     }
 
     /**
