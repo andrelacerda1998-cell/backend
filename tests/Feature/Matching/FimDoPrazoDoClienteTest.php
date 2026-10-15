@@ -240,6 +240,18 @@ class FimDoPrazoDoClienteTest extends TestCase
         );
     }
 
+    /** Um cliente que também tem perfil de técnico recebe o aviso na mesma. */
+    public function test_o_cliente_que_tambem_e_tecnico_sabe_que_o_tempo_acabou(): void
+    {
+        $cliente = $this->cliente();
+        Vendor::factory()->create(['user_id' => $cliente->id]);
+        [$service] = $this->porPagar($cliente, ServicesType::factory()->create(), 400);
+
+        app(MatchingService::class)->expireCheckout($service);
+
+        Notification::assertSentTo($cliente, MatchingFailedNotification::class);
+    }
+
     public function test_quem_tinha_profissionais_a_espera_nao_ouve_ninguem_disponivel(): void
     {
         $cliente = $this->cliente();

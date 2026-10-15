@@ -600,7 +600,9 @@ class MatchingService
     {
         DB::afterCommit(function () use ($service, $motivo) {
             try {
-                $service->customer?->notify(new MatchingFailedNotification($service, $motivo));
+                // `customerUser`: a relação `customer` exclui quem também tem
+                // perfil de técnico, e esse cliente ficava sem o aviso.
+                $service->customerUser?->notify(new MatchingFailedNotification($service, $motivo));
             } catch (\Throwable $e) {
                 report($e);
             }
