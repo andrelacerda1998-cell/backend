@@ -56,6 +56,12 @@ final class CoberturaPelasCidades
     /** @var array<string, list<City>> o catálogo inteiro, pelo nome normalizado */
     private array $catalogo;
 
+    /** @var array<string, list<City>> o mesmo, pelo nome sem "de/da/do…" */
+    private array $catalogoSemParticulas;
+
+    /** @var Collection<int, City> as cidades com centro (já geocodificadas) */
+    private Collection $comCentro;
+
     public function __construct(private readonly bool $testes = false)
     {
         $this->tecnicosPorCidade = $this->tecnicos()
@@ -73,6 +79,13 @@ final class CoberturaPelasCidades
             ->groupBy(fn (City $c) => City::normalizar((string) $c->name))
             ->map(fn (Collection $mesmoNome) => $mesmoNome->values()->all())
             ->all();
+        $this->catalogoSemParticulas = $cidades
+            ->groupBy(fn (City $c) => self::semParticulas((string) $c->name))
+            ->map(fn (Collection $mesmoNome) => $mesmoNome->values()->all())
+            ->all();
+        $this->comCentro = $cidades
+            ->filter(fn (City $c) => $c->latitude !== null && $c->longitude !== null)
+            ->values();
     }
 
     /**
@@ -111,6 +124,56 @@ final class CoberturaPelasCidades
     }
 
     /**
+     * A cidade do catálogo onde fica uma morada, para contar a procura por cidade.
+     *
+     * A morada de um pedido traz o nome que o mapa lhe deu, que tanto é uma
+     * cidade ("Almada") como uma localidade ou freguesia ("Turcifal"). Contada
+     * pelo nome, a Cobertura mostrava localidades como se fossem cidades e
+     * dizia que nenhum técnico as podia escolher. Por ordem:
+     *
+     *  1. o nome, se for o de uma cidade do catálogo (com duas iguais, a do mesmo distrito);
+     *  2. o nome sem "de/da/do…": a morada diz "Costa de Caparica" e o catálogo "Costa da Caparica";
+     *  3. as coordenadas: das cidades que a contêm (centro e raio, City::contem,
+     *     a regra do matching), a de centro mais perto.
+     *
+     * Null quando a morada não cai em cidade nenhuma.
+     */
+    public function cidadeDaMorada(?string $nome, ?string $distrito, ?float $latitude, ?float $longitude): ?City
+    {
+        if ($nome !== null && trim($nome) !== '') {
+            $pelaGrafia = self::semParticulas($nome);
+            $cidade = $this->doCatalogo($nome, $distrito)
+                ?? ($pelaGrafia === '' ? null : self::doDistrito($this->catalogoSemParticulas[$pelaGrafia] ?? [], $distrito));
+
+            if ($cidade !== null) {
+                return $cidade;
+            }
+        }
+
+        if ($latitude === null || $longitude === null) {
+            return null;
+        }
+
+        $maisPerto = null;
+        $menorDistancia = PHP_INT_MAX;
+
+        foreach ($this->comCentro as $cidade) {
+            if (! $cidade->contem($latitude, $longitude, null)) {
+                continue;
+            }
+
+            $distancia = calculate_distance($cidade->latitude, $cidade->longitude, $latitude, $longitude);
+
+            if ($distancia < $menorDistancia) {
+                $maisPerto = $cidade;
+                $menorDistancia = $distancia;
+            }
+        }
+
+        return $maisPerto;
+    }
+
+    /**
      * Os técnicos que não escolheram cidade nenhuma.
      *
      * @return list<int>
@@ -140,8 +203,16 @@ final class CoberturaPelasCidades
     /** A cidade do catálogo com este nome; com dois iguais, a do mesmo distrito. */
     private function doCatalogo(string $nome, ?string $distrito): ?City
     {
-        $mesmoNome = $this->catalogo[City::normalizar($nome)] ?? [];
+        return self::doDistrito($this->catalogo[City::normalizar($nome)] ?? [], $distrito);
+    }
 
+    /**
+     * Das cidades com o mesmo nome, a do distrito pedido (ou a primeira).
+     *
+     * @param  list<City>  $mesmoNome
+     */
+    private static function doDistrito(array $mesmoNome, ?string $distrito): ?City
+    {
         if ($mesmoNome === []) {
             return null;
         }
@@ -155,5 +226,13 @@ final class CoberturaPelasCidades
         }
 
         return $mesmoNome[0];
+    }
+
+    /** O nome normalizado sem as partículas, que mudam de uma grafia para outra. */
+    private static function semParticulas(string $nome): string
+    {
+        $palavras = explode(' ', City::normalizar($nome));
+
+        return implode(' ', array_values(array_diff($palavras, ['d', 'de', 'da', 'do', 'das', 'dos'])));
     }
 }
