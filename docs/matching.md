@@ -410,6 +410,16 @@ confirmam com `MbwayPaymentResolver::markPaid` e avisam no
 `MaterializePendingSchedule`. Até 14/10/2026 só o cartão avisava, e o regresso
 do 3DS deixava o serviço em `Pending`.
 
+**Um MB Way preso não fica preso.** Se a verificação automática do MB Way
+(`MbwayPaymentCheckJob`, 4 minutos) parar a meio, o
+`services:resgatar-mbway-presos` (de 5 em 5 minutos) dá a última verificação
+aos que estão por resolver há mais de 10 minutos e menos de 2 horas:
+autorizado confirma, recusado recusa, nunca respondido expira. Mais antigos
+ficam para a equipa ("Cancelar" no backoffice). Quando um MB Way do fluxo de
+seleção é recusado ou expira, o técnico escolhido recebe "O pedido foi
+cancelado", com push (`MatchingService::fecharSemPagamento`). Até 15/10/2026
+ninguém lho dizia, e o pedido 299 ficou preso com o dinheiro cativo.
+
 ## Endpoints do profissional
 
 | método | rota | o que faz |

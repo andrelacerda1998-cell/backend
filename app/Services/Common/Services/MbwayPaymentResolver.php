@@ -6,6 +6,7 @@ use App\Enums\Services\PaymentStatus;
 use App\Enums\Services\ServiceStatus;
 use App\Models\Service;
 use App\Notifications\Customer\Mbway\PaymentRefusedNotification;
+use App\Services\Matching\MatchingService;
 
 /**
  * Desfechos de pagamento MBWay partilhados entre o MbwayPaymentCheckJob (polling do backend),
@@ -48,6 +49,9 @@ class MbwayPaymentResolver
         $service->status_justification = 'internal/services.mbway.refused';
         $service->pending_schedule_data = null;
         $service->save();
+
+        // Fluxo de seleção: o técnico escolhido fica a saber que o pedido caiu.
+        app(MatchingService::class)->fecharSemPagamento($service);
 
         $service->customerUser?->notify(new PaymentRefusedNotification($service));
     }
