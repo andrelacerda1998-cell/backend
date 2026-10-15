@@ -1,0 +1,142 @@
+name: Ler o pagamento MB Way preso
+
+# Só por accionamento manual. Responde a UMA pergunta: porque é que o MB Way
+# de 15/10/2026 (ordem Payshop 02CE0BB9…, 20,34 €, autorizada às 10:52:03 UTC
+# e em PENDING_CONFIRMATION no Payshop) deixou o pedido em AwaitingPayment —
+# nem o ecrã de espera da app nem o MbwayPaymentCheckJob gravaram a
+# confirmação, e o job também não o expirou ao fim dos 4 minutos.
+#
+# SÓ LEITURAS. Nada aqui escreve na base de dados, no Payshop, na fila ou no
+# índice: nem `updateData()`, nem `queue:retry`, nem nada que chame o Payshop.
+#
+# SEM DADOS PESSOAIS NO RESULTADO: só ids, estados e datas. Nas mensagens de
+# erro, emails e telefones são mascarados antes de sair do servidor.
+on:
+  workflow_dispatch:
+
+# De propósito SEM o grupo `deploy-production`: é uma leitura, não deve
+# segurar o lugar a um deploy nem ficar atrás de um.
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    name: Ler o pedido, a ordem, a fila e os erros
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Traz o portão de aprovação manual: abrir uma sessão SSH à produção
+    # merece aprovação explícita, mesmo só para ler.
+    environment: production
+    steps:
+      - name: Ler no contentor de produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Comando FIXO, e não um input: aceitar um comando por parâmetro
+          # transformava este botão numa shell remota para produção.
+          script: |
+            set -uo pipefail
+            cd ~/project-laravel
+            ART="docker compose exec -T laravel-prod php artisan"
+            MASCARA='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[email]/g; s/\+?351 ?[0-9]{9}/[telefone]/g; s/\b9[0-9]{8}\b/[telefone]/g'
+
+            echo "=============================================="
+            echo " 1. O PEDIDO E A ORDEM DO MB WAY"
+            echo "=============================================="
+            $ART tinker --execute='
+              echo "fuso da app: ".config("app.timezone")." | agora: ".now().PHP_EOL;
+              $ordem = RwInteractive\PayshopSdk\Models\PaymentOrder::query()
+                  ->whereRaw("upper(uuid) = ?", ["02CE0BB9-6624-46C4-AEBF-4C4A40382E49"])->first();
+              if (! $ordem) { echo "ordem 02CE0BB9 NAO existe na base".PHP_EOL; }
+              else {
+                  echo "ordem id=".$ordem->id." estado_local=".($ordem->status?->value ?? $ordem->status)
+                      ." metodo=".($ordem->payment_method_id ?? "null")." criada=".$ordem->created_at." atualizada=".$ordem->updated_at.PHP_EOL;
+                  echo "pedidos com esta ordem: ".App\Models\Service::where("payment_order_id", $ordem->id)->pluck("id")->implode(", ").PHP_EOL;
+              }
+
+              $cliente = App\Models\User::find(1241);
+              echo PHP_EOL."user 1241: existe=".($cliente ? "sim" : "nao")
+                  ." tem_perfil_de_tecnico=".($cliente && $cliente->vendor()->exists() ? "SIM" : "nao").PHP_EOL;
+
+              $pedidos = App\Models\Service::where("customer_id", 1241)
+                  ->where("created_at", ">=", now()->subHours(30))->orderBy("id")->get();
+              echo PHP_EOL."pedidos do user 1241 nas ultimas 30 h: ".$pedidos->count().PHP_EOL;
+              foreach ($pedidos as $s) {
+                  $po = $s->payment_order_id ? RwInteractive\PayshopSdk\Models\PaymentOrder::find($s->payment_order_id) : null;
+                  echo "  #".$s->id
+                      ." estado=".($s->status?->value ?? $s->status)
+                      ." pagamento=".($s->payment_status?->value ?? $s->payment_status)
+                      ." ordem=".($s->payment_order_id ?? "null")
+                      .($po ? " (".substr($po->uuid, 0, 8)." ".($po->status?->value ?? $po->status).")" : "")
+                      ." tecnico=".($s->vendor_id ?? "null")
+                      ." agendado=".($s->pending_schedule_data ? "sim" : "nao")
+                      ." criado=".$s->created_at." atualizado=".$s->updated_at
+                      ." relacao_customer_nula=".($s->customer === null ? "SIM" : "nao").PHP_EOL;
+                  foreach ($s->candidates()->orderBy("rank")->get() as $c) {
+                      echo "      candidato vendor=".$c->vendor_id." estado=".($c->status?->value ?? $c->status)
+                          ." respondeu=".($c->responded_at ?? "-")." atualizado=".$c->updated_at.PHP_EOL;
+                  }
+                  foreach (App\Models\ServiceEvent::where("service_id", $s->id)->orderBy("id")->get() as $e) {
+                      echo "      evento ".$e->ocorreu_em." ".$e->tipo." ".($e->estado_de ?? "-")." -> ".($e->estado_para ?? "-").PHP_EOL;
+                  }
+              }
+            ' 2>&1 | sed -E "$MASCARA" || echo "(não deu para ler o pedido)"
+
+            echo
+            echo "=============================================="
+            echo " 2. A FILA: HORIZON, TAMANHOS E JOBS FALHADOS"
+            echo "=============================================="
+            $ART horizon:status || true
+            $ART tinker --execute='
+              foreach (["default", "push"] as $fila) {
+                  try { echo "fila ".$fila.": ".Illuminate\Support\Facades\Queue::size($fila).PHP_EOL; }
+                  catch (\Throwable $e) { echo "fila ".$fila.": ERRO ".$e->getMessage().PHP_EOL; }
+              }
+              echo "mbway_payment_check_timeout=".var_export(config("services.request.mbway_payment_check_timeout"), true).PHP_EOL;
+
+              $falhados = DB::table("failed_jobs")->where("failed_at", ">=", now()->subHours(30))->orderBy("id")->get(["failed_at", "payload", "exception"]);
+              echo PHP_EOL."failed_jobs nas ultimas 30 h: ".$falhados->count().PHP_EOL;
+              foreach ($falhados as $f) {
+                  $nome = json_decode($f->payload, true)["displayName"] ?? "?";
+                  echo "  ".$f->failed_at." ".$nome." :: ".substr(strtok($f->exception, "\n"), 0, 400).PHP_EOL;
+              }
+
+              try {
+                  $horizon = app(Laravel\Horizon\Contracts\JobRepository::class)->getFailed();
+                  echo PHP_EOL."falhados no Horizon (mais recentes): ".count($horizon).PHP_EOL;
+                  foreach (array_slice($horizon->all(), 0, 25) as $j) {
+                      $quando = isset($j->failed_at) ? date("Y-m-d H:i:s", (int) $j->failed_at) : "?";
+                      echo "  ".$quando." ".($j->name ?? "?")." :: ".substr(strtok((string) ($j->exception ?? ""), "\n"), 0, 400).PHP_EOL;
+                  }
+              } catch (\Throwable $e) { echo "Horizon: ".$e->getMessage().PHP_EOL; }
+            ' 2>&1 | sed -E "$MASCARA" || echo "(não deu para ler a fila)"
+
+            echo
+            echo "=============================================="
+            echo " 3. ERROS NO REGISTO DO LARAVEL ENTRE AS 10:40 E AS 12:39"
+            echo "    (cobre o intervalo em UTC e em hora de Lisboa)"
+            echo "=============================================="
+            docker compose exec -T laravel-prod sh -c '
+              for f in $(ls -t storage/logs/*.log 2>/dev/null | head -3); do
+                echo "ficheiro: $f"
+                grep -E "^\[2026-10-15 (10:[4-5][0-9]|11:[0-5][0-9]|12:[0-3][0-9])" "$f" \
+                  | grep -E "\.(ERROR|CRITICAL|EMERGENCY|WARNING)" | tail -40 | cut -c1-600
+              done
+            ' | sed -E "$MASCARA" || echo "(não deu para ler o registo)"
+
+            echo
+            echo "=============================================="
+            echo " 4. EXCEÇÕES NO TELESCOPE (ÚLTIMAS 30 H)"
+            echo "=============================================="
+            $ART tinker --execute='
+              if (! Illuminate\Support\Facades\Schema::hasTable("telescope_entries")) { echo "sem tabela do Telescope".PHP_EOL; return; }
+              $linhas = DB::table("telescope_entries")->where("type", "exception")
+                  ->where("created_at", ">=", now()->subHours(30))->orderByDesc("sequence")->limit(20)->get(["created_at", "content"]);
+              foreach ($linhas as $l) {
+                  $c = json_decode($l->content, true);
+                  echo $l->created_at." ".($c["class"] ?? "?")." :: ".substr($c["message"] ?? "", 0, 250)
+                      ." @ ".basename($c["file"] ?? "?").":".($c["line"] ?? "?").PHP_EOL;
+              }
+            ' 2>&1 | sed -E "$MASCARA" || echo "(não deu para ler o Telescope)"
