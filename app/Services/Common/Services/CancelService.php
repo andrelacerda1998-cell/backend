@@ -6,6 +6,7 @@ use App\Enums\Services\ServiceStatus;
 use App\Jobs\Services\CreateCancellationInvoiceJob;
 use App\Jobs\Services\CreateVendorCancellationInvoiceJob;
 use App\Models\Service;
+use App\Models\ServiceExtra;
 use Bavix\Wallet\Internal\Exceptions\ExceptionInterface;
 use RwInteractive\PayshopSdk\Enums\Payment\Status;
 
@@ -260,6 +261,10 @@ class CancelService
         if (CancellationPolicy::isChargeable($this->service)) {
             $this->cancelWithCharge();
 
+            // Fora da transação do cancelamento: o reembolso de um extra é uma
+            // chamada ao Payshop. Ver `resolverExtrasAoCancelar`.
+            $this->resolverExtrasAoCancelar();
+
             return;
         }
 
@@ -275,6 +280,8 @@ class CancelService
             report($e);
             throw $e;
         }
+
+        $this->resolverExtrasAoCancelar();
     }
 
     /**
@@ -430,7 +437,101 @@ class CancelService
                 \DB::rollBack();
                 throw $e;
             }
+
+            // Também quando é o técnico a cancelar no local: a peça que o
+            // cliente aprovou e pagou já lá ficou, o tempo não foi trabalhado.
+            $this->resolverExtrasAoCancelar();
         }
+    }
+
+    /**
+     * OS EXTRAS DE UM SERVIÇO QUE MORRE (decisão do André, 02/10/2026; portado
+     * do backend#136 a 16/10/2026).
+     *
+     * Um extra é cobrado ao cliente NO MOMENTO DA APROVAÇÃO, e só existe com o
+     * serviço em ARRIVED, um dos estados de onde ainda se pode cancelar (pelo
+     * cliente ou pelo técnico). O cancelamento não lhes tocava, e quem credita
+     * extras (`CloseService::settleExtras`) nunca corre num serviço cancelado:
+     * o cliente ficava sem o dinheiro, o técnico sem nada, e o extra
+     * `approved`/`paid` para sempre, sem ninguém saber que existia.
+     *
+     * A regra segue a do serviço base, que cobra o que aconteceu e não cobra o
+     * que não aconteceu:
+     *
+     *  - PEÇA: credita-se 100% ao técnico. Comprou-a do bolso e, estando no
+     *    local, muito provavelmente já a instalou. Reembolsar o cliente seria
+     *    ele ficar com a torneira E com o dinheiro.
+     *  - TEMPO EXTRA: reembolsa-se o cliente. É trabalho que não foi feito.
+     *
+     * O que não pode acontecer é o extra ficar pendurado. Corre FORA de
+     * qualquer transação: o reembolso é uma chamada ao Payshop, e dentro de
+     * uma transação segurava a linha durante a resposta do gateway. Uma falha
+     * num extra não desfaz o cancelamento, que já está feito e comunicado:
+     * fica reportada, e o extra fica como estava, para se reconciliar.
+     * Idempotente: `vendor_credited_at` na peça, `refunded` no tempo.
+     */
+    public function resolverExtrasAoCancelar(): void
+    {
+        $extras = $this->service->extras()->where('status', 'approved')->get();
+
+        foreach ($extras as $extra) {
+            // Nunca entrou dinheiro (falhou a cobrança, MB Way por confirmar):
+            // não há o que devolver nem o que creditar.
+            if (! $extra->isCharged()) {
+                continue;
+            }
+
+            try {
+                $extra->type === 'part'
+                    ? $this->creditarPecaAoTecnico($extra)
+                    : $this->reembolsarTempoExtra($extra);
+            } catch (\Throwable $e) {
+                report($e);
+                \Log::error('[cancelar] falhou a resolver o extra #'.$extra->id, [
+                    'servico' => $this->service->id,
+                    'erro' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /** Peça: inteira para quem a pagou. */
+    private function creditarPecaAoTecnico(ServiceExtra $extra): void
+    {
+        // Já creditada (outra corrida, ou o fecho correu antes): não pagar duas vezes.
+        if ($extra->vendor_credited_at !== null || (int) $extra->amount <= 0) {
+            return;
+        }
+
+        $meta = $this->service->getMetaProduct();
+        $meta['description'] = ($meta['description'] ?? '').' — peça #'.$extra->id.' (serviço cancelado)';
+        $meta['extra_id'] = $extra->id;
+
+        \DB::transaction(function () use ($extra, $meta) {
+            $this->service->vendor->user->deposit((int) $extra->amount, $meta);
+            $extra->forceFill(['vendor_credited_at' => now()])->save();
+        });
+    }
+
+    /** Tempo extra: devolve-se, porque não foi trabalhado. */
+    private function reembolsarTempoExtra(ServiceExtra $extra): void
+    {
+        if ($extra->payment_status === 'refunded') {
+            return;
+        }
+
+        // `not_required` nunca passou pelo gateway (serviço de teste, extra a
+        // 0 €): não há ordem para reembolsar, só o estado para fechar.
+        if ($extra->payment_status === 'paid' && $extra->paymentOrder) {
+            $ordem = $extra->paymentOrder->refund((int) $extra->amount);
+
+            // Só se marca devolvido o que o Payshop diz que devolveu.
+            if (! in_array($ordem->status, [Status::REFUNDED, Status::PARTIALLY_REFUNDED], true)) {
+                throw new \RuntimeException('O Payshop não confirmou o reembolso do extra #'.$extra->id.' (estado '.($ordem->status->value ?? 'desconhecido').').');
+            }
+        }
+
+        $extra->forceFill(['payment_status' => 'refunded'])->save();
     }
 
     /**
