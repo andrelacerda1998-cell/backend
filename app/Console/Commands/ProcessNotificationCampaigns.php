@@ -45,11 +45,15 @@ class ProcessNotificationCampaigns extends Command
             })
             ->get();
 
-        Log::info('campaigns to process', ['ids' => $campaigns->pluck('id')->all()]);
         if ($campaigns->isEmpty()) {
             $this->info('No campaigns to process.');
             return 0;
         }
+
+        // Só se escreve no laravel.log quando há mesmo campanhas. Este comando
+        // corre a cada minuto pelo agendador; logar "ids: []" sempre enchia o
+        // laravel.log sem fim (chegou aos 720 MB em produção — risco de disco).
+        Log::info('campaigns to process', ['ids' => $campaigns->pluck('id')->all()]);
 
         $this->info("Found {$campaigns->count()} campaign(s) to process.");
 
